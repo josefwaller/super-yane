@@ -22,3 +22,12 @@ pub struct StatusRegister {
     /// Break flag
     pub b: Flag,
 }
+
+impl StatusRegister {
+    pub fn is_8bit(&self) -> bool {
+        self.m.into()
+    }
+    pub fn is_16bit(&self) -> bool {
+        !self.is_8bit()
+    }
+}
