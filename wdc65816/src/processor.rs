@@ -1,3 +1,4 @@
+use crate::bus::Bus;
 use crate::flag::Flag;
 use crate::opcodes::*;
 use crate::status_register::StatusRegister;
@@ -37,28 +38,23 @@ pub struct Processor {
     s: u16,
 }
 
-/// Combine an 8-bit bank and a 16-bit address to form the final 24-bit address bus output
-fn addr_bus_val(bank: u8, addr: u16) -> usize {
-    bank as usize * 0x10000 + addr as usize
-}
-
-const BUS_OVERFLOW: usize = 0x1000000;
+const BUS_OVERFLOW: u32 = 0x1000000;
 
 /// Read a single byte from a memory given an 8-bit bank and a 16-bit address
-fn read_u8(memory: &mut impl Memory, bank: u8, addr: u16) -> u8 {
+fn read_u8(memory: &mut impl Memory, addr: Bus) -> u8 {
     // Combine bank and address to form final address
-    memory.read(addr_bus_val(bank, addr))
+    memory.read(addr.into())
 }
 
-fn read_u16<T: Memory>(memory: &mut T, bank: u8, addr: u16) -> u16 {
+fn read_u16<T: Memory>(memory: &mut T, addr: Bus) -> u16 {
     // Read low first
-    let low = read_u8(memory, bank, addr) as u16;
-    let high = read_u8(memory, bank, addr.wrapping_add(1)) as u16;
+    let low = read_u8(memory, addr) as u16;
+    let high = read_u8(memory, addr.offset(1)) as u16;
     low + (high << 8)
 }
-fn read_u24(memory: &mut impl Memory, bank: u8, addr: u16) -> u32 {
-    let low = read_u8(memory, bank, addr) as u32;
-    let higher = read_u16(memory, bank, addr.wrapping_add(1)) as u32;
+fn read_u24(memory: &mut impl Memory, addr: Bus) -> u32 {
+    let low = read_u8(memory, addr) as u32;
+    let higher = read_u16(memory, addr.offset(1)) as u32;
     low + (higher << 8)
 }
 
@@ -85,11 +81,12 @@ impl Processor {
     }
 
     /// Add with Carry
-    fn adc(&mut self, addr: usize, memory: &mut impl Memory) {
-        let (value, c, z, n, v) = Processor::add_bytes(self.a, memory.read(addr), self.p.c);
+    fn adc(&mut self, addr: Bus, memory: &mut impl Memory) {
+        let (value, c, z, n, v) = Processor::add_bytes(self.a, memory.read(addr.into()), self.p.c);
         self.a = value;
         if self.p.is_16bit() {
-            let (value, c, z2, n, v) = Processor::add_bytes(self.b, memory.read(addr + 1), c);
+            let (value, c, z2, n, v) =
+                Processor::add_bytes(self.b, memory.read(addr.offset(1).into()), c);
             self.b = value;
             // Both need to be 0 for the zero flag to be set
             self.p.z = (z & z2).into();
@@ -106,119 +103,126 @@ impl Processor {
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
+    /// All return (bank, address) which are combined to form the final address in the
+    /// cpu function to form the final 24-bit address
 
     /// Immediate addressing
-    fn i(&mut self, _memory: &mut impl Memory) -> usize {
+    fn i(&mut self, _memory: &mut impl Memory) -> Bus {
         // Address is simply the next byte in the instruction
-        let addr = addr_bus_val(self.pbr, self.pc);
+        let addr = Bus::new(self.pbr, self.pc);
         self.pc = self.pc.wrapping_add(1);
         addr
     }
     /// Absolute addressing
-    fn a(&mut self, memory: &mut impl Memory) -> usize {
+    fn a(&mut self, memory: &mut impl Memory) -> Bus {
         // Read the 16 bit address off the instruction
-        let addr = read_u16(memory, self.pbr, self.pc);
+        let addr = read_u16(memory, Bus::new(self.pbr, self.pc));
         self.pc = self.pc.wrapping_add(2);
-        addr_bus_val(self.dbr, addr)
+        Bus::new(self.dbr, addr)
     }
     // Utility offset function for absolute indexed function
-    fn a_off(&mut self, memory: &mut impl Memory, register: u16) -> usize {
-        let addr = read_u16(memory, self.pbr, self.pc);
+    fn a_off(&mut self, memory: &mut impl Memory, register: u16) -> Bus {
+        let addr = read_u16(memory, Bus::new(self.pbr, self.pc));
         let addr = addr.wrapping_add(register as u16);
         // Extra unused read for X indexed
         memory.io();
         self.pc = self.pc.wrapping_add(2);
-        addr_bus_val(self.dbr, addr)
+        Bus::new(self.dbr, addr)
     }
     /// Absolute X Indexed addressing
-    fn ax(&mut self, memory: &mut impl Memory) -> usize {
+    fn ax(&mut self, memory: &mut impl Memory) -> Bus {
         self.a_off(memory, self.x)
     }
     /// Absolute Y Indexed addressing
-    fn ay(&mut self, memory: &mut impl Memory) -> usize {
+    fn ay(&mut self, memory: &mut impl Memory) -> Bus {
         self.a_off(memory, self.y)
     }
     /// Absolute Long addressing
-    fn al(&mut self, memory: &mut impl Memory) -> usize {
-        let bank = read_u8(memory, self.pbr, self.pc);
-        let addr = read_u16(memory, self.pbr, self.pc.wrapping_add(1));
+    fn al(&mut self, memory: &mut impl Memory) -> Bus {
+        let addr = Bus::new(self.pbr, self.pc);
+        let bank = read_u8(memory, addr);
+        let addr = read_u16(memory, addr.offset(1));
         self.pc = self.pc.wrapping_add(3);
-        addr_bus_val(bank, addr)
+        Bus::new(bank, addr)
     }
     /// Absolute Long X Indexed
-    fn alx(&mut self, memory: &mut impl Memory) -> usize {
-        let bank = read_u8(memory, self.pbr, self.pc);
-        let addr = read_u16(memory, self.pbr, self.pc.wrapping_add(1)).wrapping_add(self.x);
+    fn alx(&mut self, memory: &mut impl Memory) -> Bus {
+        let addr = Bus::new(self.pbr, self.pc);
+        let bank = read_u8(memory, addr);
+        let addr = read_u16(memory, addr.offset(1)).wrapping_add(self.x);
         self.pc = self.pc.wrapping_add(3);
-        addr_bus_val(bank, addr)
+        Bus::new(bank, addr)
     }
     /// Direct addressing
-    fn d(&mut self, memory: &mut impl Memory) -> usize {
-        let addr = read_u8(memory, self.pbr, self.pc);
+    fn d(&mut self, memory: &mut impl Memory) -> Bus {
+        let addr = read_u8(memory, Bus::new(self.pbr, self.pc));
         // Extra read if direct register low is not 0
         if self.d & 0xFF != 0 {
             memory.io();
         }
-        let addr = addr_bus_val(0x00, self.d + addr as u16);
         self.pc = self.pc.wrapping_add(1);
-        addr
+        Bus::new(0x00, self.d + addr as u16)
     }
     // Direct addressing with offset
-    fn d_off(&mut self, memory: &mut impl Memory, register: u16) -> usize {
-        let addr = self.d(memory) as u16;
+    fn d_off(&mut self, memory: &mut impl Memory, register: u16) -> Bus {
+        let addr = self.d(memory);
         memory.io();
-        addr_bus_val(0x00, addr.wrapping_add(register))
+        addr.offset(register)
     }
     /// Direct X Indexed addressing
-    fn dx(&mut self, memory: &mut impl Memory) -> usize {
+    fn dx(&mut self, memory: &mut impl Memory) -> Bus {
         self.d_off(memory, self.x)
     }
     /// Direct Y Indexed addressing
-    fn dy(&mut self, memory: &mut impl Memory) -> usize {
+    fn dy(&mut self, memory: &mut impl Memory) -> Bus {
         self.d_off(memory, self.y)
     }
     /// Direct Indirect addressing
-    fn di(&mut self, memory: &mut impl Memory) -> usize {
+    fn di(&mut self, memory: &mut impl Memory) -> Bus {
         let addr = self.d(memory);
-        addr_bus_val(self.dbr, addr as u16)
+        Bus::new(self.dbr, addr.address)
     }
     /// Direct Indirect X Indexed addressing
-    fn dix(&mut self, memory: &mut impl Memory) -> usize {
-        let addr = self.d(memory) as u16;
-        memory.io();
-        addr_bus_val(self.dbr, addr.wrapping_add(self.x as u16))
-    }
-    /// Direct Indirect Y Indexed addressing
-    fn diy(&mut self, memory: &mut impl Memory) -> usize {
+    fn dix(&mut self, memory: &mut impl Memory) -> Bus {
         let addr = self.di(memory);
         memory.io();
-        (addr + self.y as usize) % BUS_OVERFLOW
+        addr.offset(self.x)
+    }
+    /// Direct Indirect Y Indexed addressing
+    fn diy(&mut self, memory: &mut impl Memory) -> Bus {
+        // Have to manually build and deconstruct this one
+        let addr: u32 = self.di(memory).into();
+        memory.io();
+        let addr = (addr + self.y as u32) % BUS_OVERFLOW;
+        addr.into()
     }
     /// Direct Indirect Long addressing
-    fn dil(&mut self, memory: &mut impl Memory) -> usize {
+    fn dil(&mut self, memory: &mut impl Memory) -> Bus {
         let addr = self
             .d
-            .wrapping_add(read_u8(memory, self.pbr, self.pc) as u16);
+            .wrapping_add(read_u8(memory, Bus::new(self.pbr, self.pc)) as u16);
         // Read the value of the pointer from memory
-        read_u24(memory, 0x00, addr) as usize
+        let addr = read_u24(memory, Bus::new(0x00, addr));
+        addr.into()
     }
     /// Direct Indirect Long Y Indexed addressing
-    fn dily(&mut self, memory: &mut impl Memory) -> usize {
-        let addr = self.dil(memory);
-        (addr + self.y as usize) % BUS_OVERFLOW
+    fn dily(&mut self, memory: &mut impl Memory) -> Bus {
+        let addr: u32 = self.dil(memory).into();
+        ((addr + self.y as u32) % BUS_OVERFLOW).into()
     }
     /// Stack Relative addressing
-    fn sr(&mut self, memory: &mut impl Memory) -> usize {
+    fn sr(&mut self, memory: &mut impl Memory) -> Bus {
         let addr = self
             .s
-            .wrapping_add(read_u8(memory, self.pbr, self.pc) as u16);
+            .wrapping_add(read_u8(memory, Bus::new(self.pbr, self.pc)) as u16);
         memory.io();
-        addr_bus_val(0x0, addr)
+        self.pc = self.pc.wrapping_add(1);
+        Bus::new(0x0, addr)
     }
     /// Stack Reslative Indirect Y Indexed addressing
-    fn sriy(&mut self, memory: &mut impl Memory) -> usize {
-        let addr = addr_bus_val(self.dbr, self.sr(memory) as u16);
-        (addr + self.y as usize) % BUS_OVERFLOW
+    fn sriy(&mut self, memory: &mut impl Memory) -> Bus {
+        let addr: u32 = self.sr(memory).with_bank(self.dbr).into();
+        ((addr + self.y as u32) % BUS_OVERFLOW).into()
     }
 
     /// Execute the next instruction in the program
@@ -229,11 +233,11 @@ impl Processor {
     pub fn step<T: Memory>(&mut self, memory: &mut T) {
         macro_rules! cpu_func {
             ($func: ident, $get_addr: ident) => {{
-                let addr = self.$get_addr(memory);
-                self.$func(addr, memory)
+                let bus = self.$get_addr(memory);
+                self.$func(bus, memory)
             }};
         }
-        let opcode = read_u8(memory, self.pbr, self.pc);
+        let opcode = read_u8(memory, Bus::new(self.pbr, self.pc));
         self.pc += 1;
 
         match opcode {

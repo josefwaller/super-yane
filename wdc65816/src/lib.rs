@@ -1,3 +1,4 @@
+mod bus;
 mod flag;
 mod opcodes;
 mod processor;
