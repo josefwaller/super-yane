@@ -1,3 +1,4 @@
+use crate::u24::u24;
 /// The 24-bit address bus used by the processor to read data
 #[derive(Copy, Clone)]
 pub struct Bus {
@@ -33,5 +34,15 @@ impl From<Bus> for u32 {
 impl From<Bus> for usize {
     fn from(value: Bus) -> Self {
         u32::from(value) as usize
+    }
+}
+impl From<u24> for Bus {
+    fn from(value: u24) -> Self {
+        Bus::from(u32::from(value))
+    }
+}
+impl From<Bus> for u24 {
+    fn from(value: Bus) -> Self {
+        u24::from(u32::from(value))
     }
 }

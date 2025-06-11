@@ -2,6 +2,7 @@ use crate::bus::Bus;
 use crate::flag::Flag;
 use crate::opcodes::*;
 use crate::status_register::StatusRegister;
+use crate::u24::u24;
 
 use std::default::Default;
 
@@ -38,8 +39,6 @@ pub struct Processor {
     s: u16,
 }
 
-const BUS_OVERFLOW: u32 = 0x1000000;
-
 /// Read a single byte from a memory given an 8-bit bank and a 16-bit address
 fn read_u8(memory: &mut impl Memory, addr: Bus) -> u8 {
     // Combine bank and address to form final address
@@ -52,10 +51,10 @@ fn read_u16<T: Memory>(memory: &mut T, addr: Bus) -> u16 {
     let high = read_u8(memory, addr.offset(1)) as u16;
     low + (high << 8)
 }
-fn read_u24(memory: &mut impl Memory, addr: Bus) -> u32 {
+fn read_u24(memory: &mut impl Memory, addr: Bus) -> u24 {
     let low = read_u8(memory, addr) as u32;
     let higher = read_u16(memory, addr.offset(1)) as u32;
-    low + (higher << 8)
+    u24::from(low + (higher << 8))
 }
 
 impl Processor {
@@ -82,11 +81,12 @@ impl Processor {
 
     /// Add with Carry
     fn adc(&mut self, addr: Bus, memory: &mut impl Memory) {
+        let addr: u24 = addr.into();
         let (value, c, z, n, v) = Processor::add_bytes(self.a, memory.read(addr.into()), self.p.c);
         self.a = value;
         if self.p.is_16bit() {
             let (value, c, z2, n, v) =
-                Processor::add_bytes(self.b, memory.read(addr.offset(1).into()), c);
+                Processor::add_bytes(self.b, memory.read(addr.wrapping_add(1u32).into()), c);
             self.b = value;
             // Both need to be 0 for the zero flag to be set
             self.p.z = (z & z2).into();
@@ -191,9 +191,9 @@ impl Processor {
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl Memory) -> Bus {
         // Have to manually build and deconstruct this one
-        let addr: u32 = self.di(memory).into();
+        let addr: u24 = self.di(memory).into();
         memory.io();
-        let addr = (addr + self.y as u32) % BUS_OVERFLOW;
+        let addr = addr.wrapping_add(self.y);
         addr.into()
     }
     /// Direct Indirect Long addressing
@@ -207,8 +207,8 @@ impl Processor {
     }
     /// Direct Indirect Long Y Indexed addressing
     fn dily(&mut self, memory: &mut impl Memory) -> Bus {
-        let addr: u32 = self.dil(memory).into();
-        ((addr + self.y as u32) % BUS_OVERFLOW).into()
+        let addr: u24 = self.dil(memory).into();
+        addr.wrapping_add(self.y).into()
     }
     /// Stack Relative addressing
     fn sr(&mut self, memory: &mut impl Memory) -> Bus {
@@ -221,8 +221,8 @@ impl Processor {
     }
     /// Stack Reslative Indirect Y Indexed addressing
     fn sriy(&mut self, memory: &mut impl Memory) -> Bus {
-        let addr: u32 = self.sr(memory).with_bank(self.dbr).into();
-        ((addr + self.y as u32) % BUS_OVERFLOW).into()
+        let addr: u24 = self.sr(memory).with_bank(self.dbr).into();
+        addr.wrapping_add(self.y).into()
     }
 
     /// Execute the next instruction in the program
