@@ -1,8 +1,8 @@
+use crate::flag::Flag;
 use crate::opcodes::*;
 use crate::status_register::StatusRegister;
 
 use std::default::Default;
-use std::mem;
 
 pub trait Memory {
     /// Read a single byte from memory
@@ -19,8 +19,10 @@ pub struct Processor {
     pc: u16,
     /// Program Bank Register
     pbr: u8,
-    /// Accumulator
-    a: u16,
+    /// Lower byte of the accumulator
+    a: u8,
+    /// Upper byte of the accumulator
+    b: u8,
     /// X Register
     x: u16,
     /// Y Register
@@ -65,26 +67,41 @@ impl Processor {
         Processor::default()
     }
 
+    /// Add two bytes together and calculate flags
+    /// Returns in the format (value, carry, zero, negative, (signed) overflow)
+    fn add_bytes(a: u8, b: u8, carry: Flag) -> (u8, Flag, Flag, Flag, Flag) {
+        let result = a.wrapping_add(b).wrapping_add(carry.into());
+        return (
+            result,
+            // Carry flag
+            (result < a).into(),
+            // Zero flag
+            (result == 0).into(),
+            // Negative flag
+            ((result & 0x80) == 0x80).into(),
+            // Overflow flag
+            (((result ^ a as u8) & (result ^ b)) & 0x80 == 0).into(),
+        );
+    }
+
     /// Add with Carry
     fn adc(&mut self, addr: usize, memory: &mut impl Memory) {
-        let (result, v, n) = if self.p.is_16bit() {
-            let value = memory.read(addr) as u16 * 0x100 + memory.read(addr.wrapping_add(1)) as u16;
-            let result = self.a.wrapping_add(value);
-            let v = ((result ^ self.a) & (result ^ value)) & 0x8000 == 0;
-            let n = result & 0x8000 != 0;
-            (result, v, n)
+        let (value, c, z, n, v) = Processor::add_bytes(self.a, memory.read(addr), self.p.c);
+        self.a = value;
+        if self.p.is_16bit() {
+            let (value, c, z2, n, v) = Processor::add_bytes(self.b, memory.read(addr + 1), c);
+            self.b = value;
+            // Both need to be 0 for the zero flag to be set
+            self.p.z = (z & z2).into();
+            self.p.n = n.into();
+            self.p.v = v.into();
+            self.p.c = c.into();
         } else {
-            let value = memory.read(addr);
-            let result = (self.a as u8).wrapping_add(value);
-            let v = ((result ^ self.a as u8) & (result ^ value)) & 0x80 == 0;
-            let n = result & 0x80 != 0;
-            (result as u16, v, n)
-        };
-        self.p.c = (result < self.a).into();
-        self.p.v = v.into();
-        self.p.n = n.into();
-        self.p.z = (result == 0).into();
-        self.a = result;
+            self.p.z = z.into();
+            self.p.n = n.into();
+            self.p.v = v.into();
+            self.p.c = c.into();
+        }
     }
 
     /// Individual methods for each addressing mode

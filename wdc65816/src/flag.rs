@@ -1,3 +1,5 @@
+use std::ops::BitAnd;
+
 /// Utility struct that can act as a binary number (0 or 1) or a boolean.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Flag {
@@ -26,6 +28,12 @@ impl PartialEq<u32> for Flag {
             panic!("Flag value must be 0 or 1, got {}", other);
         }
         self.value != *other
+    }
+}
+impl BitAnd for Flag {
+    type Output = Flag;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Flag::from(self.into() && rhs.into())
     }
 }
 impl From<bool> for Flag {
