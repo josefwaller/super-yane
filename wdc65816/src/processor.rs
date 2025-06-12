@@ -115,6 +115,37 @@ impl Processor {
             self.p.z = (self.a == 0).into();
         }
     }
+    /// Shift a u8 and set the appropriate flags
+    fn asl_8(&mut self, value: u8) -> u8 {
+        let (value, carry) = value.overflowing_shl(1);
+        self.p.c = carry.into();
+        self.p.n = (value > 0x7F).into();
+        self.p.z = (value == 0).into();
+        value
+    }
+    fn asl_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let low = self.asl_8(low);
+        let carry = self.p.c;
+        let zero = self.p.z;
+        let high = self.asl_8(high).wrapping_add(carry.into());
+        // Both need to be 0
+        self.p.z = self.p.z & zero;
+        (low, high)
+    }
+    /// Arithmatic shift left
+    fn asl(&mut self, addr: u24, memory: &mut impl Memory) {
+        if self.p.is_8bit() {
+            let value = memory.read(addr.into());
+            memory.write(addr.into(), value);
+        } else {
+            let (low, high) = self.asl_16(
+                memory.read(addr.into()),
+                memory.read(addr.wrapping_add(1u32).into()),
+            );
+            memory.write(addr.into(), low);
+            memory.write(addr.wrapping_add(1u32).into(), high);
+        }
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -277,6 +308,13 @@ impl Processor {
             AND_DILY => cpu_func!(and, dily),
             AND_SR => cpu_func!(and, sr),
             AND_SRIY => cpu_func!(and, sriy),
+            ASL_ACC => {
+                self.a = self.asl_8(self.a);
+                if self.p.is_16bit() {
+                    let carry = self.p.c;
+                    self.b = self.asl_8(self.b).wrapping_add(carry.into());
+                }
+            }
             ASL_A => cpu_func!(asl, a),
             ASL_D => cpu_func!(asl, d),
             ASL_AX => cpu_func!(asl, ax),
