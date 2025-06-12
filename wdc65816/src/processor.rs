@@ -62,6 +62,11 @@ impl Processor {
         Processor::default()
     }
 
+    /// Return a set flag if a byte is negative (i.e. MSB is set)
+    fn is_neg(byte: u8) -> Flag {
+        ((byte & 0x80) == 0x80).into()
+    }
+
     /// Add two bytes together and calculate flags
     /// Returns in the format (value, carry, zero, negative, (signed) overflow)
     fn add_bytes(a: u8, b: u8, carry: Flag) -> (u8, Flag, Flag, Flag, Flag) {
@@ -73,7 +78,7 @@ impl Processor {
             // Zero flag
             (result == 0).into(),
             // Negative flag
-            ((result & 0x80) == 0x80).into(),
+            Processor::is_neg(result),
             // Overflow flag
             (((result ^ a as u8) & (result ^ b)) & 0x80 == 0).into(),
         );
@@ -98,6 +103,19 @@ impl Processor {
             self.p.n = n.into();
             self.p.v = v.into();
             self.p.c = c.into();
+        }
+    }
+    /// And with accumulator
+    fn and(&mut self, addr: Bus, memory: &impl Memory) {
+        let addr: u24 = addr.into();
+        self.a = self.a & memory.read(addr.into());
+        if self.p.is_16bit() {
+            self.b = self.b & memory.read(addr.wrapping_add(1u32).into());
+            self.p.z = (self.a == 0 && self.b == 0).into();
+            self.p.n = Processor::is_neg(self.b);
+        } else {
+            self.p.n = Processor::is_neg(self.a);
+            self.p.z = (self.a == 0).into();
         }
     }
 
@@ -256,6 +274,21 @@ impl Processor {
             ADC_DILY => cpu_func!(adc, dily),
             ADC_SR => cpu_func!(adc, sr),
             ADC_SRIY => cpu_func!(adc, sriy),
+            AND_I => cpu_func!(and, i),
+            AND_A => cpu_func!(and, a),
+            AND_AL => cpu_func!(and, al),
+            AND_D => cpu_func!(and, d),
+            AND_DI => cpu_func!(and, di),
+            AND_DIL => cpu_func!(and, dil),
+            AND_AX => cpu_func!(and, ax),
+            AND_ALX => cpu_func!(and, alx),
+            AND_AY => cpu_func!(and, ay),
+            AND_DX => cpu_func!(and, dx),
+            AND_DIX => cpu_func!(and, dix),
+            AND_DIY => cpu_func!(and, diy),
+            AND_DILY => cpu_func!(and, dily),
+            AND_SR => cpu_func!(and, sr),
+            AND_SRIY => cpu_func!(and, sriy),
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
     }
