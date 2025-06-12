@@ -9,6 +9,14 @@ pub struct u24 {
 }
 
 impl u24 {
+    pub fn from(bank: u8, lower: u16) -> u24 {
+        u24 {
+            value: (bank as u32) * 0x10000 + lower as u32,
+        }
+    }
+    pub fn with_bank(&self, bank: u8) -> u24 {
+        u24::from(bank, (self.value & 0xFFFF) as u16)
+    }
     pub fn wrapping_add<T: Into<u32>>(&self, rhs: T) -> u24 {
         u24 {
             value: self.value.wrapping_add(rhs.into()) % OVERFLOW,
