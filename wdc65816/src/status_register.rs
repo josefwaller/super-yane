@@ -1,26 +1,24 @@
-use crate::flag::Flag;
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StatusRegister {
     /// Carry flag
-    pub c: Flag,
+    pub c: bool,
     /// Zero flag
-    pub z: Flag,
+    pub z: bool,
     /// Negative flag
-    pub n: Flag,
+    pub n: bool,
     /// Decimal mode flag
-    pub d: Flag,
+    pub d: bool,
     /// Interrupt disable flag
-    pub i: Flag,
+    pub i: bool,
     /// Memory/Accumulator mode flag
     /// 1 = 8-bit mode, 0 = 16-bit mode
-    pub m: Flag,
+    pub m: bool,
     /// Overflow flag
-    pub v: Flag,
+    pub v: bool,
     /// Emulation flag
-    pub e: Flag,
+    pub e: bool,
     /// Break flag
-    pub b: Flag,
+    pub b: bool,
 }
 
 impl StatusRegister {

@@ -1,5 +1,3 @@
-mod bus;
-mod flag;
 mod opcodes;
 mod processor;
 mod status_register;

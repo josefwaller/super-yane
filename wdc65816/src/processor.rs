@@ -1,4 +1,3 @@
-use crate::flag::Flag;
 use crate::opcodes::*;
 use crate::status_register::StatusRegister;
 use crate::u24::u24;
@@ -61,25 +60,20 @@ impl Processor {
         Processor::default()
     }
 
-    /// Return a set flag if a byte is negative (i.e. MSB is set)
-    fn is_neg(byte: u8) -> Flag {
-        ((byte & 0x80) == 0x80).into()
-    }
-
     /// Add two bytes together and calculate flags
     /// Returns in the format (value, carry, zero, negative, (signed) overflow)
-    fn add_bytes(a: u8, b: u8, carry: Flag) -> (u8, Flag, Flag, Flag, Flag) {
+    fn add_bytes(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool, bool) {
         let result = a.wrapping_add(b).wrapping_add(carry.into());
         return (
             result,
             // Carry flag
-            (result < a).into(),
+            result < a,
             // Zero flag
-            (result == 0).into(),
+            result == 0,
             // Negative flag
-            Processor::is_neg(result),
+            result > 0x7F,
             // Overflow flag
-            (((result ^ a as u8) & (result ^ b)) & 0x80 == 0).into(),
+            ((result ^ a as u8) & (result ^ b)) & 0x80 == 0,
         );
     }
 
@@ -92,15 +86,15 @@ impl Processor {
                 Processor::add_bytes(self.b, memory.read(addr.wrapping_add(1u32).into()), c);
             self.b = value;
             // Both need to be 0 for the zero flag to be set
-            self.p.z = (z & z2).into();
-            self.p.n = n.into();
-            self.p.v = v.into();
-            self.p.c = c.into();
+            self.p.z = z && z2;
+            self.p.n = n;
+            self.p.v = v;
+            self.p.c = c;
         } else {
-            self.p.z = z.into();
-            self.p.n = n.into();
-            self.p.v = v.into();
-            self.p.c = c.into();
+            self.p.z = z;
+            self.p.n = n;
+            self.p.v = v;
+            self.p.c = c;
         }
     }
     /// And with accumulator
@@ -108,19 +102,19 @@ impl Processor {
         self.a = self.a & memory.read(addr.into());
         if self.p.is_16bit() {
             self.b = self.b & memory.read(addr.wrapping_add(1u32).into());
-            self.p.z = (self.a == 0 && self.b == 0).into();
-            self.p.n = Processor::is_neg(self.b);
+            self.p.z = self.a == 0 && self.b == 0;
+            self.p.n = self.b > 0x7F;
         } else {
-            self.p.n = Processor::is_neg(self.a);
-            self.p.z = (self.a == 0).into();
+            self.p.n = self.a > 0x7F;
+            self.p.z = self.a == 0;
         }
     }
     /// Shift a u8 and set the appropriate flags
     fn asl_8(&mut self, value: u8) -> u8 {
         let (value, carry) = value.overflowing_shl(1);
-        self.p.c = carry.into();
-        self.p.n = (value > 0x7F).into();
-        self.p.z = (value == 0).into();
+        self.p.c = carry;
+        self.p.n = value > 0x7F;
+        self.p.z = value == 0;
         value
     }
     fn asl_16(&mut self, low: u8, high: u8) -> (u8, u8) {
