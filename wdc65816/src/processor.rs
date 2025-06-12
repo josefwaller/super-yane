@@ -59,57 +59,41 @@ impl Processor {
     pub fn new() -> Self {
         Processor::default()
     }
-
-    /// Add two bytes together and calculate flags
-    /// Returns in the format (value, carry, zero, negative, (signed) overflow)
-    fn add_bytes(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool, bool) {
-        let result = a.wrapping_add(b).wrapping_add(carry.into());
-        return (
-            result,
-            // Carry flag
-            result < a,
-            // Zero flag
-            result == 0,
-            // Negative flag
-            result > 0x7F,
-            // Overflow flag
-            ((result ^ a as u8) & (result ^ b)) & 0x80 == 0,
-        );
+    /// Add with Carry 8-bit
+    fn adc_8(&mut self, value: u8) {
+        let (a, c) = self.a.overflowing_add(value);
+        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 == 0;
+        self.p.n = (a & 0x80) != 0;
+        self.p.z = a == 0;
+        self.p.c = c;
+        self.a = a;
     }
-
-    /// Add with Carry
-    fn adc(&mut self, addr: u24, memory: &mut impl Memory) {
-        let (value, c, z, n, v) = Processor::add_bytes(self.a, memory.read(addr.into()), self.p.c);
-        self.a = value;
-        if self.p.is_16bit() {
-            let (value, c, z2, n, v) =
-                Processor::add_bytes(self.b, memory.read(addr.wrapping_add(1u32).into()), c);
-            self.b = value;
-            // Both need to be 0 for the zero flag to be set
-            self.p.z = z && z2;
-            self.p.n = n;
-            self.p.v = v;
-            self.p.c = c;
-        } else {
-            self.p.z = z;
-            self.p.n = n;
-            self.p.v = v;
-            self.p.c = c;
-        }
+    /// Add with Carry 16-bit
+    fn adc_16(&mut self, low: u8, high: u8) {
+        let (a, c) = self.a.overflowing_add(low);
+        self.a = a;
+        let (b, c2) = self.b.overflowing_add(high);
+        self.p.n = (b & 0x80) != 0;
+        self.p.z = a == 0 && b == 0;
+        self.p.c = c2;
+        self.a = a;
+        self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 == 0;
+        self.b = b.wrapping_add(c.into());
     }
-    /// And with accumulator
-    fn and(&mut self, addr: u24, memory: &impl Memory) {
-        self.a = self.a & memory.read(addr.into());
-        if self.p.is_16bit() {
-            self.b = self.b & memory.read(addr.wrapping_add(1u32).into());
-            self.p.z = self.a == 0 && self.b == 0;
-            self.p.n = self.b > 0x7F;
-        } else {
-            self.p.n = self.a > 0x7F;
-            self.p.z = self.a == 0;
-        }
+    /// And 8-bit
+    fn and_8(&mut self, value: u8) {
+        self.a = self.a & value;
+        self.p.n = self.a > 0x7F;
+        self.p.z = self.a == 0;
     }
-    /// Shift a u8 and set the appropriate flags
+    /// And 16-bit
+    fn and_16(&mut self, low: u8, high: u8) {
+        self.a = self.a & low;
+        self.b = self.b & high;
+        self.p.n = self.b > 0x7F;
+        self.p.z = self.a == 0 && self.b == 0;
+    }
+    /// ASL 8-bit
     fn asl_8(&mut self, value: u8) -> u8 {
         let (value, carry) = value.overflowing_shl(1);
         self.p.c = carry;
@@ -117,6 +101,7 @@ impl Processor {
         self.p.z = value == 0;
         value
     }
+    /// ASL 16-bit
     fn asl_16(&mut self, low: u8, high: u8) -> (u8, u8) {
         let low = self.asl_8(low);
         let carry = self.p.c;
@@ -125,20 +110,6 @@ impl Processor {
         // Both need to be 0
         self.p.z = self.p.z & zero;
         (low, high)
-    }
-    /// Arithmatic shift left
-    fn asl(&mut self, addr: u24, memory: &mut impl Memory) {
-        if self.p.is_8bit() {
-            let value = memory.read(addr.into());
-            memory.write(addr.into(), value);
-        } else {
-            let (low, high) = self.asl_16(
-                memory.read(addr.into()),
-                memory.read(addr.wrapping_add(1u32).into()),
-            );
-            memory.write(addr.into(), low);
-            memory.write(addr.wrapping_add(1u32).into(), high);
-        }
     }
 
     /// Individual methods for each addressing mode
@@ -262,46 +233,69 @@ impl Processor {
     /// decode it, and execute it.
     /// Update the program counter accordingly.
     pub fn step<T: Memory>(&mut self, memory: &mut T) {
-        macro_rules! cpu_func {
-            ($func: ident, $get_addr: ident) => {{
-                let bus = self.$get_addr(memory);
-                self.$func(bus, memory)
+        macro_rules! read_func {
+            ($f_8: ident, $f_16: ident, $addr: ident) => {{
+                let addr = self.$addr(memory);
+                if self.p.is_8bit() {
+                    self.$f_8(memory.read(addr.into()));
+                } else {
+                    self.$f_16(
+                        memory.read(addr.into()),
+                        memory.read(addr.wrapping_add(1u32).into()),
+                    );
+                }
+            }};
+        }
+        macro_rules! read_write_func {
+            ($func_8: ident, $func_16: ident, $get_addr: ident) => {{
+                let address = self.$get_addr(memory);
+                if self.p.is_8bit() {
+                    let value = self.$func_8(memory.read(address.into()));
+                    memory.write(address.into(), value);
+                } else {
+                    let (low, high) = self.$func_16(
+                        memory.read(address.into()),
+                        memory.read(address.wrapping_add(1u32).into()),
+                    );
+                    memory.write(address.into(), low);
+                    memory.write(address.wrapping_add(1u32).into(), high);
+                }
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
         match opcode {
-            ADC_I => cpu_func!(adc, i),
-            ADC_A => cpu_func!(adc, a),
-            ADC_AX => cpu_func!(adc, ax),
-            ADC_AY => cpu_func!(adc, ay),
-            ADC_AL => cpu_func!(adc, al),
-            ADC_ALX => cpu_func!(adc, alx),
-            ADC_D => cpu_func!(adc, d),
-            ADC_DX => cpu_func!(adc, dx),
-            ADC_DI => cpu_func!(adc, di),
-            ADC_DIX => cpu_func!(adc, dix),
-            ADC_DIY => cpu_func!(adc, diy),
-            ADC_DIL => cpu_func!(adc, dil),
-            ADC_DILY => cpu_func!(adc, dily),
-            ADC_SR => cpu_func!(adc, sr),
-            ADC_SRIY => cpu_func!(adc, sriy),
-            AND_I => cpu_func!(and, i),
-            AND_A => cpu_func!(and, a),
-            AND_AL => cpu_func!(and, al),
-            AND_D => cpu_func!(and, d),
-            AND_DI => cpu_func!(and, di),
-            AND_DIL => cpu_func!(and, dil),
-            AND_AX => cpu_func!(and, ax),
-            AND_ALX => cpu_func!(and, alx),
-            AND_AY => cpu_func!(and, ay),
-            AND_DX => cpu_func!(and, dx),
-            AND_DIX => cpu_func!(and, dix),
-            AND_DIY => cpu_func!(and, diy),
-            AND_DILY => cpu_func!(and, dily),
-            AND_SR => cpu_func!(and, sr),
-            AND_SRIY => cpu_func!(and, sriy),
+            ADC_I => read_func!(adc_8, adc_16, i),
+            ADC_A => read_func!(adc_8, adc_16, a),
+            ADC_AX => read_func!(adc_8, adc_16, ax),
+            ADC_AY => read_func!(adc_8, adc_16, ay),
+            ADC_AL => read_func!(adc_8, adc_16, al),
+            ADC_ALX => read_func!(adc_8, adc_16, alx),
+            ADC_D => read_func!(adc_8, adc_16, d),
+            ADC_DX => read_func!(adc_8, adc_16, dx),
+            ADC_DI => read_func!(adc_8, adc_16, di),
+            ADC_DIX => read_func!(adc_8, adc_16, dix),
+            ADC_DIY => read_func!(adc_8, adc_16, diy),
+            ADC_DIL => read_func!(adc_8, adc_16, dil),
+            ADC_DILY => read_func!(adc_8, adc_16, dily),
+            ADC_SR => read_func!(adc_8, adc_16, sr),
+            ADC_SRIY => read_func!(adc_8, adc_16, sriy),
+            AND_I => read_func!(and_8, and_16, i),
+            AND_A => read_func!(and_8, and_16, a),
+            AND_AL => read_func!(and_8, and_16, al),
+            AND_D => read_func!(and_8, and_16, d),
+            AND_DI => read_func!(and_8, and_16, di),
+            AND_DIL => read_func!(and_8, and_16, dil),
+            AND_AX => read_func!(and_8, and_16, ax),
+            AND_ALX => read_func!(and_8, and_16, alx),
+            AND_AY => read_func!(and_8, and_16, ay),
+            AND_DX => read_func!(and_8, and_16, dx),
+            AND_DIX => read_func!(and_8, and_16, dix),
+            AND_DIY => read_func!(and_8, and_16, diy),
+            AND_DILY => read_func!(and_8, and_16, dily),
+            AND_SR => read_func!(and_8, and_16, sr),
+            AND_SRIY => read_func!(and_8, and_16, sriy),
             ASL_ACC => {
                 self.a = self.asl_8(self.a);
                 if self.p.is_16bit() {
@@ -309,18 +303,18 @@ impl Processor {
                     self.b = self.asl_8(self.b).wrapping_add(carry.into());
                 }
             }
-            ASL_A => cpu_func!(asl, a),
-            ASL_D => cpu_func!(asl, d),
-            ASL_AX => cpu_func!(asl, ax),
-            ASL_DX => cpu_func!(asl, dx),
-            BCC => self.bcc(),
+            ASL_A => read_write_func!(asl_8, asl_16, a),
+            ASL_D => read_write_func!(asl_8, asl_16, d),
+            ASL_AX => read_write_func!(asl_8, asl_16, ax),
+            ASL_DX => read_write_func!(asl_8, asl_16, dx),
+            /*BCC => self.bcc(),
             BCS => self.bcs(),
             BEQ => self.beq(),
-            BIT_I => cpu_func!(bit, i),
-            BIT_A => cpu_func!(bit, a),
-            BIT_D => cpu_func!(bit, d),
-            BIT_AX => cpu_func!(bit, ax),
-            BIT_DX => cpu_func!(bit, dx),
+            BIT_I => cpu_func!(bit_8, bit_16, i),
+            BIT_A => cpu_func!(bit_8, bit_16, a),
+            BIT_D => cpu_func!(bit_8, bit_16, d),
+            BIT_AX => cpu_func!(bit_8, bit_16, ax),
+            BIT_DX => cpu_func!(bit_8, bit_16, dx),
             BMI => self.bmi(),
             BNE => self.bne(),
             BPL => self.bpl(),
@@ -333,113 +327,113 @@ impl Processor {
             CLD => self.cld(),
             CLI => self.cli(),
             CLV => self.clv(),
-            CMP_I => cpu_func!(cmp, i),
-            CMP_A => cpu_func!(cmp, a),
-            CMP_AL => cpu_func!(cmp, al),
-            CMP_D => cpu_func!(cmp, d),
-            CMP_DI => cpu_func!(cmp, di),
-            CMP_DIL => cpu_func!(cmp, dil),
-            CMP_AX => cpu_func!(cmp, ax),
-            CMP_ALX => cpu_func!(cmp, alx),
-            CMP_AY => cpu_func!(cmp, ay),
-            CMP_DX => cpu_func!(cmp, dx),
-            CMP_DIX => cpu_func!(cmp, dix),
-            CMP_DIY => cpu_func!(cmp, diy),
-            CMP_DILY => cpu_func!(cmp, dily),
-            CMP_SR => cpu_func!(cmp, sr),
-            CMP_SRIY => cpu_func!(cmp, sriy),
+            CMP_I => cpu_func!(cmp_8, cmp_16, i),
+            CMP_A => cpu_func!(cmp_8, cmp_16, a),
+            CMP_AL => cpu_func!(cmp_8, cmp_16, al),
+            CMP_D => cpu_func!(cmp_8, cmp_16, d),
+            CMP_DI => cpu_func!(cmp_8, cmp_16, di),
+            CMP_DIL => cpu_func!(cmp_8, cmp_16, dil),
+            CMP_AX => cpu_func!(cmp_8, cmp_16, ax),
+            CMP_ALX => cpu_func!(cmp_8, cmp_16, alx),
+            CMP_AY => cpu_func!(cmp_8, cmp_16, ay),
+            CMP_DX => cpu_func!(cmp_8, cmp_16, dx),
+            CMP_DIX => cpu_func!(cmp_8, cmp_16, dix),
+            CMP_DIY => cpu_func!(cmp_8, cmp_16, diy),
+            CMP_DILY => cpu_func!(cmp_8, cmp_16, dily),
+            CMP_SR => cpu_func!(cmp_8, cmp_16, sr),
+            CMP_SRIY => cpu_func!(cmp_8, cmp_16, sriy),
             COP => self.cop(),
-            CPX_I => cpu_func!(cpx, i),
-            CPX_A => cpu_func!(cpx, a),
-            CPX_D => cpu_func!(cpx, d),
-            CPY_I => cpu_func!(cpy, i),
-            CPY_A => cpu_func!(cpy, a),
-            CPY_D => cpu_func!(cpy, d),
-            DEC_ACC => cpu_func!(dec, acc),
-            DEC_A => cpu_func!(dec, a),
-            DEC_D => cpu_func!(dec, d),
-            DEC_AX => cpu_func!(dec, ax),
-            DEC_DX => cpu_func!(dec, dx),
+            CPX_I => cpu_func!(cpx_8, cpx_16, i),
+            CPX_A => cpu_func!(cpx_8, cpx_16, a),
+            CPX_D => cpu_func!(cpx_8, cpx_16, d),
+            CPY_I => cpu_func!(cpy_8, cpy_16, i),
+            CPY_A => cpu_func!(cpy_8, cpy_16, a),
+            CPY_D => cpu_func!(cpy_8, cpy_16, d),
+            DEC_ACC => cpu_func!(dec_8, dec_16, acc),
+            DEC_A => cpu_func!(dec_8, dec_16, a),
+            DEC_D => cpu_func!(dec_8, dec_16, d),
+            DEC_AX => cpu_func!(dec_8, dec_16, ax),
+            DEC_DX => cpu_func!(dec_8, dec_16, dx),
             DEX => self.dex(),
             DEY => self.dey(),
-            EOR_I => cpu_func!(eor, i),
-            EOR_A => cpu_func!(eor, a),
-            EOR_AL => cpu_func!(eor, al),
-            EOR_D => cpu_func!(eor, d),
-            EOR_DI => cpu_func!(eor, di),
-            EOR_DIL => cpu_func!(eor, dil),
-            EOR_AX => cpu_func!(eor, ax),
-            EOR_ALX => cpu_func!(eor, alx),
-            EOR_AY => cpu_func!(eor, ay),
-            EOR_DX => cpu_func!(eor, dx),
-            EOR_DIX => cpu_func!(eor, dix),
-            EOR_DIY => cpu_func!(eor, diy),
-            EOR_DILY => cpu_func!(eor, dily),
-            EOR_SR => cpu_func!(eor, sr),
-            EOR_SRIY => cpu_func!(eor, sriy),
-            INC_ACC => cpu_func!(inc, acc),
-            INC_A => cpu_func!(inc, a),
-            INC_D => cpu_func!(inc, d),
-            INC_AX => cpu_func!(inc, ax),
-            INC_DX => cpu_func!(inc, dx),
+            EOR_I => cpu_func!(eor_8, eor_16, i),
+            EOR_A => cpu_func!(eor_8, eor_16, a),
+            EOR_AL => cpu_func!(eor_8, eor_16, al),
+            EOR_D => cpu_func!(eor_8, eor_16, d),
+            EOR_DI => cpu_func!(eor_8, eor_16, di),
+            EOR_DIL => cpu_func!(eor_8, eor_16, dil),
+            EOR_AX => cpu_func!(eor_8, eor_16, ax),
+            EOR_ALX => cpu_func!(eor_8, eor_16, alx),
+            EOR_AY => cpu_func!(eor_8, eor_16, ay),
+            EOR_DX => cpu_func!(eor_8, eor_16, dx),
+            EOR_DIX => cpu_func!(eor_8, eor_16, dix),
+            EOR_DIY => cpu_func!(eor_8, eor_16, diy),
+            EOR_DILY => cpu_func!(eor_8, eor_16, dily),
+            EOR_SR => cpu_func!(eor_8, eor_16, sr),
+            EOR_SRIY => cpu_func!(eor_8, eor_16, sriy),
+            INC_ACC => cpu_func!(inc_8, inc_16, acc),
+            INC_A => cpu_func!(inc_8, inc_16, a),
+            INC_D => cpu_func!(inc_8, inc_16, d),
+            INC_AX => cpu_func!(inc_8, inc_16, ax),
+            INC_DX => cpu_func!(inc_8, inc_16, dx),
             INX => self.inx(),
             INY => self.iny(),
-            JMP_A => cpu_func!(jmp, a),
-            JMP_AI => cpu_func!(jmp, ai),
-            JMP_AIX => cpu_func!(jmp, aix),
-            JMP_AL => cpu_func!(jmp, al),
-            JMP_AIL => cpu_func!(jmp, ail),
-            JSR_A => cpu_func!(jsr, a),
-            JSR_AIX => cpu_func!(jsr, aix),
-            JSR_AL => cpu_func!(jsr, al),
-            LDA_I => cpu_func!(lda, i),
-            LDA_A => cpu_func!(lda, a),
-            LDA_AL => cpu_func!(lda, al),
-            LDA_D => cpu_func!(lda, d),
-            LDA_DI => cpu_func!(lda, di),
-            LDA_DIL => cpu_func!(lda, dil),
-            LDA_AX => cpu_func!(lda, ax),
-            LDA_ALX => cpu_func!(lda, alx),
-            LDA_AY => cpu_func!(lda, ay),
-            LDA_DX => cpu_func!(lda, dx),
-            LDA_DIX => cpu_func!(lda, dix),
-            LDA_DIY => cpu_func!(lda, diy),
-            LDA_DILY => cpu_func!(lda, dily),
-            LDA_SR => cpu_func!(lda, sr),
-            LDA_SRIY => cpu_func!(lda, sriy),
-            LDX_I => cpu_func!(ldx, i),
-            LDX_A => cpu_func!(ldx, a),
-            LDX_D => cpu_func!(ldx, d),
-            LDX_AY => cpu_func!(ldx, ay),
-            LDX_DY => cpu_func!(ldx, dy),
-            LDY_I => cpu_func!(ldy, i),
-            LDY_A => cpu_func!(ldy, a),
-            LDY_D => cpu_func!(ldy, d),
-            LDY_AX => cpu_func!(ldy, ax),
-            LDY_DX => cpu_func!(ldy, dx),
-            LSR_ACC => cpu_func!(lsr, acc),
-            LSR_A => cpu_func!(lsr, a),
-            LSR_D => cpu_func!(lsr, d),
-            LSR_AX => cpu_func!(lsr, ax),
-            LSR_DX => cpu_func!(lsr, dx),
-            MVN_NEXT => cpu_func!(mvn, next),
-            MVN_PREV => cpu_func!(mvn, prev),
+            JMP_A => cpu_func!(jmp_8, jmp_16, a),
+            JMP_AI => cpu_func!(jmp_8, jmp_16, ai),
+            JMP_AIX => cpu_func!(jmp_8, jmp_16, aix),
+            JMP_AL => cpu_func!(jmp_8, jmp_16, al),
+            JMP_AIL => cpu_func!(jmp_8, jmp_16, ail),
+            JSR_A => cpu_func!(jsr_8, jsr_16, a),
+            JSR_AIX => cpu_func!(jsr_8, jsr_16, aix),
+            JSR_AL => cpu_func!(jsr_8, jsr_16, al),
+            LDA_I => cpu_func!(lda_8, lda_16, i),
+            LDA_A => cpu_func!(lda_8, lda_16, a),
+            LDA_AL => cpu_func!(lda_8, lda_16, al),
+            LDA_D => cpu_func!(lda_8, lda_16, d),
+            LDA_DI => cpu_func!(lda_8, lda_16, di),
+            LDA_DIL => cpu_func!(lda_8, lda_16, dil),
+            LDA_AX => cpu_func!(lda_8, lda_16, ax),
+            LDA_ALX => cpu_func!(lda_8, lda_16, alx),
+            LDA_AY => cpu_func!(lda_8, lda_16, ay),
+            LDA_DX => cpu_func!(lda_8, lda_16, dx),
+            LDA_DIX => cpu_func!(lda_8, lda_16, dix),
+            LDA_DIY => cpu_func!(lda_8, lda_16, diy),
+            LDA_DILY => cpu_func!(lda_8, lda_16, dily),
+            LDA_SR => cpu_func!(lda_8, lda_16, sr),
+            LDA_SRIY => cpu_func!(lda_8, lda_16, sriy),
+            LDX_I => cpu_func!(ldx_8, ldx_16, i),
+            LDX_A => cpu_func!(ldx_8, ldx_16, a),
+            LDX_D => cpu_func!(ldx_8, ldx_16, d),
+            LDX_AY => cpu_func!(ldx_8, ldx_16, ay),
+            LDX_DY => cpu_func!(ldx_8, ldx_16, dy),
+            LDY_I => cpu_func!(ldy_8, ldy_16, i),
+            LDY_A => cpu_func!(ldy_8, ldy_16, a),
+            LDY_D => cpu_func!(ldy_8, ldy_16, d),
+            LDY_AX => cpu_func!(ldy_8, ldy_16, ax),
+            LDY_DX => cpu_func!(ldy_8, ldy_16, dx),
+            LSR_ACC => cpu_func!(lsr_8, lsr_16, acc),
+            LSR_A => cpu_func!(lsr_8, lsr_16, a),
+            LSR_D => cpu_func!(lsr_8, lsr_16, d),
+            LSR_AX => cpu_func!(lsr_8, lsr_16, ax),
+            LSR_DX => cpu_func!(lsr_8, lsr_16, dx),
+            MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
+            MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),
             NOP => self.nop(),
-            ORA_I => cpu_func!(ora, i),
-            ORA_A => cpu_func!(ora, a),
-            ORA_AL => cpu_func!(ora, al),
-            ORA_D => cpu_func!(ora, d),
-            ORA_DI => cpu_func!(ora, di),
-            ORA_DIL => cpu_func!(ora, dil),
-            ORA_AX => cpu_func!(ora, ax),
-            ORA_ALX => cpu_func!(ora, alx),
-            ORA_AY => cpu_func!(ora, ay),
-            ORA_DX => cpu_func!(ora, dx),
-            ORA_DIX => cpu_func!(ora, dix),
-            ORA_DIY => cpu_func!(ora, diy),
-            ORA_DILY => cpu_func!(ora, dily),
-            ORA_SR => cpu_func!(ora, sr),
-            ORA_SRIY => cpu_func!(ora, sriy),
+            ORA_I => cpu_func!(ora_8, ora_16, i),
+            ORA_A => cpu_func!(ora_8, ora_16, a),
+            ORA_AL => cpu_func!(ora_8, ora_16, al),
+            ORA_D => cpu_func!(ora_8, ora_16, d),
+            ORA_DI => cpu_func!(ora_8, ora_16, di),
+            ORA_DIL => cpu_func!(ora_8, ora_16, dil),
+            ORA_AX => cpu_func!(ora_8, ora_16, ax),
+            ORA_ALX => cpu_func!(ora_8, ora_16, alx),
+            ORA_AY => cpu_func!(ora_8, ora_16, ay),
+            ORA_DX => cpu_func!(ora_8, ora_16, dx),
+            ORA_DIX => cpu_func!(ora_8, ora_16, dix),
+            ORA_DIY => cpu_func!(ora_8, ora_16, diy),
+            ORA_DILY => cpu_func!(ora_8, ora_16, dily),
+            ORA_SR => cpu_func!(ora_8, ora_16, sr),
+            ORA_SRIY => cpu_func!(ora_8, ora_16, sriy),
             PEA => self.pea(),
             PEI => self.pei(),
             PER => self.per(),
@@ -456,73 +450,73 @@ impl Processor {
             PLP => self.plp(),
             PLX => self.plx(),
             PLY => self.ply(),
-            REP_I => cpu_func!(rep, i),
-            ROL_ACC => cpu_func!(rol, acc),
-            ROL_A => cpu_func!(rol, a),
-            ROL_D => cpu_func!(rol, d),
-            ROL_AX => cpu_func!(rol, ax),
-            ROL_DX => cpu_func!(rol, dx),
-            ROR_ACC => cpu_func!(ror, acc),
-            ROR_A => cpu_func!(ror, a),
-            ROR_D => cpu_func!(ror, d),
-            ROR_AX => cpu_func!(ror, ax),
-            ROR_DX => cpu_func!(ror, dx),
+            REP_I => cpu_func!(rep_8, rep_16, i),
+            ROL_ACC => cpu_func!(rol_8, rol_16, acc),
+            ROL_A => cpu_func!(rol_8, rol_16, a),
+            ROL_D => cpu_func!(rol_8, rol_16, d),
+            ROL_AX => cpu_func!(rol_8, rol_16, ax),
+            ROL_DX => cpu_func!(rol_8, rol_16, dx),
+            ROR_ACC => cpu_func!(ror_8, ror_16, acc),
+            ROR_A => cpu_func!(ror_8, ror_16, a),
+            ROR_D => cpu_func!(ror_8, ror_16, d),
+            ROR_AX => cpu_func!(ror_8, ror_16, ax),
+            ROR_DX => cpu_func!(ror_8, ror_16, dx),
             RTI => self.rti(),
             RTL => self.rtl(),
             RTS => self.rts(),
-            SBC_I => cpu_func!(sbc, i),
-            SBC_A => cpu_func!(sbc, a),
-            SBC_AL => cpu_func!(sbc, al),
-            SBC_D => cpu_func!(sbc, d),
-            SBC_DI => cpu_func!(sbc, di),
-            SBC_DIL => cpu_func!(sbc, dil),
-            SBC_AX => cpu_func!(sbc, ax),
-            SBC_ALX => cpu_func!(sbc, alx),
-            SBC_AY => cpu_func!(sbc, ay),
-            SBC_DX => cpu_func!(sbc, dx),
-            SBC_DIX => cpu_func!(sbc, dix),
-            SBC_DIY => cpu_func!(sbc, diy),
-            SBC_DILY => cpu_func!(sbc, dily),
-            SBC_SR => cpu_func!(sbc, sr),
-            SBC_SRIY => cpu_func!(sbc, sriy),
+            SBC_I => cpu_func!(sbc_8, sbc_16, i),
+            SBC_A => cpu_func!(sbc_8, sbc_16, a),
+            SBC_AL => cpu_func!(sbc_8, sbc_16, al),
+            SBC_D => cpu_func!(sbc_8, sbc_16, d),
+            SBC_DI => cpu_func!(sbc_8, sbc_16, di),
+            SBC_DIL => cpu_func!(sbc_8, sbc_16, dil),
+            SBC_AX => cpu_func!(sbc_8, sbc_16, ax),
+            SBC_ALX => cpu_func!(sbc_8, sbc_16, alx),
+            SBC_AY => cpu_func!(sbc_8, sbc_16, ay),
+            SBC_DX => cpu_func!(sbc_8, sbc_16, dx),
+            SBC_DIX => cpu_func!(sbc_8, sbc_16, dix),
+            SBC_DIY => cpu_func!(sbc_8, sbc_16, diy),
+            SBC_DILY => cpu_func!(sbc_8, sbc_16, dily),
+            SBC_SR => cpu_func!(sbc_8, sbc_16, sr),
+            SBC_SRIY => cpu_func!(sbc_8, sbc_16, sriy),
             SEC => self.sec(),
             SED => self.sed(),
             SEI => self.sei(),
-            SEP_I => cpu_func!(sep, i),
-            STA_A => cpu_func!(sta, a),
-            STA_AL => cpu_func!(sta, al),
-            STA_D => cpu_func!(sta, d),
-            STA_DI => cpu_func!(sta, di),
-            STA_DIL => cpu_func!(sta, dil),
-            STA_AX => cpu_func!(sta, ax),
-            STA_ALX => cpu_func!(sta, alx),
-            STA_AY => cpu_func!(sta, ay),
-            STA_DX => cpu_func!(sta, dx),
-            STA_DIX => cpu_func!(sta, dix),
-            STA_DIY => cpu_func!(sta, diy),
-            STA_DILY => cpu_func!(sta, dily),
-            STA_SR => cpu_func!(sta, sr),
-            STA_SRIY => cpu_func!(sta, sriy),
+            SEP_I => cpu_func!(sep_8, sep_16, i),
+            STA_A => cpu_func!(sta_8, sta_16, a),
+            STA_AL => cpu_func!(sta_8, sta_16, al),
+            STA_D => cpu_func!(sta_8, sta_16, d),
+            STA_DI => cpu_func!(sta_8, sta_16, di),
+            STA_DIL => cpu_func!(sta_8, sta_16, dil),
+            STA_AX => cpu_func!(sta_8, sta_16, ax),
+            STA_ALX => cpu_func!(sta_8, sta_16, alx),
+            STA_AY => cpu_func!(sta_8, sta_16, ay),
+            STA_DX => cpu_func!(sta_8, sta_16, dx),
+            STA_DIX => cpu_func!(sta_8, sta_16, dix),
+            STA_DIY => cpu_func!(sta_8, sta_16, diy),
+            STA_DILY => cpu_func!(sta_8, sta_16, dily),
+            STA_SR => cpu_func!(sta_8, sta_16, sr),
+            STA_SRIY => cpu_func!(sta_8, sta_16, sriy),
             STP => self.stp(),
-            STX_A => cpu_func!(stx, a),
-            STX_D => cpu_func!(stx, d),
-            STX_DY => cpu_func!(stx, dy),
-            STY_A => cpu_func!(sty, a),
-            STY_D => cpu_func!(sty, d),
-            STY_DX => cpu_func!(sty, dx),
-            STZ_A => cpu_func!(stz, a),
-            STZ_D => cpu_func!(stz, d),
-            STZ_AX => cpu_func!(stz, ax),
-            STZ_DX => cpu_func!(stz, dx),
+            STX_A => cpu_func!(stx_8, stx_16, a),
+            STX_D => cpu_func!(stx_8, stx_16, d),
+            STX_DY => cpu_func!(stx_8, stx_16, dy),
+            STY_A => cpu_func!(sty_8, sty_16, a),
+            STY_D => cpu_func!(sty_8, sty_16, d),
+            STY_DX => cpu_func!(sty_8, sty_16, dx),
+            STZ_A => cpu_func!(stz_8, stz_16, a),
+            STZ_D => cpu_func!(stz_8, stz_16, d),
+            STZ_AX => cpu_func!(stz_8, stz_16, ax),
+            STZ_DX => cpu_func!(stz_8, stz_16, dx),
             TAX => self.tax(),
             TAY => self.tay(),
             TCD => self.tcd(),
             TCS => self.tcs(),
             TDC => self.tdc(),
-            TRB_A => cpu_func!(trb, a),
-            TRB_D => cpu_func!(trb, d),
-            TSB_A => cpu_func!(tsb, a),
-            TSB_D => cpu_func!(tsb, d),
+            TRB_A => cpu_func!(trb_8, trb_16, a),
+            TRB_D => cpu_func!(trb_8, trb_16, d),
+            TSB_A => cpu_func!(tsb_8, tsb_16, a),
+            TSB_D => cpu_func!(tsb_8, tsb_16, d),
             TSC => self.tsc(),
             TSX => self.tsx(),
             TXA => self.txa(),
@@ -533,7 +527,7 @@ impl Processor {
             WAI => self.wai(),
             WDM => self.wdm(),
             XBA => self.xba(),
-            XCE => self.xce(),
+            XCE => self.xce(),*/
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
     }
