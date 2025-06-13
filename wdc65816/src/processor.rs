@@ -179,12 +179,27 @@ impl Processor {
 
     /// Compare (CMP) 8-bit
     fn cmp_8(&mut self, value: u8) {
-        self.compare_8(self.a, value)
+        self.compare_8(self.a, value);
     }
     fn cmp_16(&mut self, low: u8, high: u8) {
         self.compare_16((self.a, self.b), (low, high));
     }
-
+    /// Compare X (CPX) 8-bit
+    fn cpx_8(&mut self, value: u8) {
+        self.compare_8(self.xl, value);
+    }
+    /// Compare X (CPX) 16-bit
+    fn cpx_16(&mut self, low: u8, high: u8) {
+        self.compare_16((self.xl, self.xh), (low, high));
+    }
+    /// Compare Y (CPY) 8-bit
+    fn cpy_8(&mut self, value: u8) {
+        self.compare_8(self.yl, value);
+    }
+    /// Compare Y (CPY) 16-bit
+    fn cpy_16(&mut self, low: u8, high: u8) {
+        self.compare_16((self.yl, self.yh), (low, high));
+    }
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
     /// All return (bank, address) which are combined to form the final address in the
@@ -441,14 +456,14 @@ impl Processor {
             CMP_DILY => read_func!(cmp_8, cmp_16, dily),
             CMP_SR => read_func!(cmp_8, cmp_16, sr),
             CMP_SRIY => read_func!(cmp_8, cmp_16, sriy),
-            /*COP => self.cop(),
-            CPX_I => cpu_func!(cpx_8, cpx_16, i),
-            CPX_A => cpu_func!(cpx_8, cpx_16, a),
-            CPX_D => cpu_func!(cpx_8, cpx_16, d),
-            CPY_I => cpu_func!(cpy_8, cpy_16, i),
-            CPY_A => cpu_func!(cpy_8, cpy_16, a),
-            CPY_D => cpu_func!(cpy_8, cpy_16, d),
-            DEC_ACC => cpu_func!(dec_8, dec_16, acc),
+            // COP => self.cop(),
+            CPX_I => read_func!(cpx_8, cpx_16, i),
+            CPX_A => read_func!(cpx_8, cpx_16, a),
+            CPX_D => read_func!(cpx_8, cpx_16, d),
+            CPY_I => read_func!(cpy_8, cpy_16, i),
+            CPY_A => read_func!(cpy_8, cpy_16, a),
+            CPY_D => read_func!(cpy_8, cpy_16, d),
+            /* DEC_ACC => cpu_func!(dec_8, dec_16, acc),
             DEC_A => cpu_func!(dec_8, dec_16, a),
             DEC_D => cpu_func!(dec_8, dec_16, d),
             DEC_AX => cpu_func!(dec_8, dec_16, ax),
