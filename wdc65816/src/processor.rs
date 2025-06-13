@@ -258,6 +258,19 @@ impl Processor {
         self.p.z = (high == 0) && (low == 0);
         (low, high)
     }
+    /// Exclusive Or (EOR) 8-bit
+    fn eor_8(&mut self, value: u8) {
+        self.a = self.a ^ value;
+        self.p.n = (self.a & 0x80) != 0;
+        self.p.z = self.a == 0;
+    }
+    /// Exclusive OR (EOR) 16-bit
+    fn eor_16(&mut self, low: u8, high: u8) {
+        self.a = self.a ^ low;
+        self.b = self.b ^ high;
+        self.p.n = (self.b & 0x80) != 0;
+        self.p.z = (self.a | self.b) == 0;
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -540,22 +553,22 @@ impl Processor {
             DEC_DX => read_write_func!(dec_8, dec_16, dx),
             DEX => reg_func!(xl, xh, xy_is_16bit, dec_8, dec_16),
             DEY => reg_func!(yl, yh, xy_is_16bit, dec_8, dec_16),
-            /*EOR_I => cpu_func!(eor_8, eor_16, i),
-            EOR_A => cpu_func!(eor_8, eor_16, a),
-            EOR_AL => cpu_func!(eor_8, eor_16, al),
-            EOR_D => cpu_func!(eor_8, eor_16, d),
-            EOR_DI => cpu_func!(eor_8, eor_16, di),
-            EOR_DIL => cpu_func!(eor_8, eor_16, dil),
-            EOR_AX => cpu_func!(eor_8, eor_16, ax),
-            EOR_ALX => cpu_func!(eor_8, eor_16, alx),
-            EOR_AY => cpu_func!(eor_8, eor_16, ay),
-            EOR_DX => cpu_func!(eor_8, eor_16, dx),
-            EOR_DIX => cpu_func!(eor_8, eor_16, dix),
-            EOR_DIY => cpu_func!(eor_8, eor_16, diy),
-            EOR_DILY => cpu_func!(eor_8, eor_16, dily),
-            EOR_SR => cpu_func!(eor_8, eor_16, sr),
-            EOR_SRIY => cpu_func!(eor_8, eor_16, sriy),
-            INC_ACC => cpu_func!(inc_8, inc_16, acc),
+            EOR_I => read_func!(eor_8, eor_16, i),
+            EOR_A => read_func!(eor_8, eor_16, a),
+            EOR_AL => read_func!(eor_8, eor_16, al),
+            EOR_D => read_func!(eor_8, eor_16, d),
+            EOR_DI => read_func!(eor_8, eor_16, di),
+            EOR_DIL => read_func!(eor_8, eor_16, dil),
+            EOR_AX => read_func!(eor_8, eor_16, ax),
+            EOR_ALX => read_func!(eor_8, eor_16, alx),
+            EOR_AY => read_func!(eor_8, eor_16, ay),
+            EOR_DX => read_func!(eor_8, eor_16, dx),
+            EOR_DIX => read_func!(eor_8, eor_16, dix),
+            EOR_DIY => read_func!(eor_8, eor_16, diy),
+            EOR_DILY => read_func!(eor_8, eor_16, dily),
+            EOR_SR => read_func!(eor_8, eor_16, sr),
+            EOR_SRIY => read_func!(eor_8, eor_16, sriy),
+            /*INC_ACC => cpu_func!(inc_8, inc_16, acc),
             INC_A => cpu_func!(inc_8, inc_16, a),
             INC_D => cpu_func!(inc_8, inc_16, d),
             INC_AX => cpu_func!(inc_8, inc_16, ax),
