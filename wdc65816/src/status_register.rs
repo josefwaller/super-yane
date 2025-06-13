@@ -16,6 +16,7 @@ pub struct StatusRegister {
     /// Overflow flag
     pub v: bool,
     /// Emulation flag
+    /// 0 = native (16-bit), 1 = emulation (8-bit)
     pub e: bool,
     /// Break flag
     pub b: bool,
@@ -36,5 +37,26 @@ impl StatusRegister {
     }
     pub fn xy_is_16bit(&self) -> bool {
         !self.x
+    }
+    pub fn to_byte(&self) -> u8 {
+        let mut value = 0;
+
+        macro_rules! set_bit {
+            ($bit_num: expr, $value: expr) => {
+                if $value {
+                    value |= (0x01 << $bit_num)
+                }
+            };
+        }
+        set_bit!(0, self.c);
+        set_bit!(1, self.z);
+        set_bit!(2, self.i);
+        set_bit!(3, self.d);
+        set_bit!(4, self.x);
+        set_bit!(5, self.m);
+        set_bit!(6, self.v);
+        set_bit!(7, self.n);
+
+        value
     }
 }

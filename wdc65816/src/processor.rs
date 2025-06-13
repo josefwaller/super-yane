@@ -3,6 +3,7 @@ use crate::status_register::StatusRegister;
 use crate::u24::u24;
 
 use std::default::Default;
+use std::sync::Arc;
 
 pub trait Memory {
     /// Read a single byte from memory
@@ -79,6 +80,26 @@ impl Processor {
             self.yh as u16 * 0x100 + self.yl as u16
         } else {
             self.yl as u16
+        }
+    }
+    /// Push a single byte to stack
+    fn push_u8(&mut self, value: u8, memory: &mut impl Memory) {
+        memory.write(self.s.into(), value);
+        self.s = self.s.wrapping_add(1);
+        // Force high to 0 in emulation mode
+        if self.p.e {
+            self.s = self.s & 0xFF;
+        }
+    }
+    /// Push a 16-bit value to the stack
+    fn push_u16(&mut self, value: u16, memory: &mut impl Memory) {
+        // Push high first
+        memory.write(self.s.into(), (value >> 8) as u8);
+        memory.write(self.s.into(), (value & 0xFF) as u8);
+        self.s = self.s.wrapping_add(2);
+        // Force high to 0 in emulation mode
+        if self.p.e {
+            self.s = self.s & 0xFF
         }
     }
     /// Add with Carry 8-bit
@@ -200,6 +221,29 @@ impl Processor {
     fn cpy_16(&mut self, low: u8, high: u8) {
         self.compare_16((self.yl, self.yh), (low, high));
     }
+
+    /// Break to a given address
+    fn break_to(&mut self, memory: &mut impl Memory, addr_16: u16, addr_8: u16, set_b: bool) {
+        if self.p.e {
+            // Since we already incremented the PC by 1 we want to just add 1
+            self.push_u16(self.pc.wrapping_add(1), memory);
+            // Clone processor register to set B flag
+            let mut p = self.p;
+            if set_b {
+                p.b = true;
+            }
+            self.push_u8(p.to_byte(), memory);
+            self.pbr = 0x00;
+            self.pc = addr_8;
+        } else {
+            self.push_u8(self.pbr, memory);
+            self.push_u16(self.pc.wrapping_add(1), memory);
+            self.push_u8(self.p.to_byte(), memory);
+            self.pbr = 0x00;
+            self.pc = addr_16;
+        }
+    }
+
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
     /// All return (bank, address) which are combined to form the final address in the
@@ -456,7 +500,7 @@ impl Processor {
             CMP_DILY => read_func!(cmp_8, cmp_16, dily),
             CMP_SR => read_func!(cmp_8, cmp_16, sr),
             CMP_SRIY => read_func!(cmp_8, cmp_16, sriy),
-            // COP => self.cop(),
+            COP => self.break_to(memory, 0xFFE4, 0xFFF4, false),
             CPX_I => read_func!(cpx_8, cpx_16, i),
             CPX_A => read_func!(cpx_8, cpx_16, a),
             CPX_D => read_func!(cpx_8, cpx_16, d),
