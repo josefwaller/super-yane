@@ -253,7 +253,7 @@ impl Processor {
     /// Decrement (DEC) 16-bit
     fn dec_16(&mut self, low: u8, high: u8) -> (u8, u8) {
         let (low, carry) = low.overflowing_sub(1);
-        let high = high.wrapping_sub(1).wrapping_sub(carry.into());
+        let high = high.wrapping_sub(carry.into());
         self.p.n = (high & 0x80) == 0;
         self.p.z = (high == 0) && (low == 0);
         (low, high)
@@ -270,6 +270,21 @@ impl Processor {
         self.b = self.b ^ high;
         self.p.n = (self.b & 0x80) != 0;
         self.p.z = (self.a | self.b) == 0;
+    }
+    /// Increment (INC) 8-bit
+    fn inc_8(&mut self, value: u8) -> u8 {
+        let r = value.wrapping_add(1);
+        self.p.n = (r & 0x80) != 0;
+        self.p.z = r == 0;
+        r
+    }
+    /// Increment (INC) 16-bit
+    fn inc_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let (low, carry) = low.overflowing_add(1);
+        let high = high.wrapping_add(carry.into());
+        self.p.n = (high & 0x80) == 0;
+        self.p.z = (high == 0) && (low == 0);
+        (low, high)
     }
 
     /// Individual methods for each addressing mode
@@ -447,6 +462,21 @@ impl Processor {
                 }
             }};
         }
+        macro_rules! acc_func {
+            ($f_8: ident, $f_16: ident) => {
+                reg_func!(a, b, a_is_16bit, $f_8, $f_16)
+            };
+        }
+        macro_rules! x_func {
+            ($f_8: ident, $f_16: ident) => {
+                reg_func!(xl, xh, xy_is_16bit, $f_8, $f_16)
+            };
+        }
+        macro_rules! y_func {
+            ($f_8: ident, $f_16: ident) => {
+                reg_func!(yl, yh, xy_is_16bit, $f_8, $f_16)
+            };
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -481,13 +511,7 @@ impl Processor {
             AND_DILY => read_func!(and_8, and_16, dily),
             AND_SR => read_func!(and_8, and_16, sr),
             AND_SRIY => read_func!(and_8, and_16, sriy),
-            ASL_ACC => {
-                self.a = self.asl_8(self.a);
-                if self.p.a_is_16bit() {
-                    let carry = self.p.c;
-                    self.b = self.asl_8(self.b).wrapping_add(carry.into());
-                }
-            }
+            ASL_ACC => acc_func!(asl_8, asl_16),
             ASL_A => read_write_func!(asl_8, asl_16, a),
             ASL_D => read_write_func!(asl_8, asl_16, d),
             ASL_AX => read_write_func!(asl_8, asl_16, ax),
@@ -513,7 +537,7 @@ impl Processor {
                 let addr = read_u8(memory, u24::from(self.pbr, self.pc)) as i16;
                 self.branch(memory, addr);
             }
-            // BRK => self.brk(),
+            BRK => self.break_to(memory, 0xFFE6, 0xFFFE, true),
             BRL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)) as i16;
                 self.branch(memory, addr);
@@ -546,13 +570,13 @@ impl Processor {
             CPY_I => read_func!(cpy_8, cpy_16, i),
             CPY_A => read_func!(cpy_8, cpy_16, a),
             CPY_D => read_func!(cpy_8, cpy_16, d),
-            DEC_ACC => reg_func!(a, b, a_is_16bit, dec_8, dec_16),
+            DEC_ACC => acc_func!(dec_8, dec_16),
             DEC_A => read_write_func!(dec_8, dec_16, a),
             DEC_D => read_write_func!(dec_8, dec_16, d),
             DEC_AX => read_write_func!(dec_8, dec_16, ax),
             DEC_DX => read_write_func!(dec_8, dec_16, dx),
-            DEX => reg_func!(xl, xh, xy_is_16bit, dec_8, dec_16),
-            DEY => reg_func!(yl, yh, xy_is_16bit, dec_8, dec_16),
+            DEX => x_func!(dec_8, dec_16),
+            DEY => y_func!(dec_8, dec_16),
             EOR_I => read_func!(eor_8, eor_16, i),
             EOR_A => read_func!(eor_8, eor_16, a),
             EOR_AL => read_func!(eor_8, eor_16, al),
@@ -568,14 +592,14 @@ impl Processor {
             EOR_DILY => read_func!(eor_8, eor_16, dily),
             EOR_SR => read_func!(eor_8, eor_16, sr),
             EOR_SRIY => read_func!(eor_8, eor_16, sriy),
-            /*INC_ACC => cpu_func!(inc_8, inc_16, acc),
-            INC_A => cpu_func!(inc_8, inc_16, a),
-            INC_D => cpu_func!(inc_8, inc_16, d),
-            INC_AX => cpu_func!(inc_8, inc_16, ax),
-            INC_DX => cpu_func!(inc_8, inc_16, dx),
-            INX => self.inx(),
-            INY => self.iny(),
-            JMP_A => cpu_func!(jmp_8, jmp_16, a),
+            INC_ACC => acc_func!(inc_8, inc_16),
+            INC_A => read_write_func!(inc_8, inc_16, a),
+            INC_D => read_write_func!(inc_8, inc_16, d),
+            INC_AX => read_write_func!(inc_8, inc_16, ax),
+            INC_DX => read_write_func!(inc_8, inc_16, dx),
+            INX => x_func!(inc_8, inc_16),
+            INY => y_func!(inc_8, inc_16),
+            /*JMP_A => cpu_func!(jmp_8, jmp_16, a),
             JMP_AI => cpu_func!(jmp_8, jmp_16, ai),
             JMP_AIX => cpu_func!(jmp_8, jmp_16, aix),
             JMP_AL => cpu_func!(jmp_8, jmp_16, al),
