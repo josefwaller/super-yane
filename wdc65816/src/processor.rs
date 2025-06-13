@@ -23,10 +23,14 @@ pub struct Processor {
     a: u8,
     /// Upper byte of the accumulator
     b: u8,
-    /// X Register
-    x: u16,
-    /// Y Register
-    y: u16,
+    /// X Register low
+    xl: u8,
+    /// X Register high
+    xh: u8,
+    /// Y Register low
+    yl: u8,
+    /// Y Register high
+    yh: u8,
     /// Status Register
     p: StatusRegister,
     /// Direct Register
@@ -58,6 +62,24 @@ fn read_u24(memory: &mut impl Memory, addr: u24) -> u24 {
 impl Processor {
     pub fn new() -> Self {
         Processor::default()
+    }
+    /// Get the X register as a u16
+    /// If the X register is 8-bit, only the bottom 8-bits will be used
+    fn x(&self) -> u16 {
+        if self.p.xy_is_16bit() {
+            self.xh as u16 * 0x100 + self.xl as u16
+        } else {
+            self.xl as u16
+        }
+    }
+    /// Get the Y register as a u16
+    /// If the Y register is 8-bit, only the bottom 8-bits will be used
+    fn y(&self) -> u16 {
+        if self.p.xy_is_16bit() {
+            self.yh as u16 * 0x100 + self.yl as u16
+        } else {
+            self.yl as u16
+        }
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
@@ -193,11 +215,11 @@ impl Processor {
     }
     /// Absolute X Indexed addressing
     fn ax(&mut self, memory: &mut impl Memory) -> u24 {
-        self.a_off(memory, self.x)
+        self.a_off(memory, self.x())
     }
     /// Absolute Y Indexed addressing
     fn ay(&mut self, memory: &mut impl Memory) -> u24 {
-        self.a_off(memory, self.y)
+        self.a_off(memory, self.y())
     }
     /// Absolute Long addressing
     fn al(&mut self, memory: &mut impl Memory) -> u24 {
@@ -207,7 +229,7 @@ impl Processor {
     }
     /// Absolute Long X Indexed
     fn alx(&mut self, memory: &mut impl Memory) -> u24 {
-        self.al(memory).wrapping_add(self.x)
+        self.al(memory).wrapping_add(self.x())
     }
     /// Direct addressing
     fn d(&mut self, memory: &mut impl Memory) -> u24 {
@@ -227,11 +249,11 @@ impl Processor {
     }
     /// Direct X Indexed addressing
     fn dx(&mut self, memory: &mut impl Memory) -> u24 {
-        self.d_off(memory, self.x)
+        self.d_off(memory, self.x())
     }
     /// Direct Y Indexed addressing
     fn dy(&mut self, memory: &mut impl Memory) -> u24 {
-        self.d_off(memory, self.y)
+        self.d_off(memory, self.y())
     }
     /// Direct Indirect addressing
     fn di(&mut self, memory: &mut impl Memory) -> u24 {
@@ -242,13 +264,13 @@ impl Processor {
     fn dix(&mut self, memory: &mut impl Memory) -> u24 {
         let addr = self.di(memory);
         memory.io();
-        addr.wrapping_add(self.x).with_bank(self.dbr)
+        addr.wrapping_add(self.x()).with_bank(self.dbr)
     }
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl Memory) -> u24 {
         let addr: u24 = self.di(memory).into();
         memory.io();
-        addr.wrapping_add(self.y)
+        addr.wrapping_add(self.y())
     }
     /// Direct Indirect Long addressing
     fn dil(&mut self, memory: &mut impl Memory) -> u24 {
@@ -261,7 +283,7 @@ impl Processor {
     /// Direct Indirect Long Y Indexed addressing
     fn dily(&mut self, memory: &mut impl Memory) -> u24 {
         let addr: u24 = self.dil(memory).into();
-        addr.wrapping_add(self.y)
+        addr.wrapping_add(self.y())
     }
     /// Stack Relative addressing
     fn sr(&mut self, memory: &mut impl Memory) -> u24 {
@@ -275,7 +297,7 @@ impl Processor {
     /// Stack Reslative Indirect Y Indexed addressing
     fn sriy(&mut self, memory: &mut impl Memory) -> u24 {
         let addr: u24 = self.sr(memory).with_bank(self.dbr).into();
-        addr.wrapping_add(self.y)
+        addr.wrapping_add(self.y())
     }
 
     /// Execute the next instruction in the program
