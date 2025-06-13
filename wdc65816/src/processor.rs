@@ -139,6 +139,29 @@ impl Processor {
     fn bit_i_16(&mut self, low: u8, high: u8) {
         self.p.z = ((self.a & low) | (self.b & high)) == 0;
     }
+    /// Generic compare function used for CMP, CPX, CPY 8-bit
+    fn compare_8(&mut self, a: u8, b: u8) {
+        let (result, carry) = a.overflowing_sub(b);
+        self.p.n = result > 0x7F;
+        self.p.z = result == 0;
+        self.p.c = !carry;
+    }
+    /// Generic compare function used for CMP, CPX, CPY 16-bit
+    fn compare_16(&mut self, (a_low, a_high): (u8, u8), (b_low, b_high): (u8, u8)) {
+        let (result, carry) = (a_high as u16 * 0x100 + a_low as u16)
+            .overflowing_sub(b_high as u16 * 0x100 + b_low as u16);
+        self.p.n = result > 0x7FFF;
+        self.p.z = result == 0;
+        self.p.c = !carry;
+    }
+
+    /// Compare (CMP) 8-bit
+    fn cmp_8(&mut self, value: u8) {
+        self.compare_8(self.a, value)
+    }
+    fn cmp_16(&mut self, low: u8, high: u8) {
+        self.compare_16((self.a, self.b), (low, high));
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -264,7 +287,7 @@ impl Processor {
         macro_rules! read_func {
             ($f_8: ident, $f_16: ident, $addr: ident) => {{
                 let addr = self.$addr(memory);
-                if self.p.is_8bit() {
+                if self.p.a_is_8bit() {
                     self.$f_8(memory.read(addr.into()));
                 } else {
                     self.$f_16(
@@ -277,7 +300,7 @@ impl Processor {
         macro_rules! read_write_func {
             ($func_8: ident, $func_16: ident, $get_addr: ident) => {{
                 let address = self.$get_addr(memory);
-                if self.p.is_8bit() {
+                if self.p.a_is_8bit() {
                     let value = self.$func_8(memory.read(address.into()));
                     memory.write(address.into(), value);
                 } else {
@@ -340,7 +363,7 @@ impl Processor {
             AND_SRIY => read_func!(and_8, and_16, sriy),
             ASL_ACC => {
                 self.a = self.asl_8(self.a);
-                if self.p.is_16bit() {
+                if self.p.a_is_16bit() {
                     let carry = self.p.c;
                     self.b = self.asl_8(self.b).wrapping_add(carry.into());
                 }
@@ -381,22 +404,22 @@ impl Processor {
             CLD => set_flag!(d, false),
             CLI => set_flag!(i, false),
             CLV => set_flag!(v, false),
-            /* CMP_I => cpu_func!(cmp_8, cmp_16, i),
-            CMP_A => cpu_func!(cmp_8, cmp_16, a),
-            CMP_AL => cpu_func!(cmp_8, cmp_16, al),
-            CMP_D => cpu_func!(cmp_8, cmp_16, d),
-            CMP_DI => cpu_func!(cmp_8, cmp_16, di),
-            CMP_DIL => cpu_func!(cmp_8, cmp_16, dil),
-            CMP_AX => cpu_func!(cmp_8, cmp_16, ax),
-            CMP_ALX => cpu_func!(cmp_8, cmp_16, alx),
-            CMP_AY => cpu_func!(cmp_8, cmp_16, ay),
-            CMP_DX => cpu_func!(cmp_8, cmp_16, dx),
-            CMP_DIX => cpu_func!(cmp_8, cmp_16, dix),
-            CMP_DIY => cpu_func!(cmp_8, cmp_16, diy),
-            CMP_DILY => cpu_func!(cmp_8, cmp_16, dily),
-            CMP_SR => cpu_func!(cmp_8, cmp_16, sr),
-            CMP_SRIY => cpu_func!(cmp_8, cmp_16, sriy),
-            COP => self.cop(),
+            CMP_I => read_func!(cmp_8, cmp_16, i),
+            CMP_A => read_func!(cmp_8, cmp_16, a),
+            CMP_AL => read_func!(cmp_8, cmp_16, al),
+            CMP_D => read_func!(cmp_8, cmp_16, d),
+            CMP_DI => read_func!(cmp_8, cmp_16, di),
+            CMP_DIL => read_func!(cmp_8, cmp_16, dil),
+            CMP_AX => read_func!(cmp_8, cmp_16, ax),
+            CMP_ALX => read_func!(cmp_8, cmp_16, alx),
+            CMP_AY => read_func!(cmp_8, cmp_16, ay),
+            CMP_DX => read_func!(cmp_8, cmp_16, dx),
+            CMP_DIX => read_func!(cmp_8, cmp_16, dix),
+            CMP_DIY => read_func!(cmp_8, cmp_16, diy),
+            CMP_DILY => read_func!(cmp_8, cmp_16, dily),
+            CMP_SR => read_func!(cmp_8, cmp_16, sr),
+            CMP_SRIY => read_func!(cmp_8, cmp_16, sriy),
+            /*COP => self.cop(),
             CPX_I => cpu_func!(cpx_8, cpx_16, i),
             CPX_A => cpu_func!(cpx_8, cpx_16, a),
             CPX_D => cpu_func!(cpx_8, cpx_16, d),

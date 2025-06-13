@@ -19,13 +19,22 @@ pub struct StatusRegister {
     pub e: bool,
     /// Break flag
     pub b: bool,
+    /// Index register width flag
+    /// 1 = 8-bit, 0=16-bit
+    pub x: bool,
 }
 
 impl StatusRegister {
-    pub fn is_8bit(&self) -> bool {
-        self.m.into()
+    pub fn a_is_8bit(&self) -> bool {
+        self.m
     }
-    pub fn is_16bit(&self) -> bool {
-        !self.is_8bit()
+    pub fn a_is_16bit(&self) -> bool {
+        !self.a_is_8bit()
+    }
+    pub fn xy_is_8bit(&self) -> bool {
+        self.x
+    }
+    pub fn xy_is_16bit(&self) -> bool {
+        !self.x
     }
 }
