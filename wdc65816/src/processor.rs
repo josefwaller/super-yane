@@ -112,6 +112,34 @@ impl Processor {
         (low, high)
     }
 
+    /// Branch
+    fn branch(&mut self, memory: &mut impl Memory, offset: i16) {
+        memory.io();
+        self.pc = self.pc.wrapping_add_signed(offset.into());
+    }
+
+    /// Bit 8-bit
+    fn bit_8(&mut self, value: u8) {
+        self.p.n = value > 0x7F;
+        self.p.v = (value & 0x40) != 0;
+        self.p.z = (value & self.a) == 0;
+    }
+    /// Bit 16-bit
+    fn bit_16(&mut self, low: u8, high: u8) {
+        self.p.n = high > 0x7F;
+        self.p.v = (high & 0x40) != 0;
+        self.p.z = ((high & self.b) | (low & self.a)) == 0;
+    }
+    /// Bit Immediate 8-bit
+    /// See the etry for BIT_I
+    fn bit_i_8(&mut self, value: u8) {
+        self.p.z = (value & self.a) == 0;
+    }
+    /// Bit Immediate 16-bit
+    fn bit_i_16(&mut self, low: u8, high: u8) {
+        self.p.z = ((self.a & low) | (self.b & high)) == 0;
+    }
+
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
     /// All return (bank, address) which are combined to form the final address in the
@@ -262,6 +290,20 @@ impl Processor {
                 }
             }};
         }
+        macro_rules! branch_if {
+            ($flag: ident, $value: expr) => {{
+                let offset = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1))) as i16;
+                if self.p.$flag == $value {
+                    self.branch(memory, offset);
+                }
+            }};
+        }
+        macro_rules! set_flag {
+            ($flag: ident, $value: expr) => {{
+                memory.io();
+                self.p.$flag = $value;
+            }};
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -307,27 +349,39 @@ impl Processor {
             ASL_D => read_write_func!(asl_8, asl_16, d),
             ASL_AX => read_write_func!(asl_8, asl_16, ax),
             ASL_DX => read_write_func!(asl_8, asl_16, dx),
-            /*BCC => self.bcc(),
-            BCS => self.bcs(),
-            BEQ => self.beq(),
-            BIT_I => cpu_func!(bit_8, bit_16, i),
-            BIT_A => cpu_func!(bit_8, bit_16, a),
-            BIT_D => cpu_func!(bit_8, bit_16, d),
-            BIT_AX => cpu_func!(bit_8, bit_16, ax),
-            BIT_DX => cpu_func!(bit_8, bit_16, dx),
-            BMI => self.bmi(),
-            BNE => self.bne(),
-            BPL => self.bpl(),
-            BRA => self.bra(),
-            BRK => self.brk(),
-            BRL => self.brl(),
-            BVC => self.bvc(),
-            BVS => self.bvs(),
-            CLC => self.clc(),
-            CLD => self.cld(),
-            CLI => self.cli(),
-            CLV => self.clv(),
-            CMP_I => cpu_func!(cmp_8, cmp_16, i),
+            BCC => branch_if!(c, false),
+            BCS => branch_if!(c, true),
+            BEQ => branch_if!(z, true),
+            BIT_I => {
+                // > Immediate addressing only affects the z flag (with the result of the bitwise And), but does not affect the n and v flags.
+                // > All other addressing modes of BIT affect the n, v, and z flags.
+                // > This is the only instruction in the 6502 family where the flags affected depends on the addressing mode.
+                // http://www.6502.org/tutorials/65c816opcodes.html#6.1.2.2
+                read_func!(bit_i_8, bit_i_16, i);
+            }
+            BIT_A => read_func!(bit_8, bit_16, a),
+            BIT_D => read_func!(bit_8, bit_16, d),
+            BIT_AX => read_func!(bit_8, bit_16, ax),
+            BIT_DX => read_func!(bit_8, bit_16, dx),
+            BMI => branch_if!(n, true),
+            BNE => branch_if!(z, false),
+            BPL => branch_if!(n, false),
+            BRA => {
+                let addr = read_u8(memory, u24::from(self.pbr, self.pc)) as i16;
+                self.branch(memory, addr);
+            }
+            // BRK => self.brk(),
+            BRL => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc)) as i16;
+                self.branch(memory, addr);
+            }
+            BVC => branch_if!(v, false),
+            BVS => branch_if!(v, true),
+            CLC => set_flag!(c, false),
+            CLD => set_flag!(d, false),
+            CLI => set_flag!(i, false),
+            CLV => set_flag!(v, false),
+            /* CMP_I => cpu_func!(cmp_8, cmp_16, i),
             CMP_A => cpu_func!(cmp_8, cmp_16, a),
             CMP_AL => cpu_func!(cmp_8, cmp_16, al),
             CMP_D => cpu_func!(cmp_8, cmp_16, d),
