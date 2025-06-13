@@ -243,6 +243,21 @@ impl Processor {
             self.pc = addr_16;
         }
     }
+    /// Decrement (DEC) 8-bit
+    fn dec_8(&mut self, value: u8) -> u8 {
+        let r = value.wrapping_sub(1);
+        self.p.n = (r & 0x80) == 0;
+        self.p.z = r == 0;
+        r
+    }
+    /// Decrement (DEC) 16-bit
+    fn dec_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let (low, carry) = low.overflowing_sub(1);
+        let high = high.wrapping_sub(1).wrapping_sub(carry.into());
+        self.p.n = (high & 0x80) == 0;
+        self.p.z = (high == 0) && (low == 0);
+        (low, high)
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -408,6 +423,17 @@ impl Processor {
                 self.p.$flag = $value;
             }};
         }
+        macro_rules! reg_func {
+            ($rl: ident, $rh: ident, $is_16: ident, $f_8: ident, $f_16: ident) => {{
+                if self.p.$is_16() {
+                    let (low, high) = self.$f_16(self.$rl, self.$rh);
+                    self.$rl = low;
+                    self.$rh = high;
+                } else {
+                    self.$rl = self.$f_8(self.$rl);
+                }
+            }};
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -507,14 +533,14 @@ impl Processor {
             CPY_I => read_func!(cpy_8, cpy_16, i),
             CPY_A => read_func!(cpy_8, cpy_16, a),
             CPY_D => read_func!(cpy_8, cpy_16, d),
-            /* DEC_ACC => cpu_func!(dec_8, dec_16, acc),
-            DEC_A => cpu_func!(dec_8, dec_16, a),
-            DEC_D => cpu_func!(dec_8, dec_16, d),
-            DEC_AX => cpu_func!(dec_8, dec_16, ax),
-            DEC_DX => cpu_func!(dec_8, dec_16, dx),
-            DEX => self.dex(),
-            DEY => self.dey(),
-            EOR_I => cpu_func!(eor_8, eor_16, i),
+            DEC_ACC => reg_func!(a, b, a_is_16bit, dec_8, dec_16),
+            DEC_A => read_write_func!(dec_8, dec_16, a),
+            DEC_D => read_write_func!(dec_8, dec_16, d),
+            DEC_AX => read_write_func!(dec_8, dec_16, ax),
+            DEC_DX => read_write_func!(dec_8, dec_16, dx),
+            DEX => reg_func!(xl, xh, xy_is_16bit, dec_8, dec_16),
+            DEY => reg_func!(yl, yh, xy_is_16bit, dec_8, dec_16),
+            /*EOR_I => cpu_func!(eor_8, eor_16, i),
             EOR_A => cpu_func!(eor_8, eor_16, a),
             EOR_AL => cpu_func!(eor_8, eor_16, al),
             EOR_D => cpu_func!(eor_8, eor_16, d),
