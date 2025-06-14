@@ -286,6 +286,16 @@ impl Processor {
         self.p.z = (high == 0) && (low == 0);
         (low, high)
     }
+    /// Jump (JMP)
+    fn jmp(&mut self, bank: u8, addr: u16) {
+        self.pbr = bank;
+        self.pc = addr;
+    }
+    /// Jump and Save Return/Jump to SubRoutine (JSR)
+    fn jsr(&mut self, memory: &mut impl Memory, bank: u8, addr: u16) {
+        self.push_u16(self.pc.wrapping_add(2), memory);
+        self.jmp(bank, addr)
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -305,6 +315,13 @@ impl Processor {
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
         self.pc = self.pc.wrapping_add(2);
         u24::from(self.dbr, addr)
+    }
+    /// Absolute Indirect addressing
+    fn ai(&mut self, memory: &mut impl Memory) -> u24 {
+        let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+        self.pc = self.pc.wrapping_add(2);
+        let addr = read_u16(memory, u24::from(self.dbr, addr));
+        u24::from(0x0, addr)
     }
     // Utility offset function for absolute indexed function
     fn a_off(&mut self, memory: &mut impl Memory, register: u16) -> u24 {
@@ -332,6 +349,11 @@ impl Processor {
     /// Absolute Long X Indexed
     fn alx(&mut self, memory: &mut impl Memory) -> u24 {
         self.al(memory).wrapping_add(self.x())
+    }
+    /// Absolute Indexed Indirect addressing
+    fn aix(&mut self, memory: &mut impl Memory) -> u24 {
+        let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
+        u24::from(0x00, addr)
     }
     /// Direct addressing
     fn d(&mut self, memory: &mut impl Memory) -> u24 {
@@ -599,15 +621,43 @@ impl Processor {
             INC_DX => read_write_func!(inc_8, inc_16, dx),
             INX => x_func!(inc_8, inc_16),
             INY => y_func!(inc_8, inc_16),
-            /*JMP_A => cpu_func!(jmp_8, jmp_16, a),
-            JMP_AI => cpu_func!(jmp_8, jmp_16, ai),
-            JMP_AIX => cpu_func!(jmp_8, jmp_16, aix),
-            JMP_AL => cpu_func!(jmp_8, jmp_16, al),
-            JMP_AIL => cpu_func!(jmp_8, jmp_16, ail),
-            JSR_A => cpu_func!(jsr_8, jsr_16, a),
-            JSR_AIX => cpu_func!(jsr_8, jsr_16, aix),
-            JSR_AL => cpu_func!(jsr_8, jsr_16, al),
-            LDA_I => cpu_func!(lda_8, lda_16, i),
+            // These all need to be custom, since JMP ABSOLUTE doesn't actually read the byte at the absolute address, but jumps to it
+            JMP_A => self.jmp(self.pbr, read_u16(memory, u24::from(self.pbr, self.pc))),
+            JMP_AI => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+                self.jmp(0x00, read_u16(memory, u24::from(0x00, addr)));
+            }
+            JMP_AIX => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
+                self.jmp(self.pbr, read_u16(memory, u24::from(0x00, addr)));
+            }
+            JMP_AL => self.jmp(
+                read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2))),
+                read_u16(memory, u24::from(self.pbr, self.pc)),
+            ),
+            JMP_AIL => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+                self.jmp(
+                    read_u8(memory, u24::from(0x00, addr).wrapping_add(2u32)),
+                    read_u16(memory, u24::from(0x00, addr)),
+                );
+            }
+            JSR_A => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+                self.jsr(memory, self.pbr, addr);
+            }
+            JSR_AIX => {
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
+                let addr = read_u16(memory, u24::from(0x00, addr));
+                self.jsr(memory, self.pbr, addr);
+            }
+            JSR_AL => {
+                self.push_u8(self.pbr, memory);
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+                let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
+                self.jsr(memory, bank, addr);
+            }
+            /*LDA_I => cpu_func!(lda_8, lda_16, i),
             LDA_A => cpu_func!(lda_8, lda_16, a),
             LDA_AL => cpu_func!(lda_8, lda_16, al),
             LDA_D => cpu_func!(lda_8, lda_16, d),

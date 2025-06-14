@@ -210,6 +210,8 @@ pub const INC_DX: u8 = 0xF6;
 pub const INX: u8 = 0xE8;
 /// Increment Y Implied
 pub const INY: u8 = 0xC8;
+/// Jump Absolute Indirect Long
+pub const JMP_AIL: u8 = 0xDC;
 /// Jump Absolute
 pub const JMP_A: u8 = 0x4C;
 /// Jump Absolute Indirect
@@ -218,8 +220,6 @@ pub const JMP_AI: u8 = 0x6C;
 pub const JMP_AIX: u8 = 0x7C;
 /// Jump Absolute Long
 pub const JMP_AL: u8 = 0x5C;
-/// Jump Absolute Indirect Long
-pub const JMP_AIL: u8 = 0xDC;
 /// Jump to Subroutine Absolute
 pub const JSR_A: u8 = 0x20;
 /// Jump to Subroutine Absolute Indexed Indirect, X
