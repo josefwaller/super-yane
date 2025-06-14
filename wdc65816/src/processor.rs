@@ -387,38 +387,70 @@ impl Processor {
         self.p.n = (high & 0x80) != 0;
         self.p.z = (low == 0) && (high == 0);
     }
-    /// Load into A (LDA) 8-bit
+    /// LoaD into A (LDA) 8-bit
     fn lda_8(&mut self, value: u8) {
         self.a = value;
         self.set_load_flags_8(value);
     }
-    /// Load into A (LDA) 16-bit
+    /// LoaD into A (LDA) 16-bit
     fn lda_16(&mut self, low: u8, high: u8) {
         self.a = low;
         self.b = high;
         self.set_load_flags_16(low, high);
     }
-    /// Load into X (LDX) 8-bit
+    /// LoaD into X (LDX) 8-bit
     fn ldx_8(&mut self, value: u8) {
         self.xl = value;
         self.set_load_flags_8(value);
     }
-    /// Load into X (LDX) 8-bit
+    /// LoaD into X (LDX) 8-bit
     fn ldx_16(&mut self, low: u8, high: u8) {
         self.xl = low;
         self.xh = high;
         self.set_load_flags_16(low, high);
     }
-    /// Load into Y (LDY) 8-bit
+    /// LoaD into Y (LDY) 8-bit
     fn ldy_8(&mut self, value: u8) {
         self.yl = value;
         self.set_load_flags_8(value);
     }
-    /// Load into Y (LDY) 16-bit
+    /// LoaD into Y (LDY) 16-bit
     fn ldy_16(&mut self, low: u8, high: u8) {
         self.yl = low;
         self.yh = high;
         self.set_load_flags_16(low, high);
+    }
+    /// STore A (STA) 8-bit
+    fn sta_8(&self) -> u8 {
+        self.a
+    }
+    /// STore A (STA) 16-bit
+    fn sta_16(&self) -> (u8, u8) {
+        (self.a, self.b)
+    }
+    /// STore X (STX) 8-bit
+    fn stx_8(&self) -> u8 {
+        self.xl
+    }
+    /// STore X (STX) 16-bit
+    fn stx_16(&self) -> (u8, u8) {
+        (self.xl, self.xh)
+    }
+    /// STore Y (STY) 8-bit
+    fn sty_8(&self) -> u8 {
+        self.yl
+    }
+    /// STore Y (STY) 16-bit
+    fn sty_16(&self) -> (u8, u8) {
+        (self.yl, self.yh)
+    }
+    /// STore Zero (STZ) 8-bit
+    fn stz_8(&self) -> u8 {
+        0
+    }
+    /// STore Z (STZ) 16-bit
+    fn stz_16(&self) -> (u8, u8) {
+        (0, 0)
     }
     /// REset Processor status bits (REP)
     fn rep(&mut self, value: u8) {
@@ -584,7 +616,14 @@ impl Processor {
         macro_rules! write_func {
             ($func_8: ident, $func_16: ident, $addr: ident, $flag: ident) => {{
                 let addr = self.$addr(memory);
-                if self.p.$flag() {}
+                if self.p.$flag() {
+                    let value = self.$func_8();
+                    memory.write(addr.into(), value);
+                } else {
+                    let (low, high) = self.$func_16();
+                    memory.write(addr.into(), low);
+                    memory.write(addr.wrapping_add(1u32).into(), high);
+                }
             }};
         }
         macro_rules! read_write_func {
@@ -899,32 +938,32 @@ impl Processor {
             SED => set_flag!(d, true),
             SEI => set_flag!(i, true),
             SEP_I => read_func_8!(sep, i),
-            /*STA_A => write_func!(sta_8, sta_16, a),
-            STA_AL => write_func!(sta_8, sta_16, al),
-            STA_D => write_func!(sta_8, sta_16, d),
-            STA_DI => write_func!(sta_8, sta_16, di),
-            STA_DIL => write_func!(sta_8, sta_16, dil),
-            STA_AX => write_func!(sta_8, sta_16, ax),
-            STA_ALX => write_func!(sta_8, sta_16, alx),
-            STA_AY => write_func!(sta_8, sta_16, ay),
-            STA_DX => write_func!(sta_8, sta_16, dx),
-            STA_DIX => write_func!(sta_8, sta_16, dix),
-            STA_DIY => write_func!(sta_8, sta_16, diy),
-            STA_DILY => write_func!(sta_8, sta_16, dily),
-            STA_SR => write_func!(sta_8, sta_16, sr),
-            STA_SRIY => write_func!(sta_8, sta_16, sriy),
-            STP => self.stp(),
-            STX_A => write_func!(stx_8, stx_16, a),
-            STX_D => write_func!(stx_8, stx_16, d),
-            STX_DY => write_func!(stx_8, stx_16, dy),
-            STY_A => write_func!(sty_8, sty_16, a),
-            STY_D => write_func!(sty_8, sty_16, d),
-            STY_DX => write_func!(sty_8, sty_16, dx),
-            STZ_A => write_func!(stz_8, stz_16, a),
-            STZ_D => write_func!(stz_8, stz_16, d),
-            STZ_AX => write_func!(stz_8, stz_16, ax),
-            STZ_DX => write_func!(stz_8, stz_16, dx),
-            TAX => self.tax(),
+            STA_A => write_func!(sta_8, sta_16, a, a_is_8bit),
+            STA_AL => write_func!(sta_8, sta_16, al, a_is_8bit),
+            STA_D => write_func!(sta_8, sta_16, d, a_is_8bit),
+            STA_DI => write_func!(sta_8, sta_16, di, a_is_8bit),
+            STA_DIL => write_func!(sta_8, sta_16, dil, a_is_8bit),
+            STA_AX => write_func!(sta_8, sta_16, ax, a_is_8bit),
+            STA_ALX => write_func!(sta_8, sta_16, alx, a_is_8bit),
+            STA_AY => write_func!(sta_8, sta_16, ay, a_is_8bit),
+            STA_DX => write_func!(sta_8, sta_16, dx, a_is_8bit),
+            STA_DIX => write_func!(sta_8, sta_16, dix, a_is_8bit),
+            STA_DIY => write_func!(sta_8, sta_16, diy, a_is_8bit),
+            STA_DILY => write_func!(sta_8, sta_16, dily, a_is_8bit),
+            STA_SR => write_func!(sta_8, sta_16, sr, a_is_8bit),
+            STA_SRIY => write_func!(sta_8, sta_16, sriy, a_is_8bit),
+            // STP => self.stp(),
+            STX_A => write_func!(stx_8, stx_16, a, xy_is_8bit),
+            STX_D => write_func!(stx_8, stx_16, d, xy_is_8bit),
+            STX_DY => write_func!(stx_8, stx_16, dy, xy_is_8bit),
+            STY_A => write_func!(sty_8, sty_16, a, xy_is_8bit),
+            STY_D => write_func!(sty_8, sty_16, d, xy_is_8bit),
+            STY_DX => write_func!(sty_8, sty_16, dx, xy_is_8bit),
+            STZ_A => write_func!(stz_8, stz_16, a, xy_is_8bit),
+            STZ_D => write_func!(stz_8, stz_16, d, xy_is_8bit),
+            STZ_AX => write_func!(stz_8, stz_16, ax, xy_is_8bit),
+            STZ_DX => write_func!(stz_8, stz_16, dx, xy_is_8bit),
+            /*TAX => self.tax(),
             TAY => self.tay(),
             TCD => self.tcd(),
             TCS => self.tcs(),
