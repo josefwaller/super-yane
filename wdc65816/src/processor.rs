@@ -136,22 +136,78 @@ impl Processor {
         self.p.n = self.b > 0x7F;
         self.p.z = self.a == 0 && self.b == 0;
     }
+    /// Set the flags after a 8-bit shift or rotate function
+    fn shift_rotate_flags_8(&mut self, value: u8) {
+        self.p.n = value > 0x7F;
+        self.p.z = value == 0;
+    }
+    /// Set the flags after a 16-bit shift or rotate function
+    fn shift_rotate_flags_16(&mut self, low: u8, high: u8) {
+        self.p.n = high > 0x7F;
+        self.p.z = (high == 0) && (low == 0);
+    }
     /// ASL 8-bit
     fn asl_8(&mut self, value: u8) -> u8 {
         let (value, carry) = value.overflowing_shl(1);
         self.p.c = carry;
-        self.p.n = value > 0x7F;
-        self.p.z = value == 0;
+        self.shift_rotate_flags_8(value);
         value
     }
     /// ASL 16-bit
     fn asl_16(&mut self, low: u8, high: u8) -> (u8, u8) {
-        let low = self.asl_8(low);
-        let carry = self.p.c;
-        let zero = self.p.z;
-        let high = self.asl_8(high).wrapping_add(carry.into());
-        // Both need to be 0
-        self.p.z = self.p.z & zero;
+        let (low, cl) = low.overflowing_shl(1);
+        let (high, ch) = high.overflowing_shl(1);
+        self.p.c = ch;
+        self.shift_rotate_flags_16(low, high);
+        (low, high.wrapping_add(cl.into()))
+    }
+    /// Logical Shift Right (LSR) 8-bit
+    fn lsr_8(&mut self, value: u8) -> u8 {
+        let (value, carry) = value.overflowing_shr(1);
+        self.p.c = carry;
+        self.shift_rotate_flags_8(value);
+        value
+    }
+    /// Logical Shift Right (LSR) 16-bit
+    fn lsr_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let (high, ch) = high.overflowing_shr(1);
+        let (low, cl) = low.overflowing_shr(1);
+        self.p.c = cl;
+        self.shift_rotate_flags_16(low, high);
+        (low | (u8::from(ch) * 0x80), high)
+    }
+    /// Rotate Left (ROL) 8-bit
+    fn rol_8(&mut self, value: u8) -> u8 {
+        let (value, carry) = value.overflowing_shl(1);
+        let value = value | u8::from(self.p.c);
+        self.p.c = carry;
+        self.shift_rotate_flags_8(value);
+        value
+    }
+    /// Rotate Left (ROL) 16-bit
+    fn rol_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let (low, cl) = low.overflowing_shl(1);
+        let (high, ch) = high.overflowing_shl(1);
+        let low = low | u8::from(self.p.c);
+        let high = high | u8::from(cl);
+        self.p.c = ch;
+        self.shift_rotate_flags_16(low, high);
+        (low, high)
+    }
+    /// Rotate Right (ROR) 8-bit
+    fn ror_8(&mut self, value: u8) -> u8 {
+        let (value, c) = value.overflowing_shr(1);
+        let value = value | (0x80 * u8::from(self.p.c));
+        self.p.c = c;
+        self.shift_rotate_flags_8(value);
+        value
+    }
+    fn ror_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        let (low, cl) = low.overflowing_shr(1);
+        let (high, ch) = high.overflowing_shr(1);
+        let low = low | (0x80 * u8::from(ch));
+        let high = high | (0x80 * u8::from(self.p.c));
+        self.p.c = cl;
         (low, high)
     }
 
@@ -339,6 +395,7 @@ impl Processor {
         self.yh = high;
         self.set_load_flags_16(low, high);
     }
+
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
     /// All return (bank, address) which are combined to form the final address in the
@@ -724,12 +781,12 @@ impl Processor {
             LDY_D => read_func!(ldy_8, ldy_16, d),
             LDY_AX => read_func!(ldy_8, ldy_16, ax),
             LDY_DX => read_func!(ldy_8, ldy_16, dx),
-            /*LSR_ACC => cpu_func!(lsr_8, lsr_16, acc),
-            LSR_A => cpu_func!(lsr_8, lsr_16, a),
-            LSR_D => cpu_func!(lsr_8, lsr_16, d),
-            LSR_AX => cpu_func!(lsr_8, lsr_16, ax),
-            LSR_DX => cpu_func!(lsr_8, lsr_16, dx),
-            MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
+            LSR_ACC => acc_func!(lsr_8, lsr_16),
+            LSR_A => read_write_func!(lsr_8, lsr_16, a),
+            LSR_D => read_write_func!(lsr_8, lsr_16, d),
+            LSR_AX => read_write_func!(lsr_8, lsr_16, ax),
+            LSR_DX => read_write_func!(lsr_8, lsr_16, dx),
+            /* MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
             MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),
             NOP => self.nop(),
             ORA_I => cpu_func!(ora_8, ora_16, i),
@@ -763,18 +820,18 @@ impl Processor {
             PLP => self.plp(),
             PLX => self.plx(),
             PLY => self.ply(),
-            REP_I => cpu_func!(rep_8, rep_16, i),
-            ROL_ACC => cpu_func!(rol_8, rol_16, acc),
-            ROL_A => cpu_func!(rol_8, rol_16, a),
-            ROL_D => cpu_func!(rol_8, rol_16, d),
-            ROL_AX => cpu_func!(rol_8, rol_16, ax),
-            ROL_DX => cpu_func!(rol_8, rol_16, dx),
-            ROR_ACC => cpu_func!(ror_8, ror_16, acc),
-            ROR_A => cpu_func!(ror_8, ror_16, a),
-            ROR_D => cpu_func!(ror_8, ror_16, d),
-            ROR_AX => cpu_func!(ror_8, ror_16, ax),
-            ROR_DX => cpu_func!(ror_8, ror_16, dx),
-            RTI => self.rti(),
+            REP_I => read_write_func!(rep_8, rep_16, i),*/
+            ROL_ACC => acc_func!(rol_8, rol_16),
+            ROL_A => read_write_func!(rol_8, rol_16, a),
+            ROL_D => read_write_func!(rol_8, rol_16, d),
+            ROL_AX => read_write_func!(rol_8, rol_16, ax),
+            ROL_DX => read_write_func!(rol_8, rol_16, dx),
+            ROR_ACC => acc_func!(ror_8, ror_16),
+            ROR_A => read_write_func!(ror_8, ror_16, a),
+            ROR_D => read_write_func!(ror_8, ror_16, d),
+            ROR_AX => read_write_func!(ror_8, ror_16, ax),
+            ROR_DX => read_write_func!(ror_8, ror_16, dx),
+            /*RTI => self.rti(),
             RTL => self.rtl(),
             RTS => self.rts(),
             SBC_I => cpu_func!(sbc_8, sbc_16, i),
