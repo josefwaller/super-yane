@@ -736,6 +736,42 @@ impl Processor {
                 self.pc = self.pc.wrapping_add(1);
             }};
         }
+        macro_rules! trans_reg {
+            // Source Low/High, dest low/high, flag
+            // Always 16 bit mode
+            ($sl: expr, $sh: expr, $dl: expr, $dh: expr) => {{
+                $dl = $sl;
+                $dh = $sh;
+                self.p.n = $sh > 0x7F;
+                self.p.z = ($sl | $sh) == 0;
+                self.pc = self.pc.wrapping_add(1);
+            }};
+            // Source Low/High, dest low/high, flag
+            ($sl: expr, $sh: expr, $dl: expr, $dh: expr, $flag: ident) => {{
+                if self.p.$flag() {
+                    trans_reg!($sl, $sh, $dl, $dh);
+                } else {
+                    $dl = $sl;
+                    self.p.n = $sl > 0x7F;
+                    self.p.z = $sl == 0;
+                    self.pc = self.pc.wrapping_add(1);
+                }
+            }};
+            // Transfer 2 u8s into a u16
+            ($le: expr, $r: ident) => {{
+                self.$r = u16::from_le_bytes($le);
+                self.p.n = self.$r > 0x7FFF;
+                self.p.z = self.$r == 0;
+                self.pc = self.pc.wrapping_add(1);
+            }};
+            // Transfer a u16 into 2 u8s
+            ($r: ident, $le: expr) => {{
+                $le = self.$r.to_le_bytes();
+                self.p.n = self.$r > 0x7FFF;
+                self.p.z = self.$r == 0;
+                self.pc = self.pc.wrapping_add(1);
+            }};
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -1051,23 +1087,30 @@ impl Processor {
             STZ_D => write_func!(stz_8, stz_16, d, xy_is_8bit),
             STZ_AX => write_func!(stz_8, stz_16, ax, xy_is_8bit),
             STZ_DX => write_func!(stz_8, stz_16, dx, xy_is_8bit),
-            /*TAX => self.tax(),
-            TAY => self.tay(),
-            TCD => self.tcd(),
-            TCS => self.tcs(),
-            TDC => self.tdc(),
-            TRB_A => cpu_func!(trb_8, trb_16, a),
+            TAX => trans_reg!(self.a, self.b, self.xl, self.xh, xy_is_16bit),
+            TAY => trans_reg!(self.a, self.b, self.yl, self.yh, xy_is_16bit),
+            TCD => trans_reg!([self.a, self.b], d),
+            TCS => trans_reg!([self.a, self.b], s),
+            TDC => trans_reg!(d, [self.a, self.b]),
+            /*TRB_A => cpu_func!(trb_8, trb_16, a),
             TRB_D => cpu_func!(trb_8, trb_16, d),
             TSB_A => cpu_func!(tsb_8, tsb_16, a),
-            TSB_D => cpu_func!(tsb_8, tsb_16, d),
-            TSC => self.tsc(),
-            TSX => self.tsx(),
-            TXA => self.txa(),
-            TXS => self.txs(),
-            TXY => self.txy(),
-            TYA => self.tya(),
-            TYX => self.tyx(),
-            WAI => self.wai(),
+            TSB_D => cpu_func!(tsb_8, tsb_16, d),*/
+            TSC => trans_reg!(s, [self.a, self.b]),
+            TSX => {
+                let [low, high] = self.s.to_le_bytes();
+                trans_reg!(low, high, self.xl, self.xh, xy_is_16bit)
+            }
+            TXA => trans_reg!(self.xl, self.xh, self.a, self.b, a_is_16bit),
+            TXS => {
+                let [low, high];
+                trans_reg!(self.xl, self.xh, low, high);
+                self.s = u16::from_le_bytes([low, high]);
+            }
+            TXY => trans_reg!(self.xl, self.xh, self.yl, self.yh, xy_is_16bit),
+            TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
+            TYX => trans_reg!(self.yl, self.yh, self.xl, self.xh, xy_is_16bit),
+            /*WAI => self.wai(),
             WDM => self.wdm(),
             XBA => self.xba(),
             XCE => self.xce(),*/
