@@ -49,8 +49,9 @@ impl StatusRegister {
             z: bit!(1),
             i: bit!(2),
             d: bit!(3),
-            xb: bit!(4),
-            m: bit!(5),
+            // The M and X flags are forced to 1 if E is 1
+            xb: bit!(4) || e,
+            m: bit!(5) || e,
             v: bit!(6),
             n: bit!(7),
             e,

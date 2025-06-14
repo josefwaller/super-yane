@@ -50,9 +50,9 @@ fn read_u8(memory: &mut impl Memory, addr: u24) -> u8 {
 
 fn read_u16<T: Memory>(memory: &mut T, addr: u24) -> u16 {
     // Read low first
-    let low = read_u8(memory, addr) as u16;
-    let high = read_u8(memory, addr.wrapping_add(1u32)) as u16;
-    low + (high << 8)
+    let low = read_u8(memory, addr);
+    let high = read_u8(memory, addr.wrapping_add(1u32));
+    u16::from_le_bytes([low, high])
 }
 fn read_u24(memory: &mut impl Memory, addr: u24) -> u24 {
     let low = read_u16(memory, addr);
@@ -98,17 +98,24 @@ impl Processor {
         }
         memory.read(self.s.into())
     }
-    fn pull_u16(&mut self, memory: &mut impl Memory) -> u16 {
+    // Push a u16 as two bytes in LE format
+    fn push_u16_le(&mut self, [low, high]: [u8; 2], memory: &mut impl Memory) {
+        self.push_u8(high, memory);
+        self.push_u8(low, memory);
+    }
+    // Pull a u16 as two bytes in LE format
+    fn pull_u16_le(&mut self, memory: &mut impl Memory) -> [u8; 2] {
         let low = self.pull_u8(memory);
         let high = self.pull_u8(memory);
+        [low, high]
+    }
+    fn pull_u16(&mut self, memory: &mut impl Memory) -> u16 {
+        let [low, high] = self.pull_u16_le(memory);
         low as u16 + 0x100 * high as u16
     }
     /// Push a 16-bit value to the stack
     fn push_u16(&mut self, value: u16, memory: &mut impl Memory) {
-        let [low, high] = value.to_le_bytes();
-        // Push high first
-        self.push_u8(high, memory);
-        self.push_u8(low, memory);
+        self.push_u16_le(value.to_le_bytes(), memory);
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
@@ -695,6 +702,40 @@ impl Processor {
                 reg_func!(yl, yh, xy_is_16bit, $f_8, $f_16)
             };
         }
+        macro_rules! push_reg {
+            // Always 8-bit
+            ($r: expr) => {{
+                self.push_u8($r, memory);
+                self.pc = self.pc.wrapping_add(1);
+            }};
+            // Variable length
+            ($rl: ident, $rh: ident, $flag_16: ident) => {{
+                if self.p.$flag_16() {
+                    self.push_u16_le([self.$rl, self.$rh], memory);
+                } else {
+                    self.push_u8(self.$rl, memory);
+                }
+                self.pc = self.pc.wrapping_add(1);
+            }};
+        }
+        macro_rules! pull_reg {
+            // Always 8-bit
+            ($r: expr) => {{
+                $r = self.pull_u8(memory);
+                self.pc = self.pc.wrapping_add(1);
+            }};
+            // Variable length
+            ($rl: ident, $rh: ident, $flag_16: ident) => {{
+                if self.p.$flag_16() {
+                    let [low, high] = self.pull_u16_le(memory);
+                    self.$rl = low;
+                    self.$rh = high;
+                } else {
+                    self.$rl = self.pull_u8(memory);
+                }
+                self.pc = self.pc.wrapping_add(1);
+            }};
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -901,22 +942,57 @@ impl Processor {
             ORA_DILY => read_func!(ora_8, ora_16, dily, a_is_8bit),
             ORA_SR => read_func!(ora_8, ora_16, sr, a_is_8bit),
             ORA_SRIY => read_func!(ora_8, ora_16, sriy, a_is_8bit),
-            /*PEA => self.pea(),
-            PEI => self.pei(),
-            PER => self.per(),
-            PHA => self.pha(),
-            PHB => self.phb(),
-            PHD => self.phd(),
-            PHK => self.phk(),
-            PHP => self.php(),
-            PHX => self.phx(),
-            PHY => self.phy(),
-            PLA => self.pla(),
-            PLB => self.plb(),
-            PLD => self.pld(),
-            PLP => self.plp(),
-            PLX => self.plx(),
-            PLY => self.ply(),*/
+            PEA => {
+                let addr = u24::from(self.pbr, self.pc);
+                let value = read_u16(memory, addr);
+                self.push_u16(value, memory);
+                self.pc = self.pc.wrapping_add(2);
+            }
+            PEI => {
+                // Push low
+                self.push_u8(read_u8(memory, u24::from(self.pbr, self.pc)), memory);
+                // Push high (0)
+                self.push_u8(0x00, memory);
+                self.pc = self.pc.wrapping_add(1);
+            }
+            PER => {
+                // Add operand to address of next instruction
+                let addr = self
+                    .pc
+                    .wrapping_sub(1)
+                    .wrapping_add(read_u16(memory, u24::from(self.pbr, self.pc)));
+                self.push_u16(addr, memory);
+                self.pc = self.pc.wrapping_add(2);
+            }
+            PHA => push_reg!(a, b, a_is_16bit),
+            PHB => push_reg!(self.dbr),
+            // Custom for 16-bit value
+            PHD => {
+                self.push_u16(self.d, memory);
+                self.pc = self.pc.wrapping_add(1);
+            }
+            PHK => push_reg!(self.pbr),
+            PHP => push_reg!(self.p.to_byte()),
+            PHX => push_reg!(xl, xh, xy_is_16bit),
+            PHY => push_reg!(yl, yh, xy_is_16bit),
+            PLA => pull_reg!(a, b, a_is_16bit),
+            PLB => {
+                pull_reg!(self.dbr);
+                self.p.n = self.dbr > 0x7F;
+                self.p.z = self.dbr == 0;
+            }
+            PLD => {
+                self.d = self.pull_u16(memory);
+                self.p.n = self.d > 0x7FFF;
+                self.p.z = self.d == 0;
+                self.pc = self.pc.wrapping_add(1);
+            }
+            PLP => {
+                self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+                self.pc = self.pc.wrapping_add(1);
+            }
+            PLX => pull_reg!(xl, xh, xy_is_16bit),
+            PLY => pull_reg!(yl, yh, xy_is_16bit),
             REP_I => read_func_8!(rep, i),
             ROL_ACC => acc_func!(rol_8, rol_16),
             ROL_A => read_write_func!(rol_8, rol_16, a, a_is_8bit),
