@@ -492,6 +492,22 @@ impl Processor {
     fn sep(&mut self, value: u8) {
         self.p = StatusRegister::from_byte(value | self.p.to_byte(), self.p.e);
     }
+    /// Test and Reset Bits (TRB) 8-bit
+    fn trb_8(&mut self, value: u8) -> u8 {
+        !self.a & value
+    }
+    /// Test and Reset Bits (TRB) 16-bit
+    fn trb_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        (!self.a & low, !self.b & high)
+    }
+    /// Test and Set Bits (TSB) 8-bit
+    fn tsb_8(&mut self, value: u8) -> u8 {
+        self.a | value
+    }
+    /// Test and Set Bits (TSB) 16-bit
+    fn tsb_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        (self.a | low, self.b | high)
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -1092,10 +1108,10 @@ impl Processor {
             TCD => trans_reg!([self.a, self.b], d),
             TCS => trans_reg!([self.a, self.b], s),
             TDC => trans_reg!(d, [self.a, self.b]),
-            /*TRB_A => cpu_func!(trb_8, trb_16, a),
-            TRB_D => cpu_func!(trb_8, trb_16, d),
-            TSB_A => cpu_func!(tsb_8, tsb_16, a),
-            TSB_D => cpu_func!(tsb_8, tsb_16, d),*/
+            TRB_A => read_write_func!(trb_8, trb_16, a, a_is_16bit),
+            TRB_D => read_write_func!(trb_8, trb_16, d, a_is_16bit),
+            TSB_A => read_write_func!(tsb_8, tsb_16, a, a_is_16bit),
+            TSB_D => read_write_func!(tsb_8, tsb_16, d, a_is_16bit),
             TSC => trans_reg!(s, [self.a, self.b]),
             TSX => {
                 let [low, high] = self.s.to_le_bytes();
