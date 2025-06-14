@@ -296,7 +296,49 @@ impl Processor {
         self.push_u16(self.pc.wrapping_add(2), memory);
         self.jmp(bank, addr)
     }
-
+    /// Set the load flags after loading an 8-bit value
+    fn set_load_flags_8(&mut self, value: u8) {
+        self.p.n = (value & 0x80) != 0;
+        self.p.z = value == 0;
+    }
+    /// Set the load flags after loading a 16-bit value
+    fn set_load_flags_16(&mut self, low: u8, high: u8) {
+        self.p.n = (high & 0x80) != 0;
+        self.p.z = (low == 0) && (high == 0);
+    }
+    /// Load into A (LDA) 8-bit
+    fn lda_8(&mut self, value: u8) {
+        self.a = value;
+        self.set_load_flags_8(value);
+    }
+    /// Load into A (LDA) 16-bit
+    fn lda_16(&mut self, low: u8, high: u8) {
+        self.a = low;
+        self.b = high;
+        self.set_load_flags_16(low, high);
+    }
+    /// Load into X (LDX) 8-bit
+    fn ldx_8(&mut self, value: u8) {
+        self.xl = value;
+        self.set_load_flags_8(value);
+    }
+    /// Load into X (LDX) 8-bit
+    fn ldx_16(&mut self, low: u8, high: u8) {
+        self.xl = low;
+        self.xh = high;
+        self.set_load_flags_16(low, high);
+    }
+    /// Load into Y (LDY) 8-bit
+    fn ldy_8(&mut self, value: u8) {
+        self.yl = value;
+        self.set_load_flags_8(value);
+    }
+    /// Load into Y (LDY) 16-bit
+    fn ldy_16(&mut self, low: u8, high: u8) {
+        self.yl = low;
+        self.yh = high;
+        self.set_load_flags_16(low, high);
+    }
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
     /// All return (bank, address) which are combined to form the final address in the
@@ -657,32 +699,32 @@ impl Processor {
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
                 self.jsr(memory, bank, addr);
             }
-            /*LDA_I => cpu_func!(lda_8, lda_16, i),
-            LDA_A => cpu_func!(lda_8, lda_16, a),
-            LDA_AL => cpu_func!(lda_8, lda_16, al),
-            LDA_D => cpu_func!(lda_8, lda_16, d),
-            LDA_DI => cpu_func!(lda_8, lda_16, di),
-            LDA_DIL => cpu_func!(lda_8, lda_16, dil),
-            LDA_AX => cpu_func!(lda_8, lda_16, ax),
-            LDA_ALX => cpu_func!(lda_8, lda_16, alx),
-            LDA_AY => cpu_func!(lda_8, lda_16, ay),
-            LDA_DX => cpu_func!(lda_8, lda_16, dx),
-            LDA_DIX => cpu_func!(lda_8, lda_16, dix),
-            LDA_DIY => cpu_func!(lda_8, lda_16, diy),
-            LDA_DILY => cpu_func!(lda_8, lda_16, dily),
-            LDA_SR => cpu_func!(lda_8, lda_16, sr),
-            LDA_SRIY => cpu_func!(lda_8, lda_16, sriy),
-            LDX_I => cpu_func!(ldx_8, ldx_16, i),
-            LDX_A => cpu_func!(ldx_8, ldx_16, a),
-            LDX_D => cpu_func!(ldx_8, ldx_16, d),
-            LDX_AY => cpu_func!(ldx_8, ldx_16, ay),
-            LDX_DY => cpu_func!(ldx_8, ldx_16, dy),
-            LDY_I => cpu_func!(ldy_8, ldy_16, i),
-            LDY_A => cpu_func!(ldy_8, ldy_16, a),
-            LDY_D => cpu_func!(ldy_8, ldy_16, d),
-            LDY_AX => cpu_func!(ldy_8, ldy_16, ax),
-            LDY_DX => cpu_func!(ldy_8, ldy_16, dx),
-            LSR_ACC => cpu_func!(lsr_8, lsr_16, acc),
+            LDA_I => read_func!(lda_8, lda_16, i),
+            LDA_A => read_func!(lda_8, lda_16, a),
+            LDA_AL => read_func!(lda_8, lda_16, al),
+            LDA_D => read_func!(lda_8, lda_16, d),
+            LDA_DI => read_func!(lda_8, lda_16, di),
+            LDA_DIL => read_func!(lda_8, lda_16, dil),
+            LDA_AX => read_func!(lda_8, lda_16, ax),
+            LDA_ALX => read_func!(lda_8, lda_16, alx),
+            LDA_AY => read_func!(lda_8, lda_16, ay),
+            LDA_DX => read_func!(lda_8, lda_16, dx),
+            LDA_DIX => read_func!(lda_8, lda_16, dix),
+            LDA_DIY => read_func!(lda_8, lda_16, diy),
+            LDA_DILY => read_func!(lda_8, lda_16, dily),
+            LDA_SR => read_func!(lda_8, lda_16, sr),
+            LDA_SRIY => read_func!(lda_8, lda_16, sriy),
+            LDX_I => read_func!(ldx_8, ldx_16, i),
+            LDX_A => read_func!(ldx_8, ldx_16, a),
+            LDX_D => read_func!(ldx_8, ldx_16, d),
+            LDX_AY => read_func!(ldx_8, ldx_16, ay),
+            LDX_DY => read_func!(ldx_8, ldx_16, dy),
+            LDY_I => read_func!(ldy_8, ldy_16, i),
+            LDY_A => read_func!(ldy_8, ldy_16, a),
+            LDY_D => read_func!(ldy_8, ldy_16, d),
+            LDY_AX => read_func!(ldy_8, ldy_16, ax),
+            LDY_DX => read_func!(ldy_8, ldy_16, dx),
+            /*LSR_ACC => cpu_func!(lsr_8, lsr_16, acc),
             LSR_A => cpu_func!(lsr_8, lsr_16, a),
             LSR_D => cpu_func!(lsr_8, lsr_16, d),
             LSR_AX => cpu_func!(lsr_8, lsr_16, ax),
