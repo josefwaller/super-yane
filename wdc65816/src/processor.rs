@@ -131,18 +131,56 @@ impl Processor {
         self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 == 0;
         self.b = b.wrapping_add(c.into());
     }
+    /// SuBtract with Carry (SBC) 8-bit
+    fn sbc_8(&mut self, value: u8) {
+        self.adc_8(value ^ 0xFF);
+    }
+    /// SuBtract with Carry (SBC) 16-bit
+    fn sbc_16(&mut self, low: u8, high: u8) {
+        self.adc_16(low ^ 0xFF, high ^ 0xFF)
+    }
+    /// Set common flags for AND, EOR, and ORA 8-bit
+    fn bitwise_flags_8(&mut self) {
+        self.p.n = self.a > 0x7F;
+        self.p.z = self.a == 0;
+    }
+    /// Set common flags for AND, EOR, and ORA 16-bit
+    fn bitwise_flags_16(&mut self) {
+        self.p.n = self.b > 0x7F;
+        self.p.z = self.a == 0 && self.b == 0;
+    }
     /// And 8-bit
     fn and_8(&mut self, value: u8) {
         self.a = self.a & value;
-        self.p.n = self.a > 0x7F;
-        self.p.z = self.a == 0;
+        self.bitwise_flags_8();
     }
     /// And 16-bit
     fn and_16(&mut self, low: u8, high: u8) {
         self.a = self.a & low;
         self.b = self.b & high;
-        self.p.n = self.b > 0x7F;
-        self.p.z = self.a == 0 && self.b == 0;
+        self.bitwise_flags_16();
+    }
+    /// Exclusive Or (EOR) 8-bit
+    fn eor_8(&mut self, value: u8) {
+        self.a = self.a ^ value;
+        self.bitwise_flags_8();
+    }
+    /// Exclusive OR (EOR) 16-bit
+    fn eor_16(&mut self, low: u8, high: u8) {
+        self.a = self.a ^ low;
+        self.b = self.b ^ high;
+        self.bitwise_flags_16();
+    }
+    /// OR with A (ORA) 8-bit
+    fn ora_8(&mut self, value: u8) {
+        self.a = self.a | value;
+        self.bitwise_flags_8();
+    }
+    /// OR with A (ORA) 16-bit
+    fn ora_16(&mut self, low: u8, high: u8) {
+        self.a = self.a | low;
+        self.b = self.b | high;
+        self.bitwise_flags_16();
     }
     /// Set the flags after a 8-bit shift or rotate function
     fn shift_rotate_flags_8(&mut self, value: u8) {
@@ -322,19 +360,6 @@ impl Processor {
         self.p.z = (high == 0) && (low == 0);
         (low, high)
     }
-    /// Exclusive Or (EOR) 8-bit
-    fn eor_8(&mut self, value: u8) {
-        self.a = self.a ^ value;
-        self.p.n = (self.a & 0x80) != 0;
-        self.p.z = self.a == 0;
-    }
-    /// Exclusive OR (EOR) 16-bit
-    fn eor_16(&mut self, low: u8, high: u8) {
-        self.a = self.a ^ low;
-        self.b = self.b ^ high;
-        self.p.n = (self.b & 0x80) != 0;
-        self.p.z = (self.a | self.b) == 0;
-    }
     /// Increment (INC) 8-bit
     fn inc_8(&mut self, value: u8) -> u8 {
         let r = value.wrapping_add(1);
@@ -480,13 +505,6 @@ impl Processor {
         self.pc = self.pc.wrapping_add(2);
         u24::from(self.dbr, addr)
     }
-    /// Absolute Indirect addressing
-    fn ai(&mut self, memory: &mut impl Memory) -> u24 {
-        let addr = read_u16(memory, u24::from(self.pbr, self.pc));
-        self.pc = self.pc.wrapping_add(2);
-        let addr = read_u16(memory, u24::from(self.dbr, addr));
-        u24::from(0x0, addr)
-    }
     // Utility offset function for absolute indexed function
     fn a_off(&mut self, memory: &mut impl Memory, register: u16) -> u24 {
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
@@ -513,11 +531,6 @@ impl Processor {
     /// Absolute Long X Indexed
     fn alx(&mut self, memory: &mut impl Memory) -> u24 {
         self.al(memory).wrapping_add(self.x())
-    }
-    /// Absolute Indexed Indirect addressing
-    fn aix(&mut self, memory: &mut impl Memory) -> u24 {
-        let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
-        u24::from(0x00, addr)
     }
     /// Direct addressing
     fn d(&mut self, memory: &mut impl Memory) -> u24 {
@@ -872,23 +885,23 @@ impl Processor {
             LSR_DX => read_write_func!(lsr_8, lsr_16, dx, a_is_8bit),
             /* MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
             MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),
-            NOP => self.nop(),
-            ORA_I => cpu_func!(ora_8, ora_16, i, a_is_8bit),
-            ORA_A => cpu_func!(ora_8, ora_16, a, a_is_8bit),
-            ORA_AL => cpu_func!(ora_8, ora_16, al, a_is_8bit),
-            ORA_D => cpu_func!(ora_8, ora_16, d, a_is_8bit),
-            ORA_DI => cpu_func!(ora_8, ora_16, di, a_is_8bit),
-            ORA_DIL => cpu_func!(ora_8, ora_16, dil, a_is_8bit),
-            ORA_AX => cpu_func!(ora_8, ora_16, ax, a_is_8bit),
-            ORA_ALX => cpu_func!(ora_8, ora_16, alx, a_is_8bit),
-            ORA_AY => cpu_func!(ora_8, ora_16, ay, a_is_8bit),
-            ORA_DX => cpu_func!(ora_8, ora_16, dx, a_is_8bit),
-            ORA_DIX => cpu_func!(ora_8, ora_16, dix, a_is_8bit),
-            ORA_DIY => cpu_func!(ora_8, ora_16, diy, a_is_8bit),
-            ORA_DILY => cpu_func!(ora_8, ora_16, dily, a_is_8bit),
-            ORA_SR => cpu_func!(ora_8, ora_16, sr, a_is_8bit),
-            ORA_SRIY => cpu_func!(ora_8, ora_16, sriy, a_is_8bit),
-            PEA => self.pea(),
+            NOP => self.nop(),*/
+            ORA_I => read_func!(ora_8, ora_16, i, a_is_8bit),
+            ORA_A => read_func!(ora_8, ora_16, a, a_is_8bit),
+            ORA_AL => read_func!(ora_8, ora_16, al, a_is_8bit),
+            ORA_D => read_func!(ora_8, ora_16, d, a_is_8bit),
+            ORA_DI => read_func!(ora_8, ora_16, di, a_is_8bit),
+            ORA_DIL => read_func!(ora_8, ora_16, dil, a_is_8bit),
+            ORA_AX => read_func!(ora_8, ora_16, ax, a_is_8bit),
+            ORA_ALX => read_func!(ora_8, ora_16, alx, a_is_8bit),
+            ORA_AY => read_func!(ora_8, ora_16, ay, a_is_8bit),
+            ORA_DX => read_func!(ora_8, ora_16, dx, a_is_8bit),
+            ORA_DIX => read_func!(ora_8, ora_16, dix, a_is_8bit),
+            ORA_DIY => read_func!(ora_8, ora_16, diy, a_is_8bit),
+            ORA_DILY => read_func!(ora_8, ora_16, dily, a_is_8bit),
+            ORA_SR => read_func!(ora_8, ora_16, sr, a_is_8bit),
+            ORA_SRIY => read_func!(ora_8, ora_16, sriy, a_is_8bit),
+            /*PEA => self.pea(),
             PEI => self.pei(),
             PER => self.per(),
             PHA => self.pha(),
@@ -918,22 +931,21 @@ impl Processor {
             RTI => self.rti(memory),
             RTL => self.rtl(memory),
             RTS => self.rts(memory),
-            /*SBC_I => cpu_func!(sbc_8, sbc_16, i),
-            SBC_A => cpu_func!(sbc_8, sbc_16, a),
-            SBC_AL => cpu_func!(sbc_8, sbc_16, al),
-            SBC_D => cpu_func!(sbc_8, sbc_16, d),
-            SBC_DI => cpu_func!(sbc_8, sbc_16, di),
-            SBC_DIL => cpu_func!(sbc_8, sbc_16, dil),
-            SBC_AX => cpu_func!(sbc_8, sbc_16, ax),
-            SBC_ALX => cpu_func!(sbc_8, sbc_16, alx),
-            SBC_AY => cpu_func!(sbc_8, sbc_16, ay),
-            SBC_DX => cpu_func!(sbc_8, sbc_16, dx),
-            SBC_DIX => cpu_func!(sbc_8, sbc_16, dix),
-            SBC_DIY => cpu_func!(sbc_8, sbc_16, diy),
-            SBC_DILY => cpu_func!(sbc_8, sbc_16, dily),
-            SBC_SR => cpu_func!(sbc_8, sbc_16, sr),
-            SBC_SRIY => cpu_func!(sbc_8, sbc_16, sriy),
-            */
+            SBC_I => read_func!(sbc_8, sbc_16, i, a_is_8bit),
+            SBC_A => read_func!(sbc_8, sbc_16, a, a_is_8bit),
+            SBC_AL => read_func!(sbc_8, sbc_16, al, a_is_8bit),
+            SBC_D => read_func!(sbc_8, sbc_16, d, a_is_8bit),
+            SBC_DI => read_func!(sbc_8, sbc_16, di, a_is_8bit),
+            SBC_DIL => read_func!(sbc_8, sbc_16, dil, a_is_8bit),
+            SBC_AX => read_func!(sbc_8, sbc_16, ax, a_is_8bit),
+            SBC_ALX => read_func!(sbc_8, sbc_16, alx, a_is_8bit),
+            SBC_AY => read_func!(sbc_8, sbc_16, ay, a_is_8bit),
+            SBC_DX => read_func!(sbc_8, sbc_16, dx, a_is_8bit),
+            SBC_DIX => read_func!(sbc_8, sbc_16, dix, a_is_8bit),
+            SBC_DIY => read_func!(sbc_8, sbc_16, diy, a_is_8bit),
+            SBC_DILY => read_func!(sbc_8, sbc_16, dily, a_is_8bit),
+            SBC_SR => read_func!(sbc_8, sbc_16, sr, a_is_8bit),
+            SBC_SRIY => read_func!(sbc_8, sbc_16, sriy, a_is_8bit),
             SEC => set_flag!(c, true),
             SED => set_flag!(d, true),
             SEI => set_flag!(i, true),
