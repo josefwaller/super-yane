@@ -420,6 +420,14 @@ impl Processor {
         self.yh = high;
         self.set_load_flags_16(low, high);
     }
+    /// REset Processor status bits (REP)
+    fn rep(&mut self, value: u8) {
+        self.p = StatusRegister::from_byte(value ^ self.p.to_byte(), self.p.e);
+    }
+    /// SEt Processor status bits (SEP)
+    fn sep(&mut self, value: u8) {
+        self.p = StatusRegister::from_byte(value | self.p.to_byte(), self.p.e);
+    }
 
     /// Individual methods for each addressing mode
     /// Combined with a CPU function to execute an instruction
@@ -565,6 +573,18 @@ impl Processor {
                         memory.read(addr.wrapping_add(1u32).into()),
                     );
                 }
+            }};
+        }
+        macro_rules! read_func_8 {
+            ($f_8: ident, $addr: ident) => {{
+                let addr = self.$addr(memory);
+                self.$f_8(memory.read(addr.into()));
+            }};
+        }
+        macro_rules! write_func {
+            ($func_8: ident, $func_16: ident, $addr: ident) => {{
+                let addr = self.$addr(memory);
+                if self.p.e {}
             }};
         }
         macro_rules! read_write_func {
@@ -844,8 +864,8 @@ impl Processor {
             PLD => self.pld(),
             PLP => self.plp(),
             PLX => self.plx(),
-            PLY => self.ply(),
-            REP_I => read_write_func!(rep_8, rep_16, i),*/
+            PLY => self.ply(),*/
+            REP_I => read_func_8!(rep_8, rep_16, i),
             ROL_ACC => acc_func!(rol_8, rol_16),
             ROL_A => read_write_func!(rol_8, rol_16, a),
             ROL_D => read_write_func!(rol_8, rol_16, d),
@@ -874,35 +894,36 @@ impl Processor {
             SBC_DILY => cpu_func!(sbc_8, sbc_16, dily),
             SBC_SR => cpu_func!(sbc_8, sbc_16, sr),
             SBC_SRIY => cpu_func!(sbc_8, sbc_16, sriy),
-            SEC => self.sec(),
-            SED => self.sed(),
-            SEI => self.sei(),
-            SEP_I => cpu_func!(sep_8, sep_16, i),
-            STA_A => cpu_func!(sta_8, sta_16, a),
-            STA_AL => cpu_func!(sta_8, sta_16, al),
-            STA_D => cpu_func!(sta_8, sta_16, d),
-            STA_DI => cpu_func!(sta_8, sta_16, di),
-            STA_DIL => cpu_func!(sta_8, sta_16, dil),
-            STA_AX => cpu_func!(sta_8, sta_16, ax),
-            STA_ALX => cpu_func!(sta_8, sta_16, alx),
-            STA_AY => cpu_func!(sta_8, sta_16, ay),
-            STA_DX => cpu_func!(sta_8, sta_16, dx),
-            STA_DIX => cpu_func!(sta_8, sta_16, dix),
-            STA_DIY => cpu_func!(sta_8, sta_16, diy),
-            STA_DILY => cpu_func!(sta_8, sta_16, dily),
-            STA_SR => cpu_func!(sta_8, sta_16, sr),
-            STA_SRIY => cpu_func!(sta_8, sta_16, sriy),
+            */
+            SEC => set_flag!(c, true),
+            SED => set_flag!(d, true),
+            /*SEI => set_flag!(i, true),
+            SEP_I => read_func_8!(sep_8, sep_16, i),
+            STA_A => write_func!(sta_8, sta_16, a),
+            STA_AL => write_func!(sta_8, sta_16, al),
+            STA_D => write_func!(sta_8, sta_16, d),
+            STA_DI => write_func!(sta_8, sta_16, di),
+            STA_DIL => write_func!(sta_8, sta_16, dil),
+            STA_AX => write_func!(sta_8, sta_16, ax),
+            STA_ALX => write_func!(sta_8, sta_16, alx),
+            STA_AY => write_func!(sta_8, sta_16, ay),
+            STA_DX => write_func!(sta_8, sta_16, dx),
+            STA_DIX => write_func!(sta_8, sta_16, dix),
+            STA_DIY => write_func!(sta_8, sta_16, diy),
+            STA_DILY => write_func!(sta_8, sta_16, dily),
+            STA_SR => write_func!(sta_8, sta_16, sr),
+            STA_SRIY => write_func!(sta_8, sta_16, sriy),
             STP => self.stp(),
-            STX_A => cpu_func!(stx_8, stx_16, a),
-            STX_D => cpu_func!(stx_8, stx_16, d),
-            STX_DY => cpu_func!(stx_8, stx_16, dy),
-            STY_A => cpu_func!(sty_8, sty_16, a),
-            STY_D => cpu_func!(sty_8, sty_16, d),
-            STY_DX => cpu_func!(sty_8, sty_16, dx),
-            STZ_A => cpu_func!(stz_8, stz_16, a),
-            STZ_D => cpu_func!(stz_8, stz_16, d),
-            STZ_AX => cpu_func!(stz_8, stz_16, ax),
-            STZ_DX => cpu_func!(stz_8, stz_16, dx),
+            STX_A => write_func!(stx_8, stx_16, a),
+            STX_D => write_func!(stx_8, stx_16, d),
+            STX_DY => write_func!(stx_8, stx_16, dy),
+            STY_A => write_func!(sty_8, sty_16, a),
+            STY_D => write_func!(sty_8, sty_16, d),
+            STY_DX => write_func!(sty_8, sty_16, dx),
+            STZ_A => write_func!(stz_8, stz_16, a),
+            STZ_D => write_func!(stz_8, stz_16, d),
+            STZ_AX => write_func!(stz_8, stz_16, ax),
+            STZ_DX => write_func!(stz_8, stz_16, dx),
             TAX => self.tax(),
             TAY => self.tay(),
             TCD => self.tcd(),
