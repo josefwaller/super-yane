@@ -18,11 +18,9 @@ pub struct StatusRegister {
     /// Emulation flag
     /// 0 = native (16-bit), 1 = emulation (8-bit)
     pub e: bool,
-    /// Break flag
-    pub b: bool,
-    /// Index register width flag
+    /// Break flag or Index register width flag
     /// 1 = 8-bit, 0=16-bit
-    pub x: bool,
+    pub xb: bool,
 }
 
 impl StatusRegister {
@@ -33,10 +31,28 @@ impl StatusRegister {
         !self.a_is_8bit()
     }
     pub fn xy_is_8bit(&self) -> bool {
-        self.x
+        self.e || self.xb
     }
     pub fn xy_is_16bit(&self) -> bool {
-        !self.x
+        !self.e && !self.xb
+    }
+    pub fn from_byte(byte: u8, e: bool) -> StatusRegister {
+        macro_rules! bit {
+            ($bit_num: expr) => {
+                ((byte >> $bit_num) & 0x01) == 1
+            };
+        }
+        StatusRegister {
+            c: bit!(0),
+            z: bit!(1),
+            i: bit!(2),
+            d: bit!(3),
+            xb: bit!(4),
+            m: bit!(5),
+            v: bit!(6),
+            n: bit!(7),
+            e,
+        }
     }
     pub fn to_byte(&self) -> u8 {
         let mut value = 0;
@@ -52,7 +68,7 @@ impl StatusRegister {
         set_bit!(1, self.z);
         set_bit!(2, self.i);
         set_bit!(3, self.d);
-        set_bit!(4, self.x);
+        set_bit!(4, self.xb);
         set_bit!(5, self.m);
         set_bit!(6, self.v);
         set_bit!(7, self.n);

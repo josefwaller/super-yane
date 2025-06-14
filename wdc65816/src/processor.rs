@@ -91,16 +91,24 @@ impl Processor {
             self.s = self.s & 0xFF;
         }
     }
+    fn pull_u8(&mut self, memory: &mut impl Memory) -> u8 {
+        self.s = self.s.wrapping_sub(1);
+        if self.p.e {
+            self.s = self.s & 0xFF;
+        }
+        memory.read(self.s.into())
+    }
+    fn pull_u16(&mut self, memory: &mut impl Memory) -> u16 {
+        let low = self.pull_u8(memory);
+        let high = self.pull_u8(memory);
+        low as u16 + 0x100 * high as u16
+    }
     /// Push a 16-bit value to the stack
     fn push_u16(&mut self, value: u16, memory: &mut impl Memory) {
+        let [low, high] = value.to_le_bytes();
         // Push high first
-        memory.write(self.s.into(), (value >> 8) as u8);
-        memory.write(self.s.into(), (value & 0xFF) as u8);
-        self.s = self.s.wrapping_add(2);
-        // Force high to 0 in emulation mode
-        if self.p.e {
-            self.s = self.s & 0xFF
-        }
+        self.push_u8(high, memory);
+        self.push_u8(low, memory);
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
@@ -286,7 +294,7 @@ impl Processor {
             // Clone processor register to set B flag
             let mut p = self.p;
             if set_b {
-                p.b = true;
+                p.xb = true;
             }
             self.push_u8(p.to_byte(), memory);
             self.pbr = 0x00;
@@ -351,6 +359,23 @@ impl Processor {
     fn jsr(&mut self, memory: &mut impl Memory, bank: u8, addr: u16) {
         self.push_u16(self.pc.wrapping_add(2), memory);
         self.jmp(bank, addr)
+    }
+    /// Return from interrupt
+    fn rti(&mut self, memory: &mut impl Memory) {
+        self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+        self.pc = self.pull_u16(memory);
+        if !self.p.e {
+            self.pbr = self.pull_u8(memory);
+        }
+    }
+    /// ReTurn from Subroutine (RTS)
+    fn rts(&mut self, memory: &mut impl Memory) {
+        self.pc = self.pull_u16(memory).wrapping_add(1);
+    }
+    /// ReTurn from subroutine Long (RTL)
+    fn rtl(&mut self, memory: &mut impl Memory) {
+        self.pc = self.pull_u16(memory).wrapping_add(1);
+        self.pbr = self.pull_u8(memory);
     }
     /// Set the load flags after loading an 8-bit value
     fn set_load_flags_8(&mut self, value: u8) {
@@ -831,10 +856,10 @@ impl Processor {
             ROR_D => read_write_func!(ror_8, ror_16, d),
             ROR_AX => read_write_func!(ror_8, ror_16, ax),
             ROR_DX => read_write_func!(ror_8, ror_16, dx),
-            /*RTI => self.rti(),
-            RTL => self.rtl(),
-            RTS => self.rts(),
-            SBC_I => cpu_func!(sbc_8, sbc_16, i),
+            RTI => self.rti(memory),
+            RTL => self.rtl(memory),
+            RTS => self.rts(memory),
+            /*SBC_I => cpu_func!(sbc_8, sbc_16, i),
             SBC_A => cpu_func!(sbc_8, sbc_16, a),
             SBC_AL => cpu_func!(sbc_8, sbc_16, al),
             SBC_D => cpu_func!(sbc_8, sbc_16, d),
