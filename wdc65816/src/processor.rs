@@ -60,6 +60,17 @@ fn read_u24(memory: &mut impl Memory, addr: u24) -> u24 {
     u24::from(high, low)
 }
 
+/// Decrement a 16-bit number given it as two bytes in LE format
+fn dec_16(low: u8, high: u8) -> [u8; 2] {
+    let (low, carry) = low.overflowing_sub(1);
+    [low, high.wrapping_sub(carry.into())]
+}
+/// Increment a 16-bit number given it as two bytes in LE format
+fn inc_16(low: u8, high: u8) -> [u8; 2] {
+    let (low, carry) = low.overflowing_add(1);
+    [low, high.wrapping_add(carry.into())]
+}
+
 impl Processor {
     pub fn new() -> Self {
         Processor::default()
@@ -781,6 +792,24 @@ impl Processor {
                 self.p.z = self.$r == 0;
             }};
         }
+        macro_rules! block_func {
+            ($xy_func: ident) => {{
+                let src_bank = read_u8(memory, u24::from(self.pbr, self.pc));
+                let dest_bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1)));
+                let data = read_u8(memory, u24::from(src_bank, self.x()));
+                memory.write(u24::from(dest_bank, self.y()).into(), data);
+                [self.a, self.b] = dec_16(self.a, self.b);
+                [self.xl, self.xh] = $xy_func(self.xl, self.xh);
+                [self.yl, self.yl] = $xy_func(self.yl, self.yh);
+                if self.a == 0xFF && self.b == 0xFF {
+                    // Loop
+                    self.pc = self.pc.wrapping_sub(1);
+                } else {
+                    // Go to next instruction
+                    self.pc = self.pc.wrapping_add(2);
+                }
+            }};
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc += 1;
 
@@ -969,8 +998,8 @@ impl Processor {
             LSR_D => read_write_func!(lsr_8, lsr_16, d, a_is_8bit),
             LSR_AX => read_write_func!(lsr_8, lsr_16, ax, a_is_8bit),
             LSR_DX => read_write_func!(lsr_8, lsr_16, dx, a_is_8bit),
-            /* MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
-            MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),*/
+            MVN_NEXT => block_func!(inc_16),
+            MVN_PREV => block_func!(dec_16),
             NOP => memory.io(),
             ORA_I => read_func!(ora_8, ora_16, i, a_is_8bit),
             ORA_A => read_func!(ora_8, ora_16, a, a_is_8bit),
