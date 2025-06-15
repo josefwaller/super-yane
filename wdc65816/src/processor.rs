@@ -723,7 +723,6 @@ impl Processor {
             // Always 8-bit
             ($r: expr) => {{
                 self.push_u8($r, memory);
-                self.pc = self.pc.wrapping_add(1);
             }};
             // Variable length
             ($rl: ident, $rh: ident, $flag_16: ident) => {{
@@ -732,14 +731,12 @@ impl Processor {
                 } else {
                     self.push_u8(self.$rl, memory);
                 }
-                self.pc = self.pc.wrapping_add(1);
             }};
         }
         macro_rules! pull_reg {
             // Always 8-bit
             ($r: expr) => {{
                 $r = self.pull_u8(memory);
-                self.pc = self.pc.wrapping_add(1);
             }};
             // Variable length
             ($rl: ident, $rh: ident, $flag_16: ident) => {{
@@ -750,7 +747,6 @@ impl Processor {
                 } else {
                     self.$rl = self.pull_u8(memory);
                 }
-                self.pc = self.pc.wrapping_add(1);
             }};
         }
         macro_rules! trans_reg {
@@ -761,7 +757,6 @@ impl Processor {
                 $dh = $sh;
                 self.p.n = $sh > 0x7F;
                 self.p.z = ($sl | $sh) == 0;
-                self.pc = self.pc.wrapping_add(1);
             }};
             // Source Low/High, dest low/high, flag
             ($sl: expr, $sh: expr, $dl: expr, $dh: expr, $flag: ident) => {{
@@ -771,7 +766,6 @@ impl Processor {
                     $dl = $sl;
                     self.p.n = $sl > 0x7F;
                     self.p.z = $sl == 0;
-                    self.pc = self.pc.wrapping_add(1);
                 }
             }};
             // Transfer 2 u8s into a u16
@@ -779,14 +773,12 @@ impl Processor {
                 self.$r = u16::from_le_bytes($le);
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
-                self.pc = self.pc.wrapping_add(1);
             }};
             // Transfer a u16 into 2 u8s
             ($r: ident, $le: expr) => {{
                 $le = self.$r.to_le_bytes();
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
-                self.pc = self.pc.wrapping_add(1);
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
@@ -978,8 +970,8 @@ impl Processor {
             LSR_AX => read_write_func!(lsr_8, lsr_16, ax, a_is_8bit),
             LSR_DX => read_write_func!(lsr_8, lsr_16, dx, a_is_8bit),
             /* MVN_NEXT => cpu_func!(mvn_8, mvn_16, next),
-            MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),
-            NOP => self.nop(),*/
+            MVN_PREV => cpu_func!(mvn_8, mvn_16, prev),*/
+            NOP => memory.io(),
             ORA_I => read_func!(ora_8, ora_16, i, a_is_8bit),
             ORA_A => read_func!(ora_8, ora_16, a, a_is_8bit),
             ORA_AL => read_func!(ora_8, ora_16, al, a_is_8bit),
@@ -1020,10 +1012,7 @@ impl Processor {
             PHA => push_reg!(a, b, a_is_16bit),
             PHB => push_reg!(self.dbr),
             // Custom for 16-bit value
-            PHD => {
-                self.push_u16(self.d, memory);
-                self.pc = self.pc.wrapping_add(1);
-            }
+            PHD => self.push_u16(self.d, memory),
             PHK => push_reg!(self.pbr),
             PHP => push_reg!(self.p.to_byte()),
             PHX => push_reg!(xl, xh, xy_is_16bit),
@@ -1038,11 +1027,9 @@ impl Processor {
                 self.d = self.pull_u16(memory);
                 self.p.n = self.d > 0x7FFF;
                 self.p.z = self.d == 0;
-                self.pc = self.pc.wrapping_add(1);
             }
             PLP => {
                 self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
-                self.pc = self.pc.wrapping_add(1);
             }
             PLX => pull_reg!(xl, xh, xy_is_16bit),
             PLY => pull_reg!(yl, yh, xy_is_16bit),
@@ -1128,9 +1115,24 @@ impl Processor {
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
             TYX => trans_reg!(self.yl, self.yh, self.xl, self.xh, xy_is_16bit),
             /*WAI => self.wai(),
-            WDM => self.wdm(),
-            XBA => self.xba(),
-            XCE => self.xce(),*/
+            WDM => self.wdm(),*/
+            XBA => {
+                std::mem::swap(&mut self.a, &mut self.b);
+                self.p.n = self.a > 0x7F;
+                self.p.z = self.a == 0;
+                memory.io();
+                memory.io();
+            }
+            XCE => {
+                std::mem::swap(&mut self.p.c, &mut self.p.e);
+                if self.p.e {
+                    self.p.xb = true;
+                    self.p.m = true;
+                    self.xh = 0;
+                    self.yh = 0;
+                    self.s = self.s & 0xFF;
+                }
+            }
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
     }

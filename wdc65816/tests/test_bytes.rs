@@ -31,10 +31,11 @@ fn test_byte_length() {
     let blacklist_ops = vec![
         "Branch",
         "Jump",
+        "Return",
         "BRK",
         "COP",
-        "STP",
-        "WAI",
+        "Stop",
+        "Wait",
         "Block Move",
         "Reserved",
     ];
