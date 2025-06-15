@@ -1143,8 +1143,12 @@ impl Processor {
             TXY => trans_reg!(self.xl, self.xh, self.yl, self.yh, xy_is_16bit),
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
             TYX => trans_reg!(self.yl, self.yh, self.xl, self.xh, xy_is_16bit),
-            /*WAI => self.wai(),
-            WDM => self.wdm(),*/
+            //WAI => self.wai(),
+            WDM => {
+                // Read and ignore next byte
+                read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1)));
+                self.pc = self.pc.wrapping_add(1)
+            }
             XBA => {
                 std::mem::swap(&mut self.a, &mut self.b);
                 self.p.n = self.a > 0x7F;
