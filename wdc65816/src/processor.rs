@@ -17,7 +17,7 @@ pub trait Memory {
 #[derive(Default)]
 pub struct Processor {
     /// Program Counter
-    pc: u16,
+    pub pc: u16,
     /// Program Bank Register
     pbr: u8,
     /// Lower byte of the accumulator
@@ -601,6 +601,7 @@ impl Processor {
         let addr = self
             .d
             .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16);
+        self.pc = self.pc.wrapping_add(1);
         // Read the value of the pointer from memory
         read_u24(memory, u24::from(0x00, addr))
     }

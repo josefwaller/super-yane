@@ -1,0 +1,2574 @@
+[
+  {
+    "code": 105,
+    "name": "ADC",
+    "addr_mode": "I",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 109,
+    "name": "ADC",
+    "addr_mode": "A",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 111,
+    "name": "ADC",
+    "addr_mode": "AL",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 101,
+    "name": "ADC",
+    "addr_mode": "DP",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 114,
+    "name": "ADC",
+    "addr_mode": "DPI",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 103,
+    "name": "ADC",
+    "addr_mode": "DPIL",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 125,
+    "name": "ADC",
+    "addr_mode": "AX",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 127,
+    "name": "ADC",
+    "addr_mode": "ALX",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 121,
+    "name": "ADC",
+    "addr_mode": "AY",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 117,
+    "name": "ADC",
+    "addr_mode": "DPX",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 97,
+    "name": "ADC",
+    "addr_mode": "DPIX",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 113,
+    "name": "ADC",
+    "addr_mode": "DPIY",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 119,
+    "name": "ADC",
+    "addr_mode": "DPILY",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 99,
+    "name": "ADC",
+    "addr_mode": "SR",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 115,
+    "name": "ADC",
+    "addr_mode": "SRIY",
+    "desc": "Add with Carry",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 41,
+    "name": "AND",
+    "addr_mode": "I",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 45,
+    "name": "AND",
+    "addr_mode": "A",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 47,
+    "name": "AND",
+    "addr_mode": "AL",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 37,
+    "name": "AND",
+    "addr_mode": "DP",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 50,
+    "name": "AND",
+    "addr_mode": "DPI",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 39,
+    "name": "AND",
+    "addr_mode": "DPIL",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 61,
+    "name": "AND",
+    "addr_mode": "AX",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 63,
+    "name": "AND",
+    "addr_mode": "ALX",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 57,
+    "name": "AND",
+    "addr_mode": "AY",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 53,
+    "name": "AND",
+    "addr_mode": "DPX",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 33,
+    "name": "AND",
+    "addr_mode": "DPIX",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 49,
+    "name": "AND",
+    "addr_mode": "DPIY",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 55,
+    "name": "AND",
+    "addr_mode": "DPILY",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 35,
+    "name": "AND",
+    "addr_mode": "SR",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 51,
+    "name": "AND",
+    "addr_mode": "SRIY",
+    "desc": "And Accumulator with Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 10,
+    "name": "ASL",
+    "addr_mode": "ACC",
+    "desc": "Arithmetic Shift Left",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 14,
+    "name": "ASL",
+    "addr_mode": "A",
+    "desc": "Arithmetic Shift Left",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 6,
+    "name": "ASL",
+    "addr_mode": "DP",
+    "desc": "Arithmetic Shift Left",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 30,
+    "name": "ASL",
+    "addr_mode": "AX",
+    "desc": "Arithmetic Shift Left",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 22,
+    "name": "ASL",
+    "addr_mode": "DPX",
+    "desc": "Arithmetic Shift Left",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 144,
+    "name": "BCC",
+    "addr_mode": "",
+    "desc": "Branch if Carry Clear",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 176,
+    "name": "BCS",
+    "addr_mode": "",
+    "desc": "Branch if Carry Set",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 208,
+    "name": "BNE",
+    "addr_mode": "",
+    "desc": "Branch if Not Equal",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 240,
+    "name": "BEQ",
+    "addr_mode": "",
+    "desc": "Branch if Equal",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 16,
+    "name": "BPL",
+    "addr_mode": "",
+    "desc": "Branch if Plus",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 48,
+    "name": "BMI",
+    "addr_mode": "",
+    "desc": "Branch if Minus",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 80,
+    "name": "BVC",
+    "addr_mode": "",
+    "desc": "Branch if Overflow Clear",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 112,
+    "name": "BVS",
+    "addr_mode": "",
+    "desc": "Branch if Overflow Set",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 128,
+    "name": "BRA",
+    "addr_mode": "",
+    "desc": "Branch Always",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 130,
+    "name": "BRL",
+    "addr_mode": "",
+    "desc": "Branch Always Long",
+    "addr_mode_desc": "",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 137,
+    "name": "BIT",
+    "addr_mode": "I",
+    "desc": "Test Memory Bits against Accumulator",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 44,
+    "name": "BIT",
+    "addr_mode": "A",
+    "desc": "Test Memory Bits against Accumulator",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 36,
+    "name": "BIT",
+    "addr_mode": "DP",
+    "desc": "Test Memory Bits against Accumulator",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 60,
+    "name": "BIT",
+    "addr_mode": "AX",
+    "desc": "Test Memory Bits against Accumulator",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 52,
+    "name": "BIT",
+    "addr_mode": "DPX",
+    "desc": "Test Memory Bits against Accumulator",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 0,
+    "name": "BRK",
+    "addr_mode": "",
+    "desc": "BRK Software Interrupt",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 2,
+    "name": "COP",
+    "addr_mode": "",
+    "desc": "COP Software Interrupt",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 24,
+    "name": "CLC",
+    "addr_mode": "",
+    "desc": "Clear Carry Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 88,
+    "name": "CLI",
+    "addr_mode": "",
+    "desc": "Clear Interrupt Disable Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 216,
+    "name": "CLD",
+    "addr_mode": "",
+    "desc": "Clear Decimal Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 184,
+    "name": "CLV",
+    "addr_mode": "",
+    "desc": "Clear Overflow Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 201,
+    "name": "CMP",
+    "addr_mode": "I",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 205,
+    "name": "CMP",
+    "addr_mode": "A",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 207,
+    "name": "CMP",
+    "addr_mode": "AL",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 197,
+    "name": "CMP",
+    "addr_mode": "DP",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 210,
+    "name": "CMP",
+    "addr_mode": "DPI",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 199,
+    "name": "CMP",
+    "addr_mode": "DPIL",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 221,
+    "name": "CMP",
+    "addr_mode": "AX",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 223,
+    "name": "CMP",
+    "addr_mode": "ALX",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 217,
+    "name": "CMP",
+    "addr_mode": "AY",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 213,
+    "name": "CMP",
+    "addr_mode": "DPX",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 193,
+    "name": "CMP",
+    "addr_mode": "DPIX",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 209,
+    "name": "CMP",
+    "addr_mode": "DPIY",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 215,
+    "name": "CMP",
+    "addr_mode": "DPILY",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 195,
+    "name": "CMP",
+    "addr_mode": "SR",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 211,
+    "name": "CMP",
+    "addr_mode": "SRIY",
+    "desc": "Compare Accumulator with Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 224,
+    "name": "CPX",
+    "addr_mode": "I",
+    "desc": "Compare Index Register X with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 236,
+    "name": "CPX",
+    "addr_mode": "A",
+    "desc": "Compare Index Register X with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 228,
+    "name": "CPX",
+    "addr_mode": "DP",
+    "desc": "Compare Index Register X with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 192,
+    "name": "CPY",
+    "addr_mode": "I",
+    "desc": "Compare Index Register Y with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 204,
+    "name": "CPY",
+    "addr_mode": "A",
+    "desc": "Compare Index Register Y with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 196,
+    "name": "CPY",
+    "addr_mode": "DP",
+    "desc": "Compare Index Register Y with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 58,
+    "name": "DEC",
+    "addr_mode": "ACC",
+    "desc": "Decrement",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 206,
+    "name": "DEC",
+    "addr_mode": "A",
+    "desc": "Decrement",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 198,
+    "name": "DEC",
+    "addr_mode": "DP",
+    "desc": "Decrement",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 222,
+    "name": "DEC",
+    "addr_mode": "AX",
+    "desc": "Decrement",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 214,
+    "name": "DEC",
+    "addr_mode": "DPX",
+    "desc": "Decrement",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 202,
+    "name": "DEX",
+    "addr_mode": "",
+    "desc": "Decrement Index Registers",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 136,
+    "name": "DEX",
+    "addr_mode": "",
+    "desc": "Decrement Index Registers",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 73,
+    "name": "EOR",
+    "addr_mode": "I",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 77,
+    "name": "EOR",
+    "addr_mode": "A",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 79,
+    "name": "EOR",
+    "addr_mode": "AL",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 69,
+    "name": "EOR",
+    "addr_mode": "DP",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 82,
+    "name": "EOR",
+    "addr_mode": "DPI",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 71,
+    "name": "EOR",
+    "addr_mode": "DPIL",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 93,
+    "name": "EOR",
+    "addr_mode": "AX",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 95,
+    "name": "EOR",
+    "addr_mode": "ALX",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 89,
+    "name": "EOR",
+    "addr_mode": "AY",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 85,
+    "name": "EOR",
+    "addr_mode": "DPX",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 65,
+    "name": "EOR",
+    "addr_mode": "DPIX",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 81,
+    "name": "EOR",
+    "addr_mode": "DPIY",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 87,
+    "name": "EOR",
+    "addr_mode": "DPILY",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 67,
+    "name": "EOR",
+    "addr_mode": "SR",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 83,
+    "name": "EOR",
+    "addr_mode": "SRIY",
+    "desc": "Exclusive OR Accumulator with Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 26,
+    "name": "INC",
+    "addr_mode": "ACC",
+    "desc": "Increment",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 238,
+    "name": "INC",
+    "addr_mode": "A",
+    "desc": "Increment",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 230,
+    "name": "INC",
+    "addr_mode": "DP",
+    "desc": "Increment",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 254,
+    "name": "INC",
+    "addr_mode": "AX",
+    "desc": "Increment",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 246,
+    "name": "INC",
+    "addr_mode": "DPX",
+    "desc": "Increment",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 232,
+    "name": "INX",
+    "addr_mode": "",
+    "desc": "Increment Index Registers",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 200,
+    "name": "INX",
+    "addr_mode": "",
+    "desc": "Increment Index Registers",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 76,
+    "name": "JMP",
+    "addr_mode": "A",
+    "desc": "Jump",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 108,
+    "name": "JMP",
+    "addr_mode": "AI",
+    "desc": "Jump",
+    "addr_mode_desc": "Absolute Indirect",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 124,
+    "name": "JMP",
+    "addr_mode": "AIX",
+    "desc": "Jump",
+    "addr_mode_desc": "Absolute Indexed Indirect, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 92,
+    "name": "JMP",
+    "addr_mode": "AL",
+    "desc": "Jump",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 220,
+    "name": "JMP",
+    "addr_mode": "AIL",
+    "desc": "Jump",
+    "addr_mode_desc": "Absolute Indirect Long",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 32,
+    "name": "JSR",
+    "addr_mode": "A",
+    "desc": "Jump to Subroutine",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 252,
+    "name": "JSR",
+    "addr_mode": "AIX",
+    "desc": "Jump to Subroutine",
+    "addr_mode_desc": "Absolute Indexed Indirect, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 34,
+    "name": "JSR",
+    "addr_mode": "AL",
+    "desc": "Jump to Subroutine",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 169,
+    "name": "LDA",
+    "addr_mode": "I",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 173,
+    "name": "LDA",
+    "addr_mode": "A",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 175,
+    "name": "LDA",
+    "addr_mode": "AL",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 165,
+    "name": "LDA",
+    "addr_mode": "DP",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 178,
+    "name": "LDA",
+    "addr_mode": "DPI",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 167,
+    "name": "LDA",
+    "addr_mode": "DPIL",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 189,
+    "name": "LDA",
+    "addr_mode": "AX",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 191,
+    "name": "LDA",
+    "addr_mode": "ALX",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 185,
+    "name": "LDA",
+    "addr_mode": "AY",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 181,
+    "name": "LDA",
+    "addr_mode": "DPX",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 161,
+    "name": "LDA",
+    "addr_mode": "DPIX",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 177,
+    "name": "LDA",
+    "addr_mode": "DPIY",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 183,
+    "name": "LDA",
+    "addr_mode": "DPILY",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 163,
+    "name": "LDA",
+    "addr_mode": "SR",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 179,
+    "name": "LDA",
+    "addr_mode": "SRIY",
+    "desc": "Load Accumulator from Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 162,
+    "name": "LDX",
+    "addr_mode": "I",
+    "desc": "Load Index Register X from Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 174,
+    "name": "LDX",
+    "addr_mode": "A",
+    "desc": "Load Index Register X from Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 166,
+    "name": "LDX",
+    "addr_mode": "DP",
+    "desc": "Load Index Register X from Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 190,
+    "name": "LDX",
+    "addr_mode": "AY",
+    "desc": "Load Index Register X from Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 182,
+    "name": "LDX",
+    "addr_mode": "DPY",
+    "desc": "Load Index Register X from Memory",
+    "addr_mode_desc": "Direct Page Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 160,
+    "name": "LDY",
+    "addr_mode": "I",
+    "desc": "Load Index Register Y from Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 172,
+    "name": "LDY",
+    "addr_mode": "A",
+    "desc": "Load Index Register Y from Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 164,
+    "name": "LDY",
+    "addr_mode": "DP",
+    "desc": "Load Index Register Y from Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 188,
+    "name": "LDY",
+    "addr_mode": "AX",
+    "desc": "Load Index Register Y from Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 180,
+    "name": "LDY",
+    "addr_mode": "DPX",
+    "desc": "Load Index Register Y from Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 74,
+    "name": "LSR",
+    "addr_mode": "ACC",
+    "desc": "Logical Shift Right",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 78,
+    "name": "LSR",
+    "addr_mode": "A",
+    "desc": "Logical Shift Right",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 70,
+    "name": "LSR",
+    "addr_mode": "DP",
+    "desc": "Logical Shift Right",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 94,
+    "name": "LSR",
+    "addr_mode": "AX",
+    "desc": "Logical Shift Right",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 86,
+    "name": "LSR",
+    "addr_mode": "DPX",
+    "desc": "Logical Shift Right",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 84,
+    "name": "MVN",
+    "addr_mode": "NEXT",
+    "desc": "Block Move",
+    "addr_mode_desc": "Next",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 68,
+    "name": "MVN",
+    "addr_mode": "PREV",
+    "desc": "Block Move",
+    "addr_mode_desc": "Previous",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 234,
+    "name": "NOP",
+    "addr_mode": "",
+    "desc": "No Operation",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 9,
+    "name": "ORA",
+    "addr_mode": "I",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 13,
+    "name": "ORA",
+    "addr_mode": "A",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 15,
+    "name": "ORA",
+    "addr_mode": "AL",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 5,
+    "name": "ORA",
+    "addr_mode": "DP",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 18,
+    "name": "ORA",
+    "addr_mode": "DPI",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 7,
+    "name": "ORA",
+    "addr_mode": "DPIL",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 29,
+    "name": "ORA",
+    "addr_mode": "AX",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 31,
+    "name": "ORA",
+    "addr_mode": "ALX",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 25,
+    "name": "ORA",
+    "addr_mode": "AY",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 21,
+    "name": "ORA",
+    "addr_mode": "DPX",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 1,
+    "name": "ORA",
+    "addr_mode": "DPIX",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 17,
+    "name": "ORA",
+    "addr_mode": "DPIY",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 23,
+    "name": "ORA",
+    "addr_mode": "DPILY",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 3,
+    "name": "ORA",
+    "addr_mode": "SR",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 19,
+    "name": "ORA",
+    "addr_mode": "SRIY",
+    "desc": "OR Accumulator with Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 244,
+    "name": "PEA",
+    "addr_mode": "",
+    "desc": " Push Effective Absolute Address",
+    "addr_mode_desc": "",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 212,
+    "name": "PEI",
+    "addr_mode": "",
+    "desc": " Push Effective Indirect Address",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 98,
+    "name": "PER",
+    "addr_mode": "",
+    "desc": " Push Effective PC Relative Indirect Address",
+    "addr_mode_desc": "",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 72,
+    "name": "PHA",
+    "addr_mode": "",
+    "desc": "Push Accumulator",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 139,
+    "name": "PHB",
+    "addr_mode": "",
+    "desc": "Push Data Bank",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 11,
+    "name": "PHD",
+    "addr_mode": "",
+    "desc": "Push Direct Page Register",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 75,
+    "name": "PHK",
+    "addr_mode": "",
+    "desc": "Push Program Bank Register",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 8,
+    "name": "PHP",
+    "addr_mode": "",
+    "desc": "Push Processor Status Register",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 218,
+    "name": "PHX",
+    "addr_mode": "",
+    "desc": "Push Index Register X",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 90,
+    "name": "PHY",
+    "addr_mode": "",
+    "desc": "Push Index Register Y",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 104,
+    "name": "PLA",
+    "addr_mode": "",
+    "desc": "Pull Accumulator",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 171,
+    "name": "PLB",
+    "addr_mode": "",
+    "desc": "Pull Data Bank",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 43,
+    "name": "PLD",
+    "addr_mode": "",
+    "desc": "Pull Direct Page Register",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 40,
+    "name": "PLP",
+    "addr_mode": "",
+    "desc": "Pull Processor Status Register",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 250,
+    "name": "PLX",
+    "addr_mode": "",
+    "desc": "Pull Index Register X",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 122,
+    "name": "PLY",
+    "addr_mode": "",
+    "desc": "Pull Index Register Y",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 194,
+    "name": "REP",
+    "addr_mode": "I",
+    "desc": "Reset Status Bits",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 42,
+    "name": "ROL",
+    "addr_mode": "ACC",
+    "desc": "Rotate Left",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 46,
+    "name": "ROL",
+    "addr_mode": "A",
+    "desc": "Rotate Left",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 38,
+    "name": "ROL",
+    "addr_mode": "DP",
+    "desc": "Rotate Left",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 62,
+    "name": "ROL",
+    "addr_mode": "AX",
+    "desc": "Rotate Left",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 54,
+    "name": "ROL",
+    "addr_mode": "DPX",
+    "desc": "Rotate Left",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 106,
+    "name": "ROR",
+    "addr_mode": "ACC",
+    "desc": "Rotate Right",
+    "addr_mode_desc": "Accumulator",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 110,
+    "name": "ROR",
+    "addr_mode": "A",
+    "desc": "Rotate Right",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 102,
+    "name": "ROR",
+    "addr_mode": "DP",
+    "desc": "Rotate Right",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 126,
+    "name": "ROR",
+    "addr_mode": "AX",
+    "desc": "Rotate Right",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 118,
+    "name": "ROR",
+    "addr_mode": "DPX",
+    "desc": "Rotate Right",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 64,
+    "name": "RTI",
+    "addr_mode": "",
+    "desc": " Return From Interrupt",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 96,
+    "name": "RTS",
+    "addr_mode": "",
+    "desc": " Return From Subroutine",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 107,
+    "name": "RTL",
+    "addr_mode": "",
+    "desc": "Return From Subroutine Long",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 233,
+    "name": "SBC",
+    "addr_mode": "I",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2,
+      3
+    ]
+  },
+  {
+    "code": 237,
+    "name": "SBC",
+    "addr_mode": "A",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 239,
+    "name": "SBC",
+    "addr_mode": "AL",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 229,
+    "name": "SBC",
+    "addr_mode": "DP",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 242,
+    "name": "SBC",
+    "addr_mode": "DPI",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 231,
+    "name": "SBC",
+    "addr_mode": "DPIL",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 253,
+    "name": "SBC",
+    "addr_mode": "AX",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 255,
+    "name": "SBC",
+    "addr_mode": "ALX",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 249,
+    "name": "SBC",
+    "addr_mode": "AY",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 245,
+    "name": "SBC",
+    "addr_mode": "DPX",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 225,
+    "name": "SBC",
+    "addr_mode": "DPIX",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 241,
+    "name": "SBC",
+    "addr_mode": "DPIY",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 247,
+    "name": "SBC",
+    "addr_mode": "DPILY",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 227,
+    "name": "SBC",
+    "addr_mode": "SR",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 243,
+    "name": "SBC",
+    "addr_mode": "SRIY",
+    "desc": "Subtract with Borrow from Accumulator",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 56,
+    "name": "SEC",
+    "addr_mode": "",
+    "desc": "Set Carry Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 120,
+    "name": "SEI",
+    "addr_mode": "",
+    "desc": "Set Interrupt Disable Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 248,
+    "name": "SED",
+    "addr_mode": "",
+    "desc": "Set Decimal Flag",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 226,
+    "name": "SEP",
+    "addr_mode": "I",
+    "desc": "Set Status Bits",
+    "addr_mode_desc": "Immediate",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 141,
+    "name": "STA",
+    "addr_mode": "A",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 143,
+    "name": "STA",
+    "addr_mode": "AL",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Absolute Long",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 133,
+    "name": "STA",
+    "addr_mode": "DP",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 146,
+    "name": "STA",
+    "addr_mode": "DPI",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Direct Page Indirect",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 135,
+    "name": "STA",
+    "addr_mode": "DPIL",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Direct Page Indirect Long",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 157,
+    "name": "STA",
+    "addr_mode": "AX",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 159,
+    "name": "STA",
+    "addr_mode": "ALX",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Absolute Long Indexed, X",
+    "bytes": [
+      4
+    ]
+  },
+  {
+    "code": 153,
+    "name": "STA",
+    "addr_mode": "AY",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Absolute Indexed, Y",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 149,
+    "name": "STA",
+    "addr_mode": "DPX",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 129,
+    "name": "STA",
+    "addr_mode": "DPIX",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Direct Page Indirect, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 145,
+    "name": "STA",
+    "addr_mode": "DPIY",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "DP Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 151,
+    "name": "STA",
+    "addr_mode": "DPILY",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "DP Indirect Long Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 131,
+    "name": "STA",
+    "addr_mode": "SR",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "Stack Relative",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 147,
+    "name": "STA",
+    "addr_mode": "SRIY",
+    "desc": "Store Accumulator to Memory",
+    "addr_mode_desc": "SR Indirect Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 219,
+    "name": "STP",
+    "addr_mode": "",
+    "desc": "Stop the Processor",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 142,
+    "name": "STX",
+    "addr_mode": "A",
+    "desc": "Store Index Register X to Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 134,
+    "name": "STX",
+    "addr_mode": "DP",
+    "desc": "Store Index Register X to Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 150,
+    "name": "STX",
+    "addr_mode": "DPY",
+    "desc": "Store Index Register X to Memory",
+    "addr_mode_desc": "Direct Page Indexed, Y",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 140,
+    "name": "STY",
+    "addr_mode": "A",
+    "desc": "Store Index Register Y to Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 132,
+    "name": "STY",
+    "addr_mode": "DP",
+    "desc": "Store Index Register Y to Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 148,
+    "name": "STY",
+    "addr_mode": "DPX",
+    "desc": "Store Index Register Y to Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 156,
+    "name": "STZ",
+    "addr_mode": "A",
+    "desc": "Store Zero to Memory",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 100,
+    "name": "STZ",
+    "addr_mode": "DP",
+    "desc": "Store Zero to Memory",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 158,
+    "name": "STZ",
+    "addr_mode": "AX",
+    "desc": "Store Zero to Memory",
+    "addr_mode_desc": "Absolute Indexed, X",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 116,
+    "name": "STZ",
+    "addr_mode": "DPX",
+    "desc": "Store Zero to Memory",
+    "addr_mode_desc": "Direct Page Indexed, X",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 170,
+    "name": "TAX",
+    "addr_mode": "",
+    "desc": "Transfer A to X",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 168,
+    "name": "TAY",
+    "addr_mode": "",
+    "desc": "Transfer A to Y",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 91,
+    "name": "TCD",
+    "addr_mode": "",
+    "desc": "Transfer 16 bit A to D",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 27,
+    "name": "TCS",
+    "addr_mode": "",
+    "desc": "Transfer 16 bit A to S",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 123,
+    "name": "TDC",
+    "addr_mode": "",
+    "desc": "Transfer D to 16 bit A",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 59,
+    "name": "TSC",
+    "addr_mode": "",
+    "desc": "Transfer S to 16 bit A",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 186,
+    "name": "TSX",
+    "addr_mode": "",
+    "desc": "Transfer S to X",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 138,
+    "name": "TXA",
+    "addr_mode": "",
+    "desc": "Transfer X to A",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 154,
+    "name": "TXS",
+    "addr_mode": "",
+    "desc": "Transfer X to S",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 155,
+    "name": "TXY",
+    "addr_mode": "",
+    "desc": "Transfer X to Y",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 152,
+    "name": "TYA",
+    "addr_mode": "",
+    "desc": "Transfer Y to A",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 187,
+    "name": "TYX",
+    "addr_mode": "",
+    "desc": "Transfer Y to X",
+    "addr_mode_desc": "",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 28,
+    "name": "TRB",
+    "addr_mode": "A",
+    "desc": "Test and Reset Memory Bits Against Accumulator",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 20,
+    "name": "TRB",
+    "addr_mode": "DP",
+    "desc": "Test and Reset Memory Bits Against Accumulator",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 12,
+    "name": "TSB",
+    "addr_mode": "A",
+    "desc": "Test and Set Memory Bits Against Accumulator",
+    "addr_mode_desc": "Absolute",
+    "bytes": [
+      3
+    ]
+  },
+  {
+    "code": 4,
+    "name": "TSB",
+    "addr_mode": "DP",
+    "desc": "Test and Set Memory Bits Against Accumulator",
+    "addr_mode_desc": "Direct Page",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 203,
+    "name": "WAI",
+    "addr_mode": "",
+    "desc": "Wait for Interrupt",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 66,
+    "name": "WDM",
+    "addr_mode": "",
+    "desc": "Reserved for Future Expansion",
+    "addr_mode_desc": "",
+    "bytes": [
+      2
+    ]
+  },
+  {
+    "code": 235,
+    "name": "XBA",
+    "addr_mode": "",
+    "desc": "Exchange the B and A Accumulators",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  },
+  {
+    "code": 251,
+    "name": "XCE",
+    "addr_mode": "",
+    "desc": "Exchange Carry and Emulation Bits",
+    "addr_mode_desc": "Implied",
+    "bytes": [
+      1
+    ]
+  }
+]
