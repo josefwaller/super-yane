@@ -801,6 +801,8 @@ impl Processor {
                 [self.a, self.b] = dec_16(self.a, self.b);
                 [self.xl, self.xh] = $xy_func(self.xl, self.xh);
                 [self.yl, self.yl] = $xy_func(self.yl, self.yh);
+                memory.io();
+                memory.io();
                 if self.a == 0xFF && self.b == 0xFF {
                     // Loop
                     self.pc = self.pc.wrapping_sub(1);
