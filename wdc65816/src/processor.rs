@@ -5,7 +5,7 @@ use crate::u24::u24;
 use std::default::Default;
 use std::sync::Arc;
 
-pub trait Memory {
+pub trait HasAddressBus {
     /// Read a single byte from memory
     fn read(&self, address: usize) -> u8;
     /// Write a single byte to memory
@@ -43,18 +43,18 @@ pub struct Processor {
 }
 
 /// Read a single byte from a memory given an 8-bit bank and a 16-bit address
-fn read_u8(memory: &mut impl Memory, addr: u24) -> u8 {
+fn read_u8(memory: &mut impl HasAddressBus, addr: u24) -> u8 {
     // Combine bank and address to form final address
     memory.read(addr.into())
 }
 
-fn read_u16<T: Memory>(memory: &mut T, addr: u24) -> u16 {
+fn read_u16<T: HasAddressBus>(memory: &mut T, addr: u24) -> u16 {
     // Read low first
     let low = read_u8(memory, addr);
     let high = read_u8(memory, addr.wrapping_add(1u32));
     u16::from_le_bytes([low, high])
 }
-fn read_u24(memory: &mut impl Memory, addr: u24) -> u24 {
+fn read_u24(memory: &mut impl HasAddressBus, addr: u24) -> u24 {
     let low = read_u16(memory, addr);
     let high = read_u8(memory, addr.wrapping_add(2u32));
     u24::from(high, low)
@@ -94,7 +94,7 @@ impl Processor {
         }
     }
     /// Push a single byte to stack
-    fn push_u8(&mut self, value: u8, memory: &mut impl Memory) {
+    fn push_u8(&mut self, value: u8, memory: &mut impl HasAddressBus) {
         memory.write(self.s.into(), value);
         self.s = self.s.wrapping_add(1);
         // Force high to 0 in emulation mode
@@ -102,7 +102,7 @@ impl Processor {
             self.s = self.s & 0xFF;
         }
     }
-    fn pull_u8(&mut self, memory: &mut impl Memory) -> u8 {
+    fn pull_u8(&mut self, memory: &mut impl HasAddressBus) -> u8 {
         self.s = self.s.wrapping_sub(1);
         if self.p.e {
             self.s = self.s & 0xFF;
@@ -110,22 +110,22 @@ impl Processor {
         memory.read(self.s.into())
     }
     // Push a u16 as two bytes in LE format
-    fn push_u16_le(&mut self, [low, high]: [u8; 2], memory: &mut impl Memory) {
+    fn push_u16_le(&mut self, [low, high]: [u8; 2], memory: &mut impl HasAddressBus) {
         self.push_u8(high, memory);
         self.push_u8(low, memory);
     }
     // Pull a u16 as two bytes in LE format
-    fn pull_u16_le(&mut self, memory: &mut impl Memory) -> [u8; 2] {
+    fn pull_u16_le(&mut self, memory: &mut impl HasAddressBus) -> [u8; 2] {
         let low = self.pull_u8(memory);
         let high = self.pull_u8(memory);
         [low, high]
     }
-    fn pull_u16(&mut self, memory: &mut impl Memory) -> u16 {
+    fn pull_u16(&mut self, memory: &mut impl HasAddressBus) -> u16 {
         let [low, high] = self.pull_u16_le(memory);
         low as u16 + 0x100 * high as u16
     }
     /// Push a 16-bit value to the stack
-    fn push_u16(&mut self, value: u16, memory: &mut impl Memory) {
+    fn push_u16(&mut self, value: u16, memory: &mut impl HasAddressBus) {
         self.push_u16_le(value.to_le_bytes(), memory);
     }
     /// Add with Carry 8-bit
@@ -276,7 +276,7 @@ impl Processor {
     }
 
     /// Branch
-    fn branch(&mut self, memory: &mut impl Memory, offset: i16) {
+    fn branch(&mut self, memory: &mut impl HasAddressBus, offset: i16) {
         memory.io();
         self.pc = self.pc.wrapping_add_signed(offset.into());
     }
@@ -343,7 +343,13 @@ impl Processor {
     }
 
     /// Break to a given address
-    fn break_to(&mut self, memory: &mut impl Memory, addr_16: u16, addr_8: u16, set_b: bool) {
+    fn break_to(
+        &mut self,
+        memory: &mut impl HasAddressBus,
+        addr_16: u16,
+        addr_8: u16,
+        set_b: bool,
+    ) {
         if self.p.e {
             // Since we already incremented the PC by 1 we want to just add 1
             self.push_u16(self.pc.wrapping_add(1), memory);
@@ -399,12 +405,12 @@ impl Processor {
         self.pc = addr;
     }
     /// Jump and Save Return/Jump to SubRoutine (JSR)
-    fn jsr(&mut self, memory: &mut impl Memory, bank: u8, addr: u16) {
+    fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
         self.push_u16(self.pc.wrapping_add(2), memory);
         self.jmp(bank, addr)
     }
     /// Return from interrupt
-    fn rti(&mut self, memory: &mut impl Memory) {
+    fn rti(&mut self, memory: &mut impl HasAddressBus) {
         self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
         self.pc = self.pull_u16(memory);
         if !self.p.e {
@@ -412,11 +418,11 @@ impl Processor {
         }
     }
     /// ReTurn from Subroutine (RTS)
-    fn rts(&mut self, memory: &mut impl Memory) {
+    fn rts(&mut self, memory: &mut impl HasAddressBus) {
         self.pc = self.pull_u16(memory).wrapping_add(1);
     }
     /// ReTurn from subroutine Long (RTL)
-    fn rtl(&mut self, memory: &mut impl Memory) {
+    fn rtl(&mut self, memory: &mut impl HasAddressBus) {
         self.pc = self.pull_u16(memory).wrapping_add(1);
         self.pbr = self.pull_u8(memory);
     }
@@ -526,21 +532,21 @@ impl Processor {
     /// cpu function to form the final 24-bit address
 
     /// Immediate addressing
-    fn i(&mut self, _memory: &mut impl Memory) -> u24 {
+    fn i(&mut self, _memory: &mut impl HasAddressBus) -> u24 {
         // Address is simply the next byte in the instruction
         let addr = u24::from(self.pbr, self.pc);
         self.pc = self.pc.wrapping_add(1);
         addr
     }
     /// Absolute addressing
-    fn a(&mut self, memory: &mut impl Memory) -> u24 {
+    fn a(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         // Read the 16 bit address off the instruction
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
         self.pc = self.pc.wrapping_add(2);
         u24::from(self.dbr, addr)
     }
     // Utility offset function for absolute indexed function
-    fn a_off(&mut self, memory: &mut impl Memory, register: u16) -> u24 {
+    fn a_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
         let addr = addr.wrapping_add(register as u16);
         // Extra unused read for X indexed
@@ -549,25 +555,25 @@ impl Processor {
         u24::from(self.dbr, addr)
     }
     /// Absolute X Indexed addressing
-    fn ax(&mut self, memory: &mut impl Memory) -> u24 {
+    fn ax(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         self.a_off(memory, self.x())
     }
     /// Absolute Y Indexed addressing
-    fn ay(&mut self, memory: &mut impl Memory) -> u24 {
+    fn ay(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         self.a_off(memory, self.y())
     }
     /// Absolute Long addressing
-    fn al(&mut self, memory: &mut impl Memory) -> u24 {
+    fn al(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = u24::from(self.pbr, self.pc);
         self.pc = self.pc.wrapping_add(3);
         read_u24(memory, addr)
     }
     /// Absolute Long X Indexed
-    fn alx(&mut self, memory: &mut impl Memory) -> u24 {
+    fn alx(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         self.al(memory).wrapping_add(self.x())
     }
     /// Direct addressing
-    fn d(&mut self, memory: &mut impl Memory) -> u24 {
+    fn d(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let offset = read_u8(memory, u24::from(self.pbr, self.pc));
         // Extra cycle if direct register low is not 0
         if self.d & 0xFF != 0 {
@@ -577,38 +583,38 @@ impl Processor {
         u24::from(0x00, self.d.wrapping_add(offset as u16))
     }
     // Direct addressing with offset
-    fn d_off(&mut self, memory: &mut impl Memory, register: u16) -> u24 {
+    fn d_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
         let addr = self.d(memory);
         memory.io();
         addr.wrapping_add(register).with_bank(0x00)
     }
     /// Direct X Indexed addressing
-    fn dx(&mut self, memory: &mut impl Memory) -> u24 {
+    fn dx(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         self.d_off(memory, self.x())
     }
     /// Direct Y Indexed addressing
-    fn dy(&mut self, memory: &mut impl Memory) -> u24 {
+    fn dy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         self.d_off(memory, self.y())
     }
     /// Direct Indirect addressing
-    fn di(&mut self, memory: &mut impl Memory) -> u24 {
+    fn di(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.d(memory);
         addr.with_bank(self.dbr)
     }
     /// Direct Indirect X Indexed addressing
-    fn dix(&mut self, memory: &mut impl Memory) -> u24 {
+    fn dix(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.di(memory);
         memory.io();
         addr.wrapping_add(self.x()).with_bank(self.dbr)
     }
     /// Direct Indirect Y Indexed addressing
-    fn diy(&mut self, memory: &mut impl Memory) -> u24 {
+    fn diy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr: u24 = self.di(memory).into();
         memory.io();
         addr.wrapping_add(self.y())
     }
     /// Direct Indirect Long addressing
-    fn dil(&mut self, memory: &mut impl Memory) -> u24 {
+    fn dil(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self
             .d
             .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16);
@@ -617,12 +623,12 @@ impl Processor {
         read_u24(memory, u24::from(0x00, addr))
     }
     /// Direct Indirect Long Y Indexed addressing
-    fn dily(&mut self, memory: &mut impl Memory) -> u24 {
+    fn dily(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr: u24 = self.dil(memory).into();
         addr.wrapping_add(self.y())
     }
     /// Stack Relative addressing
-    fn sr(&mut self, memory: &mut impl Memory) -> u24 {
+    fn sr(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self
             .s
             .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16);
@@ -631,7 +637,7 @@ impl Processor {
         u24::from(0x0, addr)
     }
     /// Stack Reslative Indirect Y Indexed addressing
-    fn sriy(&mut self, memory: &mut impl Memory) -> u24 {
+    fn sriy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr: u24 = self.sr(memory).with_bank(self.dbr).into();
         addr.wrapping_add(self.y())
     }
@@ -641,7 +647,7 @@ impl Processor {
     /// Read from the memory at the program counter to get the opcode,
     /// decode it, and execute it.
     /// Update the program counter accordingly.
-    pub fn step<T: Memory>(&mut self, memory: &mut T) {
+    pub fn step<T: HasAddressBus>(&mut self, memory: &mut T) {
         macro_rules! read_func {
             ($f_8: ident, $f_16: ident, $addr: ident, $flag: ident) => {{
                 let addr = self.$addr(memory);

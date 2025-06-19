@@ -1,5 +1,3 @@
-use std::ops::BitXor;
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StatusRegister {
     /// Carry flag

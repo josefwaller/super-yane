@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use wdc65816::{Memory, Processor};
+use wdc65816::{HasAddressBus, Processor};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct OpcodeData {
@@ -16,7 +16,7 @@ struct OpcodeMemory {
     opcode: u8,
 }
 
-impl Memory for OpcodeMemory {
+impl HasAddressBus for OpcodeMemory {
     fn io(&mut self) {}
     fn read(&self, _address: usize) -> u8 {
         self.opcode
