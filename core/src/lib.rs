@@ -26,6 +26,12 @@ macro_rules! wrapper {
 }
 
 impl Console {
+    pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
+        Console {
+            cpu: Processor::default(),
+            ram: [0; 0x2000],
+        }
+    }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         let mut wrapper = wrapper!(self);
         (0..num_instructions).for_each(|_| self.cpu.step(&mut wrapper))
