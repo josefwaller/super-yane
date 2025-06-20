@@ -1,12 +1,13 @@
 use log::*;
 use wdc65816::{HasAddressBus, Processor};
 
-use crate::Cartridge;
+use crate::{Cartridge, Ppu};
 
 pub struct Console {
     pub cpu: Processor,
     pub ram: [u8; 0x20000],
     pub cartridge: Cartridge,
+    pub ppu: Ppu,
 }
 
 macro_rules! wrapper {
@@ -14,16 +15,25 @@ macro_rules! wrapper {
         struct Wrapper<'a> {
             ram: &'a mut [u8; 0x20000],
             cartridge: &'a mut Cartridge,
+            ppu: &'a mut Ppu,
         }
         impl HasAddressBus for Wrapper<'_> {
             fn io(&mut self) {}
-            fn read(&self, address: usize) -> u8 {
+            fn read(&mut self, address: usize) -> u8 {
                 let a = address;
                 let v = if (0x7E0000..0x800000).contains(&a) {
                     self.ram[a - 0x7E0000]
                 } else if a % 0x800000 < 0x8000 {
                     let a = a & 0xFFFF;
-                    if a < 0x2000 { self.ram[a] } else { 0 }
+                    if a < 0x2000 {
+                        self.ram[a]
+                    } else if a < 0x2100 {
+                        0
+                    } else if a < 0x2140 {
+                        self.ppu.read_byte(a)
+                    } else {
+                        0
+                    }
                 } else {
                     self.cartridge.read_byte(a)
                 };
@@ -43,7 +53,7 @@ macro_rules! wrapper {
                         // Open bus?
                     } else if a < 0x2140 {
                         // PPU Registers
-                        debug!("Wrote {:X} to PPU Register {:X}", value, a)
+                        self.ppu.write_byte(address, value);
                     } else {
                     }
                 } else {
@@ -54,6 +64,7 @@ macro_rules! wrapper {
         Wrapper {
             ram: &mut $self.ram,
             cartridge: &mut $self.cartridge,
+            ppu: &mut $self.ppu,
         }
     }};
 }
@@ -64,21 +75,12 @@ impl Console {
             cpu: Processor::default(),
             ram: [0; 0x20000],
             cartridge: Cartridge::from_data(cartridge_data),
+            ppu: Ppu::default(),
         };
-        c.cpu.pc = c.read_byte(0xFFFC) as u16 + 0x100 * c.read_byte(0xFFFD) as u16;
+        c.cpu.pc =
+            c.cartridge.read_byte(0xFFFC) as u16 + 0x100 * c.cartridge.read_byte(0xFFFD) as u16;
         debug!("Initialized PC to {:X}", c.cpu.pc);
         c
-    }
-    pub fn read_byte(&self, address: usize) -> u8 {
-        let a = address;
-        if (0x7E0000..0x800000).contains(&a) {
-            self.ram[a - 0x7E0000]
-        } else if a % 0x800000 < 0x8000 {
-            let a = a & 0xFFFF;
-            if a < 0x2000 { self.ram[a] } else { 0 }
-        } else {
-            self.cartridge.read_byte(a)
-        }
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         let mut wrapper = wrapper!(self);

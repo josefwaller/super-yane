@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 pub trait HasAddressBus {
     /// Read a single byte from memory
-    fn read(&self, address: usize) -> u8;
+    fn read(&mut self, address: usize) -> u8;
     /// Write a single byte to memory
     fn write(&mut self, address: usize, value: u8);
     /// "Handle" an IO cycle

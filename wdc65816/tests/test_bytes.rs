@@ -18,7 +18,7 @@ struct OpcodeMemory {
 
 impl HasAddressBus for OpcodeMemory {
     fn io(&mut self) {}
-    fn read(&self, _address: usize) -> u8 {
+    fn read(&mut self, _address: usize) -> u8 {
         self.opcode
     }
     fn write(&mut self, _address: usize, _value: u8) {}
