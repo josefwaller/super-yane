@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 sdl2 = "0.37.0"
 super-yane = { path = "../core" }
+log = { workspace = true }
+simplelog = "0.12.2"

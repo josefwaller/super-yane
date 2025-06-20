@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 wdc65816 = { path = "../wdc65816" }
+log = { workspace = true }

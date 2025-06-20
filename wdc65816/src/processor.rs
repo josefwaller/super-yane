@@ -1,9 +1,10 @@
 use crate::opcodes::*;
 use crate::status_register::StatusRegister;
 use crate::u24::u24;
+use log::*;
 
 use std::default::Default;
-use std::sync::Arc;
+use std::fmt::Debug;
 
 pub trait HasAddressBus {
     /// Read a single byte from memory
@@ -19,27 +20,44 @@ pub struct Processor {
     /// Program Counter
     pub pc: u16,
     /// Program Bank Register
-    pbr: u8,
+    pub pbr: u8,
     /// Lower byte of the accumulator
-    a: u8,
+    pub a: u8,
     /// Upper byte of the accumulator
-    b: u8,
+    pub b: u8,
     /// X Register low
-    xl: u8,
+    pub xl: u8,
     /// X Register high
-    xh: u8,
+    pub xh: u8,
     /// Y Register low
-    yl: u8,
+    pub yl: u8,
     /// Y Register high
-    yh: u8,
+    pub yh: u8,
     /// Status Register
-    p: StatusRegister,
+    pub p: StatusRegister,
     /// Direct Register
-    d: u16,
+    pub d: u16,
     /// Data Bank Register
-    dbr: u8,
+    pub dbr: u8,
     /// Stack Pointer
-    s: u16,
+    pub s: u16,
+}
+
+impl Debug for Processor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "PC={:2X},C={:2X},X={:2X},Y={:2X},P={:X},D={:2X},DBR={:X},S={:2X}",
+            self.pc,
+            self.c(),
+            self.x(),
+            self.y(),
+            self.p.to_byte(),
+            self.d,
+            self.dbr,
+            self.s
+        )
+    }
 }
 
 /// Read a single byte from a memory given an 8-bit bank and a 16-bit address
@@ -75,9 +93,17 @@ impl Processor {
     pub fn new() -> Self {
         Processor::default()
     }
+
+    pub fn c(&self) -> u16 {
+        if self.p.a_is_16bit() {
+            self.b as u16 * 0x100 + self.a as u16
+        } else {
+            self.a as u16
+        }
+    }
     /// Get the X register as a u16
     /// If the X register is 8-bit, only the bottom 8-bits will be used
-    fn x(&self) -> u16 {
+    pub fn x(&self) -> u16 {
         if self.p.xy_is_16bit() {
             self.xh as u16 * 0x100 + self.xl as u16
         } else {
@@ -86,7 +112,7 @@ impl Processor {
     }
     /// Get the Y register as a u16
     /// If the Y register is 8-bit, only the bottom 8-bits will be used
-    fn y(&self) -> u16 {
+    pub fn y(&self) -> u16 {
         if self.p.xy_is_16bit() {
             self.yh as u16 * 0x100 + self.yl as u16
         } else {
@@ -278,7 +304,7 @@ impl Processor {
     /// Branch
     fn branch(&mut self, memory: &mut impl HasAddressBus, offset: i16) {
         memory.io();
-        self.pc = self.pc.wrapping_add_signed(offset.into());
+        self.pc = (self.pc as i16).wrapping_add(offset) as u16;
     }
 
     /// Bit 8-bit
@@ -406,7 +432,7 @@ impl Processor {
     }
     /// Jump and Save Return/Jump to SubRoutine (JSR)
     fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
-        self.push_u16(self.pc.wrapping_add(2), memory);
+        self.push_u16(self.pc.wrapping_add(1), memory);
         self.jmp(bank, addr)
     }
     /// Return from interrupt
@@ -503,7 +529,7 @@ impl Processor {
     }
     /// REset Processor status bits (REP)
     fn rep(&mut self, value: u8) {
-        self.p = StatusRegister::from_byte(value ^ self.p.to_byte(), self.p.e);
+        self.p = StatusRegister::from_byte(!value & self.p.to_byte(), self.p.e);
     }
     /// SEt Processor status bits (SEP)
     fn sep(&mut self, value: u8) {
@@ -661,6 +687,15 @@ impl Processor {
                 }
             }};
         }
+        // For Immediate addressing, we need to adjust how much we add to the PC depending on the register mode (8-bit or 6-bit)
+        macro_rules! read_func_i {
+            ($f_8: ident, $f_16: ident, $flag: ident) => {{
+                read_func!($f_8, $f_16, i, $flag);
+                if !self.p.$flag() {
+                    self.pc = self.pc.wrapping_add(1);
+                }
+            }};
+        }
         macro_rules! read_func_8 {
             ($f_8: ident, $addr: ident) => {{
                 let addr = self.$addr(memory);
@@ -698,9 +733,10 @@ impl Processor {
         }
         macro_rules! branch_if {
             ($flag: ident, $value: expr) => {{
-                let offset = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1))) as i16;
+                let offset = read_u8(memory, u24::from(self.pbr, self.pc)) as i8;
+                self.pc = self.pc.wrapping_add(1);
                 if self.p.$flag == $value {
-                    self.branch(memory, offset);
+                    self.branch(memory, offset as i16);
                 }
             }};
         }
@@ -819,10 +855,11 @@ impl Processor {
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
-        self.pc += 1;
+        debug!("Executing {:X} {:?}", opcode, self);
+        self.pc = self.pc.wrapping_add(1);
 
         match opcode {
-            ADC_I => read_func!(adc_8, adc_16, i, a_is_8bit),
+            ADC_I => read_func_i!(adc_8, adc_16, a_is_8bit),
             ADC_A => read_func!(adc_8, adc_16, a, a_is_8bit),
             ADC_AX => read_func!(adc_8, adc_16, ax, a_is_8bit),
             ADC_AY => read_func!(adc_8, adc_16, ay, a_is_8bit),
@@ -837,7 +874,7 @@ impl Processor {
             ADC_DILY => read_func!(adc_8, adc_16, dily, a_is_8bit),
             ADC_SR => read_func!(adc_8, adc_16, sr, a_is_8bit),
             ADC_SRIY => read_func!(adc_8, adc_16, sriy, a_is_8bit),
-            AND_I => read_func!(and_8, and_16, i, a_is_8bit),
+            AND_I => read_func_i!(and_8, and_16, a_is_8bit),
             AND_A => read_func!(and_8, and_16, a, a_is_8bit),
             AND_AL => read_func!(and_8, and_16, al, a_is_8bit),
             AND_D => read_func!(and_8, and_16, d, a_is_8bit),
@@ -875,12 +912,14 @@ impl Processor {
             BNE => branch_if!(z, false),
             BPL => branch_if!(n, false),
             BRA => {
-                let addr = read_u8(memory, u24::from(self.pbr, self.pc)) as i16;
+                let addr = (read_u8(memory, u24::from(self.pbr, self.pc)) as i8) as i16;
+                self.pc = self.pc.wrapping_add(1);
                 self.branch(memory, addr);
             }
             BRK => self.break_to(memory, 0xFFE6, 0xFFFE, true),
             BRL => {
-                let addr = read_u16(memory, u24::from(self.pbr, self.pc)) as i16;
+                let addr = (read_u16(memory, u24::from(self.pbr, self.pc)) as i8) as i16;
+                self.pc = self.pc.wrapping_add(2);
                 self.branch(memory, addr);
             }
             BVC => branch_if!(v, false),
@@ -889,7 +928,7 @@ impl Processor {
             CLD => set_flag!(d, false),
             CLI => set_flag!(i, false),
             CLV => set_flag!(v, false),
-            CMP_I => read_func!(cmp_8, cmp_16, i, a_is_8bit),
+            CMP_I => read_func_i!(cmp_8, cmp_16, a_is_8bit),
             CMP_A => read_func!(cmp_8, cmp_16, a, a_is_8bit),
             CMP_AL => read_func!(cmp_8, cmp_16, al, a_is_8bit),
             CMP_D => read_func!(cmp_8, cmp_16, d, a_is_8bit),
@@ -905,10 +944,10 @@ impl Processor {
             CMP_SR => read_func!(cmp_8, cmp_16, sr, a_is_8bit),
             CMP_SRIY => read_func!(cmp_8, cmp_16, sriy, a_is_8bit),
             COP => self.break_to(memory, 0xFFE4, 0xFFF4, false),
-            CPX_I => read_func!(cpx_8, cpx_16, i, xy_is_8bit),
+            CPX_I => read_func_i!(cpx_8, cpx_16, xy_is_8bit),
             CPX_A => read_func!(cpx_8, cpx_16, a, xy_is_8bit),
             CPX_D => read_func!(cpx_8, cpx_16, d, xy_is_8bit),
-            CPY_I => read_func!(cpy_8, cpy_16, i, xy_is_8bit),
+            CPY_I => read_func_i!(cpy_8, cpy_16, xy_is_8bit),
             CPY_A => read_func!(cpy_8, cpy_16, a, xy_is_8bit),
             CPY_D => read_func!(cpy_8, cpy_16, d, xy_is_8bit),
             DEC_ACC => acc_func!(dec_8, dec_16),
@@ -918,7 +957,7 @@ impl Processor {
             DEC_DX => read_write_func!(dec_8, dec_16, dx, a_is_8bit),
             DEX => x_func!(dec_8, dec_16),
             DEY => y_func!(dec_8, dec_16),
-            EOR_I => read_func!(eor_8, eor_16, i, a_is_8bit),
+            EOR_I => read_func_i!(eor_8, eor_16, a_is_8bit),
             EOR_A => read_func!(eor_8, eor_16, a, a_is_8bit),
             EOR_AL => read_func!(eor_8, eor_16, al, a_is_8bit),
             EOR_D => read_func!(eor_8, eor_16, d, a_is_8bit),
@@ -976,7 +1015,7 @@ impl Processor {
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
                 self.jsr(memory, bank, addr);
             }
-            LDA_I => read_func!(lda_8, lda_16, i, a_is_8bit),
+            LDA_I => read_func_i!(lda_8, lda_16, a_is_8bit),
             LDA_A => read_func!(lda_8, lda_16, a, a_is_8bit),
             LDA_AL => read_func!(lda_8, lda_16, al, a_is_8bit),
             LDA_D => read_func!(lda_8, lda_16, d, a_is_8bit),
@@ -991,12 +1030,12 @@ impl Processor {
             LDA_DILY => read_func!(lda_8, lda_16, dily, a_is_8bit),
             LDA_SR => read_func!(lda_8, lda_16, sr, a_is_8bit),
             LDA_SRIY => read_func!(lda_8, lda_16, sriy, a_is_8bit),
-            LDX_I => read_func!(ldx_8, ldx_16, i, xy_is_8bit),
+            LDX_I => read_func_i!(ldx_8, ldx_16, xy_is_8bit),
             LDX_A => read_func!(ldx_8, ldx_16, a, xy_is_8bit),
             LDX_D => read_func!(ldx_8, ldx_16, d, xy_is_8bit),
             LDX_AY => read_func!(ldx_8, ldx_16, ay, xy_is_8bit),
             LDX_DY => read_func!(ldx_8, ldx_16, dy, xy_is_8bit),
-            LDY_I => read_func!(ldy_8, ldy_16, i, xy_is_8bit),
+            LDY_I => read_func_i!(ldy_8, ldy_16, xy_is_8bit),
             LDY_A => read_func!(ldy_8, ldy_16, a, xy_is_8bit),
             LDY_D => read_func!(ldy_8, ldy_16, d, xy_is_8bit),
             LDY_AX => read_func!(ldy_8, ldy_16, ax, xy_is_8bit),
@@ -1009,7 +1048,7 @@ impl Processor {
             MVN_NEXT => block_func!(inc_16),
             MVN_PREV => block_func!(dec_16),
             NOP => memory.io(),
-            ORA_I => read_func!(ora_8, ora_16, i, a_is_8bit),
+            ORA_I => read_func_i!(ora_8, ora_16, a_is_8bit),
             ORA_A => read_func!(ora_8, ora_16, a, a_is_8bit),
             ORA_AL => read_func!(ora_8, ora_16, al, a_is_8bit),
             ORA_D => read_func!(ora_8, ora_16, d, a_is_8bit),
@@ -1084,7 +1123,7 @@ impl Processor {
             RTI => self.rti(memory),
             RTL => self.rtl(memory),
             RTS => self.rts(memory),
-            SBC_I => read_func!(sbc_8, sbc_16, i, a_is_8bit),
+            SBC_I => read_func_i!(sbc_8, sbc_16, a_is_8bit),
             SBC_A => read_func!(sbc_8, sbc_16, a, a_is_8bit),
             SBC_AL => read_func!(sbc_8, sbc_16, al, a_is_8bit),
             SBC_D => read_func!(sbc_8, sbc_16, d, a_is_8bit),
@@ -1118,16 +1157,16 @@ impl Processor {
             STA_SR => write_func!(sta_8, sta_16, sr, a_is_8bit),
             STA_SRIY => write_func!(sta_8, sta_16, sriy, a_is_8bit),
             // STP => self.stp(),
-            STX_A => write_func!(stx_8, stx_16, a, xy_is_8bit),
-            STX_D => write_func!(stx_8, stx_16, d, xy_is_8bit),
-            STX_DY => write_func!(stx_8, stx_16, dy, xy_is_8bit),
-            STY_A => write_func!(sty_8, sty_16, a, xy_is_8bit),
-            STY_D => write_func!(sty_8, sty_16, d, xy_is_8bit),
-            STY_DX => write_func!(sty_8, sty_16, dx, xy_is_8bit),
-            STZ_A => write_func!(stz_8, stz_16, a, xy_is_8bit),
-            STZ_D => write_func!(stz_8, stz_16, d, xy_is_8bit),
-            STZ_AX => write_func!(stz_8, stz_16, ax, xy_is_8bit),
-            STZ_DX => write_func!(stz_8, stz_16, dx, xy_is_8bit),
+            STX_A => write_func!(stx_8, stx_16, a, a_is_8bit),
+            STX_D => write_func!(stx_8, stx_16, d, a_is_8bit),
+            STX_DY => write_func!(stx_8, stx_16, dy, a_is_8bit),
+            STY_A => write_func!(sty_8, sty_16, a, a_is_8bit),
+            STY_D => write_func!(sty_8, sty_16, d, a_is_8bit),
+            STY_DX => write_func!(sty_8, sty_16, dx, a_is_8bit),
+            STZ_A => write_func!(stz_8, stz_16, a, a_is_8bit),
+            STZ_D => write_func!(stz_8, stz_16, d, a_is_8bit),
+            STZ_AX => write_func!(stz_8, stz_16, ax, a_is_8bit),
+            STZ_DX => write_func!(stz_8, stz_16, dx, a_is_8bit),
             TAX => trans_reg!(self.a, self.b, self.xl, self.xh, xy_is_16bit),
             TAY => trans_reg!(self.a, self.b, self.yl, self.yh, xy_is_16bit),
             TCD => trans_reg!([self.a, self.b], d),
