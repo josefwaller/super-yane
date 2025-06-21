@@ -32,7 +32,7 @@ macro_rules! wrapper {
                     } else if a < 0x2140 {
                         self.ppu.read_byte(a)
                     } else {
-                        0
+                        self.ppu.read_byte(a)
                     }
                 } else {
                     self.cartridge.read_byte(a)
@@ -84,7 +84,10 @@ impl Console {
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         let mut wrapper = wrapper!(self);
-        (0..num_instructions).for_each(|_| self.cpu.step(&mut wrapper))
+        (0..num_instructions).for_each(|_| {
+            self.cpu.step(&mut wrapper);
+        });
+        wrapper.ppu.advance_master_clock(1);
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
         std::iter::from_fn(|| {

@@ -24,13 +24,7 @@ fn main() {
             _ => {}
         });
 
-        let mut count = 0;
-        console.advance_until(&mut |console: &Console| {
-            count += 1;
-            count > 1500
-        });
-        debug!("{:?}", console.cpu);
-        break;
+        console.advance_instructions(3);
 
         canvas.present();
     }
