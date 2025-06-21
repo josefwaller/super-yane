@@ -8,3 +8,4 @@ sdl2 = "0.37.0"
 super-yane = { path = "../core" }
 log = { workspace = true }
 simplelog = "0.12.2"
+iced = { version = "0.13.1", features = ["image"] }
