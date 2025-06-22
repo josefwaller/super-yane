@@ -1,18 +1,18 @@
 use log::*;
 
 #[derive(Default, Copy, Clone)]
-struct Background {
+pub struct Background {
     // 0 = 8x8, 1 = 16x16
-    size: bool,
-    mosaic: bool,
-    num_horz_tilemaps: u32,
-    num_vert_tilemaps: u32,
-    tilemap_addr: usize,
-    chr_addr: usize,
-    h_off: u32,
-    v_off: u32,
-    main_screen_enable: bool,
-    sub_screen_enable: bool,
+    pub tile_size: u32,
+    pub mosaic: bool,
+    pub num_horz_tilemaps: u32,
+    pub num_vert_tilemaps: u32,
+    pub tilemap_addr: usize,
+    pub chr_addr: usize,
+    pub h_off: u32,
+    pub v_off: u32,
+    pub main_screen_enable: bool,
+    pub sub_screen_enable: bool,
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -24,26 +24,30 @@ enum VramIncMode {
 }
 pub struct Ppu {
     /// VBlank flag
-    vblank: bool,
-    forced_blanking: bool,
-    brightness: u32,
-    bg_mode: u32,
-    bg3_prio: bool,
-    backgrounds: [Background; 4],
-    mosaic_size: u32,
+    pub vblank: bool,
+    pub forced_blanking: bool,
+    pub brightness: u32,
+    pub bg_mode: u32,
+    pub bg3_prio: bool,
+    pub backgrounds: [Background; 4],
+    pub mosaic_size: u32,
     /// Background H off latch
-    bg_h_off: u32,
+    pub bg_h_off: u32,
     /// Background V off latch
-    bg_v_off: u32,
-    obj_main_enable: bool,
-    obj_subscreen_enable: bool,
-    vram_increment_amount: u32,
-    vram_increment_mode: VramIncMode,
-    vram_addr: usize,
-    vram: [u8; 0x10000],
-    cgram: [u16; 0x100],
-    cgram_addr: usize,
-    cgram_latch: Option<u8>,
+    pub bg_v_off: u32,
+    pub obj_main_enable: bool,
+    pub obj_subscreen_enable: bool,
+    pub vram_increment_amount: u32,
+    pub vram_increment_mode: VramIncMode,
+    pub vram_addr: usize,
+    pub vram: [u8; 0x10000],
+    pub cgram: [u16; 0x100],
+    pub cgram_addr: usize,
+    pub cgram_latch: Option<u8>,
+    /// Screen buffer
+    pub screen_buffer: [u16; 256 * 240],
+    pub dot: usize,
+    pixel_buffer: Vec<u16>,
 }
 
 impl Default for Ppu {
@@ -67,6 +71,9 @@ impl Default for Ppu {
             cgram: [0; 0x100],
             cgram_addr: 0,
             cgram_latch: None,
+            screen_buffer: [0; 256 * 240],
+            dot: 0,
+            pixel_buffer: vec![],
         }
     }
 }
@@ -92,7 +99,7 @@ impl Ppu {
             0x2105 => {
                 // Copy background sizes
                 (0..4).for_each(|i| {
-                    self.backgrounds[i].size = bit!(i + 4) == 1;
+                    self.backgrounds[i].tile_size = if bit!(i + 4) == 1 { 16 } else { 8 };
                 });
                 self.bg3_prio = (value & 0x08) != 0;
                 self.bg_mode = (value & 0x0F) as u32;
@@ -107,7 +114,7 @@ impl Ppu {
                 let b = &mut self.backgrounds[addr - 0x2107];
                 b.num_horz_tilemaps = bit!(0) * 2;
                 b.num_vert_tilemaps = bit!(1);
-                b.tilemap_addr = (value & 0xFC) as usize / 0x04;
+                b.tilemap_addr = ((value & 0xFC) as usize / 0x04) << 10;
             }
             0x210B => {
                 self.backgrounds[0].chr_addr = (value as usize & 0x0F) << 12;
@@ -153,6 +160,7 @@ impl Ppu {
                 self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100);
             }
             0x2118 => {
+                debug!("Writing {:X} to {:X}", value, self.vram_addr);
                 // Write the low byte
                 self.vram[2 * self.vram_addr] = value;
                 if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
@@ -160,6 +168,7 @@ impl Ppu {
                 }
             }
             0x2119 => {
+                debug!("Writing {:X} to {:X}", value, self.vram_addr);
                 // Write the high byte
                 self.vram[2 * self.vram_addr + 1] = value;
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
@@ -196,6 +205,17 @@ impl Ppu {
         }
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
-        self.vblank = !self.vblank;
+        (0..clock).for_each(|_| {
+            self.dot = (self.dot + 1) % (256 * 240);
+            if self.pixel_buffer.is_empty() {
+                let addr = self.backgrounds[0].tilemap_addr
+                    + self.dot / self.backgrounds[0].tile_size as usize;
+                // Load next pixel data
+                debug!("Reading from {:X}", addr);
+                let byte = self.vram[addr];
+                (0..4).for_each(|_| self.pixel_buffer.push(byte as u16));
+            }
+            self.screen_buffer[self.dot] = self.pixel_buffer.pop().unwrap_or(0xFFFF);
+        })
     }
 }

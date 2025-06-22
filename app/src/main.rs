@@ -1,3 +1,4 @@
+use iced::{Font, Settings};
 use log::*;
 use simplelog::{ConfigBuilder, SimpleLogger};
 
@@ -6,10 +7,9 @@ use application::Application;
 
 fn main() {
     SimpleLogger::init(
-        log::LevelFilter::Info,
+        log::LevelFilter::Debug,
         ConfigBuilder::new()
-            .set_location_level(LevelFilter::Info)
-            .add_filter_ignore_str("iced")
+            .add_filter_allow_str("super_yane")
             .build(),
     )
     .unwrap();
@@ -18,6 +18,13 @@ fn main() {
     iced::application("Super Y.A.N.E.", Application::update, Application::view)
         .subscription(Application::subscription)
         .theme(Application::theme)
+        .settings(Settings {
+            id: None,
+            fonts: vec![],
+            default_font: Font::MONOSPACE,
+            default_text_size: 12.into(),
+            antialiasing: false,
+        })
         .run()
         .unwrap();
 }

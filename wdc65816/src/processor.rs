@@ -855,7 +855,6 @@ impl Processor {
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
-        debug!("Executing {:X} {:?}", opcode, self);
         self.pc = self.pc.wrapping_add(1);
 
         match opcode {
