@@ -3,6 +3,7 @@ use log::*;
 use simplelog::{ConfigBuilder, SimpleLogger};
 
 mod application;
+mod widgets;
 use application::Application;
 
 fn main() {

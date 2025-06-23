@@ -211,7 +211,7 @@ impl Ppu {
                 let addr = self.backgrounds[0].tilemap_addr
                     + self.dot / self.backgrounds[0].tile_size as usize;
                 // Load next pixel data
-                debug!("Reading from {:X}", addr);
+                // debug!("Reading from {:X}", addr);
                 let byte = self.vram[addr];
                 (0..4).for_each(|_| self.pixel_buffer.push(byte as u16));
             }
