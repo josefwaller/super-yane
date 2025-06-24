@@ -34,7 +34,7 @@ impl StatusRegister {
         self.e || self.xb
     }
     pub fn xy_is_16bit(&self) -> bool {
-        !self.e && !self.xb
+        !self.xy_is_8bit()
     }
     pub fn from_byte(byte: u8, e: bool) -> StatusRegister {
         macro_rules! bit {

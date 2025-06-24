@@ -1,6 +1,8 @@
 use iced::{
     Alignment::{self, Center},
-    Color, Element, Event, Length, Renderer, Subscription, Theme,
+    Color, Element, Event,
+    Length::{self, FillPortion},
+    Renderer, Subscription, Theme,
     alignment::Horizontal,
     color, event,
     widget::{
@@ -17,6 +19,7 @@ use log::*;
 use iced::widget::text;
 
 use super_yane::{Console, ppu::Background};
+use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
 
@@ -91,10 +94,11 @@ pub fn vertical_table<'a>(
     .into()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
     NewFrame(),
-    OnEvent(Event),
+    AdvanceInstructions(u32),
+    // OnEvent(Event),
     ChangeVramPage(usize),
 }
 
@@ -115,8 +119,11 @@ impl Default for Application {
 impl Application {
     pub fn update(&mut self, message: Message) {
         match message {
-            Message::OnEvent(e) => {}
-            Message::NewFrame() => self.console.advance_instructions(100),
+            // Message::OnEvent(e) => {}
+            Message::NewFrame() => {}
+            Message::AdvanceInstructions(num_instructions) => {
+                self.console.advance_instructions(num_instructions)
+            }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
         }
     }
@@ -139,9 +146,13 @@ impl Application {
                         .height(Length::Fill)
                         .width(Length::FillPortion(50))
                         .content_fit(iced::ContentFit::Contain),
-                    row![button("||"), button(">"), button(">|")],
+                    row![
+                        button("||"),
+                        button(">"),
+                        button(">|").on_press(Message::AdvanceInstructions(1))
+                    ],
                 ],
-                container(text("Previous instructions")).width(Length::Shrink)
+                self.next_instructions()
             ]
             .spacing(10)
             .height(Length::Fill),
@@ -175,7 +186,7 @@ impl Application {
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
         ];
         scrollable(column![
-            text(format!("{}", self.vram_offset)),
+            text(format!("{}", self.console.cpu.pc)),
             vertical_table(values, 150.0, 0),
             text("Backgrounds:"),
             vertical_table(
@@ -191,46 +202,59 @@ impl Application {
             )
         ])
     }
-    // fn vram(&self) -> Scrollable<'_, Message> {
-    // let bytes_per_line = 0x20;
-    // let number_lines = 20;
-    // use iced::widget::keyed::Column;
-    // scrollable(Column::with_children(
-    //     self.console
-    //         .ppu
-    //         .vram
-    //         .chunks(bytes_per_line)
-    //         .enumerate()
-    //         .map(|(i, line)| {
-    //             if (i + 1) * 12 < self.vram_offset
-    //                 || (i + 1) * 12 > self.vram_offset + number_lines * 12
-    //             {
-    //                 (i, horizontal_space().height(12).into())
-    //             } else {
-    //                 (
-    //                     i,
-    //                     row![
-    //                         text(format!("0x{:04X}", i * bytes_per_line))
-    //                             .color(color(TABLE_COLORS[0])),
-    //                         text(
-    //                             line.iter()
-    //                                 .fold(String::new(), |acc, e| format!("{} {:02X}", acc, e)),
-    //                         )
-    //                         .wrapping(text::Wrapping::None)
-    //                     ]
-    //                     .height(Length::Fixed(16.0))
-    //                     .into(),
-    //                 )
-    //             }
-    //         }),
-    // ))
-    // .on_scroll(|v| Message::ChangeVramPage(v.absolute_offset().y as usize))
-    // }
+    fn next_instructions(&self) -> Scrollable<Message> {
+        let mut pc = self.console.cpu.pc;
+        scrollable(iced::widget::keyed::Column::with_children(
+            // Add the header row first
+            [(
+                text("PB PC  ").color(COLORS[0]),
+                text("OP ").color(COLORS[0]).align_x(Horizontal::Right),
+                text("Operand").color(COLORS[0]),
+            )]
+            .into_iter()
+            // Add the upcoming (future) instructions
+            .chain((0..100).map(|_| {
+                let c = &self.console;
+                let addr = c.cpu.pbr as usize * 0x10000 + pc as usize;
+                let opcode = c.cartridge.read_byte(addr);
+                let data = opcode_data(opcode, c.cpu.p.a_is_16bit(), c.cpu.p.xy_is_16bit());
+                let v = (
+                    text(format!("{:02X} {:04X}", c.cpu.pbr, pc)),
+                    text(data.name).align_x(Horizontal::Right),
+                    text(format_address_mode(
+                        data.addr_mode,
+                        &[
+                            c.cartridge.read_byte(addr + 1),
+                            c.cartridge.read_byte(addr + 2),
+                            c.cartridge.read_byte(addr + 3),
+                        ],
+                        data.bytes,
+                    )),
+                );
+                pc = pc.wrapping_add(data.bytes as u16);
+                v
+            }))
+            .enumerate()
+            .map(|(i, (a, b, c))| {
+                (
+                    i,
+                    row![
+                        a.width(Length::Shrink),
+                        b.width(Length::Shrink),
+                        c.width(Length::Fill)
+                    ]
+                    .spacing(10)
+                    .into(),
+                )
+            }),
+        ))
+        .width(Length::FillPortion(25))
+    }
 
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             window::frames().map(|_| Message::NewFrame()),
-            event::listen().map(Message::OnEvent),
+            // event::listen().map(Message::OnEvent),
         ])
     }
     pub fn theme(&self) -> Theme {

@@ -1,6 +1,6 @@
 use log::*;
 
-#[derive(Default, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
     pub tile_size: u32,
@@ -13,6 +13,22 @@ pub struct Background {
     pub v_off: u32,
     pub main_screen_enable: bool,
     pub sub_screen_enable: bool,
+}
+impl Default for Background {
+    fn default() -> Self {
+        Background {
+            tile_size: 8,
+            mosaic: false,
+            num_horz_tilemaps: 1,
+            num_vert_tilemaps: 1,
+            tilemap_addr: 0,
+            chr_addr: 0,
+            h_off: 0,
+            v_off: 0,
+            main_screen_enable: false,
+            sub_screen_enable: false,
+        }
+    }
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -211,7 +227,6 @@ impl Ppu {
                 let addr = self.backgrounds[0].tilemap_addr
                     + self.dot / self.backgrounds[0].tile_size as usize;
                 // Load next pixel data
-                // debug!("Reading from {:X}", addr);
                 let byte = self.vram[addr];
                 (0..4).for_each(|_| self.pixel_buffer.push(byte as u16));
             }

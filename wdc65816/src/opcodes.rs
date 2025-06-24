@@ -287,9 +287,9 @@ pub const LSR_AX: u8 = 0x5E;
 /// Logical Shift Right Direct Indexed, X
 pub const LSR_DX: u8 = 0x56;
 /// Block Move Next
-pub const MVN_NEXT: u8 = 0x54;
+pub const MVN: u8 = 0x54;
 /// Block Move Previous
-pub const MVN_PREV: u8 = 0x44;
+pub const MVP: u8 = 0x44;
 /// No Operation Implied
 pub const NOP: u8 = 0xEA;
 /// OR Accumulator with Memory Immediate
