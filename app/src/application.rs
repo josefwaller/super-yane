@@ -65,11 +65,12 @@ pub fn background_table(background: &Background, depth: usize) -> Element<'_, Me
     )
 }
 
-pub const COLORS: [Color; 4] = [
+pub const COLORS: [Color; 5] = [
     color!(0x98c2d4),
     color!(0xd49e98),
     color!(0x91c29c),
     color!(0xc2af91),
+    color!(0xf06262),
 ];
 pub fn vertical_table<'a>(
     values: Vec<(impl Into<String>, Element<'a, Message>)>,
@@ -140,7 +141,8 @@ impl Application {
         let data = self.console.ppu.screen_buffer.map(|i| data[i as usize]);
         column![
             row![
-                self.ppu_data().width(Length::FillPortion(25)),
+                scrollable(column![self.cpu_data(), self.ppu_data()])
+                    .width(Length::FillPortion(25)),
                 column![
                     Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
                         .height(Length::Fill)
@@ -169,7 +171,42 @@ impl Application {
         .into()
     }
 
-    fn ppu_data(&self) -> scrollable::Scrollable<'_, Message> {
+    fn cpu_data(&self) -> Column<'_, Message> {
+        let cpu = &self.console.cpu;
+        let values = vec![
+            table_row!("C", cpu.c(), "{:04X}"),
+            table_row!("X", cpu.x(), "{:04X}"),
+            table_row!("Y", cpu.y(), "{:04X}"),
+            table_row!("PBR", cpu.pbr, "{:02X}"),
+            table_row!("PC", cpu.pc, "{:04X}"),
+            table_row!("DBR", cpu.dbr, "{:02X}"),
+            table_row!("D", cpu.d, "{:04X}"),
+            table_row!("SP", cpu.s, "{:04X}"),
+            (
+                "P",
+                vertical_table(
+                    vec![
+                        table_row!("c", cpu.p.c, "{}"),
+                        table_row!("z", cpu.p.z, "{}"),
+                        table_row!("n", cpu.p.n, "{}"),
+                        table_row!("d", cpu.p.d, "{}"),
+                        table_row!("i", cpu.p.i, "{}"),
+                        table_row!("m", cpu.p.m, "{}"),
+                        table_row!("v", cpu.p.v, "{}"),
+                        table_row!("e", cpu.p.e, "{}"),
+                        table_row!("xb", cpu.p.xb, "{}"),
+                    ],
+                    20.0,
+                    1,
+                ),
+            ),
+        ];
+        column![
+            text("CPU").color(COLORS[4]),
+            vertical_table(values, 50.0, 0)
+        ]
+    }
+    fn ppu_data(&self) -> Column<'_, Message> {
         macro_rules! ppu_val {
             ($label: expr, $field: ident, $format_str: expr) => {
                 table_row!($label, self.console.ppu.$field, $format_str)
@@ -185,8 +222,8 @@ impl Application {
             ppu_val!("Background Mode", bg_mode),
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
         ];
-        scrollable(column![
-            text(format!("{}", self.console.cpu.pc)),
+        column![
+            text("PPU").color(COLORS[4]),
             vertical_table(values, 150.0, 0),
             text("Backgrounds:"),
             vertical_table(
@@ -200,7 +237,7 @@ impl Application {
                 20.0,
                 1,
             )
-        ])
+        ]
     }
     fn next_instructions(&self) -> Scrollable<Message> {
         let mut pc = self.console.cpu.pc;
