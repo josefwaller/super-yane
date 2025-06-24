@@ -101,11 +101,13 @@ pub enum Message {
     AdvanceInstructions(u32),
     // OnEvent(Event),
     ChangeVramPage(usize),
+    ChangePaused(bool),
 }
 
 pub struct Application {
     console: Console,
     vram_offset: usize,
+    is_paused: bool,
 }
 
 impl Default for Application {
@@ -113,6 +115,7 @@ impl Default for Application {
         Application {
             console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
             vram_offset: 0,
+            is_paused: true,
         }
     }
 }
@@ -121,11 +124,17 @@ impl Application {
     pub fn update(&mut self, message: Message) {
         match message {
             // Message::OnEvent(e) => {}
-            Message::NewFrame() => {}
+            Message::NewFrame() => {
+                if !self.is_paused {
+                    // Todo: Determine how many per frame
+                    self.console.advance_instructions(100);
+                }
+            }
             Message::AdvanceInstructions(num_instructions) => {
                 self.console.advance_instructions(num_instructions)
             }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
+            Message::ChangePaused(p) => self.is_paused = p,
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
@@ -141,7 +150,7 @@ impl Application {
         let data = self.console.ppu.screen_buffer.map(|i| data[i as usize]);
         column![
             row![
-                scrollable(column![self.cpu_data(), self.ppu_data()])
+                scrollable(column![self.cpu_data(), self.ppu_data(), self.dma_data()])
                     .width(Length::FillPortion(25)),
                 column![
                     Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
@@ -149,8 +158,8 @@ impl Application {
                         .width(Length::FillPortion(50))
                         .content_fit(iced::ContentFit::Contain),
                     row![
-                        button("||"),
-                        button(">"),
+                        button(if self.is_paused { " >" } else { "||" })
+                            .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1))
                     ],
                 ],
@@ -221,6 +230,12 @@ impl Application {
             ppu_val!("Brightness", brightness, hex_fmt!()),
             ppu_val!("Background Mode", bg_mode),
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
+            table_row!("VRAM address", 2 * self.console.ppu.vram_addr, "{:06X}"),
+            table_row!(
+                "VRAM INC mode",
+                self.console.ppu.vram_increment_mode,
+                "{:?}"
+            ),
         ];
         column![
             text("PPU").color(COLORS[4]),
@@ -238,6 +253,31 @@ impl Application {
                 1,
             )
         ]
+    }
+    fn dma_data(&self) -> Column<'_, Message> {
+        Column::with_children(self.console.dma_channels.iter().enumerate().map(|(i, d)| {
+            row![
+                text(i.to_string()),
+                vertical_table(
+                    vec![
+                        table_row!("Transfer Pattern", d.transfer_pattern, "{:?}"),
+                        table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
+                        table_row!("Indirect", d.indirect, "{}"),
+                        table_row!("Direction", d.direction, "{:?}"),
+                        table_row!("Destination", d.dest_addr, "{:02X}"),
+                        table_row!(
+                            "Source",
+                            d.src_bank as usize * 0x10000 + d.src_addr as usize,
+                            "{:06X}"
+                        ),
+                        table_row!("Bytes Remaining", d.byte_counter, "{:04X}")
+                    ],
+                    150.0,
+                    0,
+                )
+            ]
+            .into()
+        }))
     }
     fn next_instructions(&self) -> Scrollable<Message> {
         let mut pc = self.console.cpu.pc;

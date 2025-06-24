@@ -31,8 +31,8 @@ impl Default for Background {
     }
 }
 
-#[derive(PartialEq, PartialOrd)]
-enum VramIncMode {
+#[derive(PartialEq, PartialOrd, Debug)]
+pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
     HighReadLowWrite = 0,
     /// Increment after reading the low byte or writing the high byte
@@ -176,7 +176,6 @@ impl Ppu {
                 self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100);
             }
             0x2118 => {
-                debug!("Writing {:X} to {:X}", value, self.vram_addr);
                 // Write the low byte
                 self.vram[2 * self.vram_addr] = value;
                 if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
@@ -184,7 +183,6 @@ impl Ppu {
                 }
             }
             0x2119 => {
-                debug!("Writing {:X} to {:X}", value, self.vram_addr);
                 // Write the high byte
                 self.vram[2 * self.vram_addr + 1] = value;
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
