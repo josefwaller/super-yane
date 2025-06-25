@@ -1008,8 +1008,9 @@ impl Processor {
                 let addr = read_u16(memory, u24::from(0x00, addr));
                 self.jsr(memory, self.pbr, addr);
             }
-            JSR_AL => {
+            JSL => {
                 self.push_u8(self.pbr, memory);
+                self.push_u16(self.pc, memory);
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
                 self.jsr(memory, bank, addr);

@@ -66,7 +66,7 @@ macro_rules! wrapper {
                 let a = address;
                 let v = if (0x7E0000..0x800000).contains(&a) {
                     self.ram[a - 0x7E0000]
-                } else if a % 0x800000 < 0x8000 {
+                } else if a < 0x400000 {
                     let a = a & 0xFFFF;
                     if a < 0x2000 {
                         self.ram[a]
@@ -74,8 +74,10 @@ macro_rules! wrapper {
                         0
                     } else if a < 0x2140 {
                         self.ppu.read_byte(a)
-                    } else {
+                    } else if a < 0x8000{
                         self.ppu.read_byte(a)
+                    } else {
+                        self.cartridge.read_byte(a)
                     }
                 } else {
                     self.cartridge.read_byte(a)

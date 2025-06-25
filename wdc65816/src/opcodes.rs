@@ -224,8 +224,8 @@ pub const JMP_AL: u8 = 0x5C;
 pub const JSR_A: u8 = 0x20;
 /// Jump to Subroutine Absolute Indexed Indirect, X
 pub const JSR_AIX: u8 = 0xFC;
-/// Jump to Subroutine Absolute Long
-pub const JSR_AL: u8 = 0x22;
+/// Jump to Subroutine Long
+pub const JSL: u8 = 0x22;
 /// Load Accumulator from Memory Immediate
 pub const LDA_I: u8 = 0xA9;
 /// Load Accumulator from Memory Absolute

@@ -15,7 +15,6 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn from_data(data: &[u8]) -> Cartridge {
-        debug!("{:X}", data.len());
         let memory_map = {
             // Figure out what kind of cartridge based on the checksum
             let checksum = if data.len().is_power_of_two() {
@@ -74,6 +73,6 @@ impl Cartridge {
         }
     }
     pub fn read_byte(&self, address: usize) -> u8 {
-        self.data[self.transform_address(address)]
+        self.data[self.transform_address(address) % self.data.len()]
     }
 }
