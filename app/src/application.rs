@@ -142,7 +142,7 @@ impl Application {
             Message::NewFrame() => {
                 if !self.is_paused {
                     // Todo: Determine how many per frame
-                    for i in 0..100 {
+                    for _ in 0..100 {
                         self.previous_states.push_back(self.console.clone());
                         if self.previous_states.len() > 100 {
                             self.previous_states.pop_front();
@@ -178,7 +178,10 @@ impl Application {
                 self.console.advance_instructions(num_instructions);
             }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
-            Message::ChangePaused(p) => self.is_paused = p,
+            Message::ChangePaused(p) => {
+                self.breakpoint_opcode = None;
+                self.is_paused = p;
+            }
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
@@ -208,7 +211,8 @@ impl Application {
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
-                        button("To BRK").on_press(Message::AdvanceUntilOpcode(0x00))
+                        button("To BRK")
+                            .on_press(Message::AdvanceUntilOpcode(wdc65816::opcodes::ADC_I))
                     ],
                 ],
                 self.next_instructions()

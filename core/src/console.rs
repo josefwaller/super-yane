@@ -74,7 +74,7 @@ macro_rules! wrapper {
                         0
                     } else if a < 0x2140 {
                         self.ppu.read_byte(a)
-                    } else if a < 0x8000{
+                    } else if a < 0x8000 {
                         self.ppu.read_byte(a)
                     } else {
                         self.cartridge.read_byte(a)
@@ -108,11 +108,6 @@ macro_rules! wrapper {
                                         let mut d = self.dma_channels[i].clone();
                                         let mut bytes_transferred = 0;
                                         // Todo: handling timing of DMA
-                                        debug!("Starting a DMA channel {:X} from {:02X}{:04X} to {:X} num bytes {:X} vram {:X}",
-                                        i,
-                                        d.src_bank,
-                                        d.src_addr,
-                                         d.dest_addr, d.byte_counter, self.ppu.vram_addr);
                                         loop {
                                             let src =
                                                 d.src_bank as usize * 0x10000 + d.src_addr as usize;
@@ -121,7 +116,6 @@ macro_rules! wrapper {
                                                     [bytes_transferred % d.transfer_pattern.len()]
                                                     as usize;
                                             let v = self.read(src);
-                                            debug!("Read {:X} from {:06X}", v, src);
                                             self.ppu.write_byte(dest, v);
                                             let md = &mut self.dma_channels[i];
                                             bytes_transferred += 1;

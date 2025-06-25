@@ -154,9 +154,14 @@ impl Processor {
     fn push_u16(&mut self, value: u16, memory: &mut impl HasAddressBus) {
         self.push_u16_le(value.to_le_bytes(), memory);
     }
+    fn adc(a: u8, b: u8, c: bool) -> (u8, bool) {
+        let (a, c2) = a.overflowing_add(b);
+        let (a, c3) = a.overflowing_add(c.into());
+        (a, c2 || c3)
+    }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
-        let (a, c) = self.a.overflowing_add(value);
+        let (a, c) = Processor::adc(self.a, value, self.p.c);
         self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 == 0;
         self.p.n = (a & 0x80) != 0;
         self.p.z = a == 0;
@@ -165,15 +170,26 @@ impl Processor {
     }
     /// Add with Carry 16-bit
     fn adc_16(&mut self, low: u8, high: u8) {
-        let (a, c) = self.a.overflowing_add(low);
+        let (a, c) = Processor::adc(self.a, low, self.p.c);
         self.a = a;
-        let (b, c2) = self.b.overflowing_add(high);
+        let (b, c2) = Processor::adc(self.b, high, c);
         self.p.n = (b & 0x80) != 0;
         self.p.z = a == 0 && b == 0;
         self.p.c = c2;
+        self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 != 0;
+        //         debug!(
+        //             "{:X} {:X} {:X} {:X} {:X} {:X} {:X}",
+        //             self.p.to_byte(),
+        //             self.b,
+        //             b,
+        //             high,
+        //             b ^ high,
+        //             self.b ^ b,
+        //             (self.b ^ b) & (high ^ b),
+        // ((self.b ^ b as u8) & (high ^ b)) & 0x80 == 0
+        //         );
         self.a = a;
-        self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 == 0;
-        self.b = b.wrapping_add(c.into());
+        self.b = b;
     }
     /// SuBtract with Carry (SBC) 8-bit
     fn sbc_8(&mut self, value: u8) {
@@ -1010,10 +1026,10 @@ impl Processor {
             }
             JSL => {
                 self.push_u8(self.pbr, memory);
-                self.push_u16(self.pc, memory);
+                self.push_u16(self.pc.wrapping_add(2), memory);
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
-                self.jsr(memory, bank, addr);
+                self.jmp(bank, addr);
             }
             LDA_I => read_func_i!(lda_8, lda_16, a_is_8bit),
             LDA_A => read_func!(lda_8, lda_16, a, a_is_8bit),

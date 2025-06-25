@@ -178,11 +178,9 @@ impl Ppu {
             }
             0x2116 => {
                 self.vram_addr = (self.vram_addr & 0x7F00) | (value as usize);
-                debug!("Writing to VRAM LOW {:02X} {:04X}", value, self.vram_addr);
             }
             0x2117 => {
                 self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100) & 0x7FFF;
-                debug!("Writing to VRAM HIGH {:02X} {:04X}", value, self.vram_addr);
             }
             0x2118 => {
                 // Write the low byte

@@ -1,5 +1,5 @@
 mod opcode_datas;
-mod opcodes;
+pub mod opcodes;
 mod processor;
 mod status_register;
 mod u24;

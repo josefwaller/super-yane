@@ -11,6 +11,7 @@ fn main() {
         log::LevelFilter::Debug,
         ConfigBuilder::new()
             .add_filter_allow_str("super_yane")
+            .add_filter_allow_str("wdc65816")
             .build(),
     )
     .unwrap();
