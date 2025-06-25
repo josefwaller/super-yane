@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use iced::{
     Alignment::{self, Center},
     Color, Element, Event,
@@ -104,6 +106,8 @@ pub fn vertical_table<'a>(
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
+    /// Advance until hitting a certain opcode
+    AdvanceUntilOpcode(u8),
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
@@ -113,6 +117,7 @@ pub struct Application {
     console: Console,
     vram_offset: usize,
     is_paused: bool,
+    previous_states: VecDeque<Console>,
 }
 
 impl Default for Application {
@@ -121,6 +126,7 @@ impl Default for Application {
             console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
             vram_offset: 0,
             is_paused: true,
+            previous_states: VecDeque::new(),
         }
     }
 }
@@ -132,14 +138,34 @@ impl Application {
             Message::NewFrame() => {
                 if !self.is_paused {
                     // Todo: Determine how many per frame
-                    self.console.advance_instructions(100);
+                    (0..100).for_each(|_| {
+                        self.previous_states.push_back(self.console.clone());
+                        self.console.advance_instructions(1);
+                    })
                 }
             }
+            Message::AdvanceUntilOpcode(opcode) => {
+                self.console.advance_until(&mut |console| {
+                    self.previous_states.push_back(console.clone());
+                    if self.previous_states.len() > 100 {
+                        self.previous_states.pop_front();
+                    }
+                    let op = console
+                        .cartridge
+                        .read_byte(console.cpu.pbr as usize * 0x10000 + console.cpu.pc as usize);
+                    debug!("{:X}", op);
+                    op == opcode
+                });
+            }
             Message::AdvanceInstructions(num_instructions) => {
-                self.console.advance_instructions(num_instructions)
+                self.previous_states.push_back(self.console.clone());
+                self.console.advance_instructions(num_instructions);
             }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
             Message::ChangePaused(p) => self.is_paused = p,
+        }
+        while self.previous_states.len() > 100 {
+            self.previous_states.pop_front();
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
@@ -165,7 +191,8 @@ impl Application {
                     row![
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
-                        button(">|").on_press(Message::AdvanceInstructions(1))
+                        button(">|").on_press(Message::AdvanceInstructions(1)),
+                        button("To BRK").on_press(Message::AdvanceUntilOpcode(0x00))
                     ],
                 ],
                 self.next_instructions()
@@ -286,51 +313,64 @@ impl Application {
             .into()
         }))
     }
+    fn state_row(&self, console: &Console, color: Color) -> Row<Message> {
+        let addr = console.cpu.pbr as usize * 0x10000 + console.cpu.pc as usize;
+        let opcode = console.cartridge.read_byte(addr);
+        let data = opcode_data(
+            opcode,
+            console.cpu.p.a_is_16bit(),
+            console.cpu.p.xy_is_16bit(),
+        );
+        let c = &console.cartridge;
+        Row::with_children(
+            [
+                format!("{:02X}", console.cpu.pbr),
+                format!("{:04X}", console.cpu.pc),
+                format!("{:02X}", opcode),
+                data.name.to_string(),
+                format_address_mode(
+                    data.addr_mode,
+                    &[
+                        c.read_byte(addr.wrapping_add(1)),
+                        c.read_byte(addr.wrapping_add(2)),
+                        c.read_byte(addr.wrapping_add(3)),
+                    ],
+                    data.bytes,
+                ),
+            ]
+            .into_iter()
+            .map(|t| text(t).width(Length::Shrink).color(color).into()),
+        )
+        .spacing(10)
+    }
     fn next_instructions(&self) -> Scrollable<Message> {
-        let mut pc = self.console.cpu.pc;
+        let mut c = self.console.clone();
+        let future_iterator = std::iter::from_fn(move || {
+            c.advance_instructions(1);
+            Some(self.state_row(&c, color!(0xFFAAAA)))
+        });
         scrollable(iced::widget::keyed::Column::with_children(
             // Add the header row first
-            [(
-                text("PB PC  ").color(COLORS[0]),
-                text("OP ").color(COLORS[0]).align_x(Horizontal::Right),
-                text("Operand").color(COLORS[0]),
+            [Row::with_children(
+                ["PB ", "PC", "OP", "   ", ""]
+                    .into_iter()
+                    .map(|s| text(s).width(Length::Shrink).into()),
             )]
             .into_iter()
+            // Add previous states
+            .chain(
+                self.previous_states
+                    .iter()
+                    .rev()
+                    .take(10)
+                    .map(|c| self.state_row(c, color!(0xAAAAFF))),
+            )
+            // Current state
+            .chain([self.state_row(&self.console, color!(0xFFFFFF))].into_iter())
             // Add the upcoming (future) instructions
-            .chain((0..100).map(|_| {
-                let c = &self.console;
-                let addr = c.cpu.pbr as usize * 0x10000 + pc as usize;
-                let opcode = c.cartridge.read_byte(addr);
-                let data = opcode_data(opcode, c.cpu.p.a_is_16bit(), c.cpu.p.xy_is_16bit());
-                let v = (
-                    text(format!("{:02X} {:04X}", c.cpu.pbr, pc)),
-                    text(data.name).align_x(Horizontal::Right),
-                    text(format_address_mode(
-                        data.addr_mode,
-                        &[
-                            c.cartridge.read_byte(addr + 1),
-                            c.cartridge.read_byte(addr + 2),
-                            c.cartridge.read_byte(addr + 3),
-                        ],
-                        data.bytes,
-                    )),
-                );
-                pc = pc.wrapping_add(data.bytes as u16);
-                v
-            }))
+            .chain(future_iterator.take(10))
             .enumerate()
-            .map(|(i, (a, b, c))| {
-                (
-                    i,
-                    row![
-                        a.width(Length::Shrink),
-                        b.width(Length::Shrink),
-                        c.width(Length::Fill)
-                    ]
-                    .spacing(10)
-                    .into(),
-                )
-            }),
+            .map(|(i, r)| (i, r.into())),
         ))
         .width(Length::FillPortion(25))
     }

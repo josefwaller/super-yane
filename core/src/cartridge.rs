@@ -1,11 +1,13 @@
 use log::debug;
 
+#[derive(Clone, Copy)]
 enum MemoryMap {
     LoRom,
     HiRom,
     ExHiRom,
 }
 
+#[derive(Clone)]
 pub struct Cartridge {
     memory_map: MemoryMap,
     data: Vec<u8>,

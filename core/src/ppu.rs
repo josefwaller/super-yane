@@ -33,13 +33,14 @@ impl Default for Background {
     }
 }
 
-#[derive(PartialEq, PartialOrd, Debug)]
+#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
     HighReadLowWrite = 0,
     /// Increment after reading the low byte or writing the high byte
     LowReadHighWrite = 1,
 }
+#[derive(Clone)]
 pub struct Ppu {
     /// VBlank flag
     pub vblank: bool,

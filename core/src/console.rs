@@ -41,6 +41,7 @@ impl Default for DmaChannel {
     }
 }
 
+#[derive(Clone)]
 pub struct Console {
     pub cpu: Processor,
     pub ram: [u8; 0x20000],

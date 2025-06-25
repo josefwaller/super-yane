@@ -15,7 +15,7 @@ pub trait HasAddressBus {
     fn io(&mut self);
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Processor {
     /// Program Counter
     pub pc: u16,
