@@ -119,6 +119,7 @@ pub struct Application {
     console: Console,
     vram_offset: usize,
     is_paused: bool,
+    breakpoint_opcode: Option<u8>,
     previous_states: VecDeque<Console>,
 }
 
@@ -128,6 +129,7 @@ impl Default for Application {
             console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
             vram_offset: 0,
             is_paused: true,
+            breakpoint_opcode: None,
             previous_states: VecDeque::new(),
         }
     }
@@ -140,24 +142,30 @@ impl Application {
             Message::NewFrame() => {
                 if !self.is_paused {
                     // Todo: Determine how many per frame
-                    (0..100).for_each(|_| {
+                    for i in 0..100 {
                         self.previous_states.push_back(self.console.clone());
+                        if self.previous_states.len() > 100 {
+                            self.previous_states.pop_front();
+                        }
                         self.console.advance_instructions(1);
-                    })
+                        let op = self.console.cartridge.read_byte(
+                            self.console.cpu.pbr as usize * 0x10000 + self.console.cpu.pc as usize,
+                        );
+                        match self.breakpoint_opcode {
+                            Some(o) => {
+                                if o == op {
+                                    self.is_paused = true;
+                                    break;
+                                }
+                            }
+                            None => {}
+                        }
+                    }
                 }
             }
             Message::AdvanceUntilOpcode(opcode) => {
-                self.console.advance_until(&mut |console| {
-                    self.previous_states.push_back(console.clone());
-                    if self.previous_states.len() > 100 {
-                        self.previous_states.pop_front();
-                    }
-                    let op = console
-                        .cartridge
-                        .read_byte(console.cpu.pbr as usize * 0x10000 + console.cpu.pc as usize);
-                    debug!("{:X}", op);
-                    op == opcode
-                });
+                self.is_paused = false;
+                self.breakpoint_opcode = Some(opcode);
             }
             Message::Revert => {
                 if self.previous_states.len() > 0 {
