@@ -11,7 +11,7 @@ pub enum DmaAddressAjustMode {
     Fixed,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct DmaChannel {
     pub transfer_pattern: Vec<u32>,
     pub adjust_mode: DmaAddressAjustMode,
@@ -24,6 +24,21 @@ pub struct DmaChannel {
     pub src_bank: u8,
     /// The byte counter, or number of bytes to transfer
     pub byte_counter: u16,
+}
+
+impl Default for DmaChannel {
+    fn default() -> Self {
+        DmaChannel {
+            transfer_pattern: vec![0],
+            adjust_mode: DmaAddressAjustMode::Increment,
+            indirect: false,
+            direction: false,
+            dest_addr: 0,
+            src_addr: 0,
+            src_bank: 0,
+            byte_counter: 0,
+        }
+    }
 }
 
 pub struct Console {
@@ -86,30 +101,44 @@ macro_rules! wrapper {
                         } else if a < 0x4400 {
                             if a == 0x420B {
                                 (0..8).for_each(|i| {
-                                    if (a >> i) & 0x01 != 0 {
-                                        let d = &mut self.dma_channels[i].clone();
-                                        let mut i = 0;
+                                    if (value >> i) & 0x01 != 0 {
+                                        let mut d = self.dma_channels[i].clone();
+                                        let mut bytes_transferred = 0;
                                         // Todo: handling timing of DMA
-                                        while d.byte_counter > 0 {
+                                        debug!("Starting a DMA channel {:X} from {:02X}{:04X} to {:X} num bytes {:X} vram {:X}",
+                                        i,
+                                        d.src_bank,
+                                        d.src_addr,
+                                         d.dest_addr, d.byte_counter, self.ppu.vram_addr);
+                                        loop {
                                             let src =
-                                                d.src_bank as usize * 0x1000 + d.src_addr as usize;
+                                                d.src_bank as usize * 0x10000 + d.src_addr as usize;
                                             let dest = d.dest_addr
-                                                + d.transfer_pattern[i % d.transfer_pattern.len()]
+                                                + d.transfer_pattern
+                                                    [bytes_transferred % d.transfer_pattern.len()]
                                                     as usize;
-                                            i += 1;
                                             let v = self.read(src);
+                                            debug!("Read {:X} from {:06X}", v, src);
                                             self.ppu.write_byte(dest, v);
-                                            match d.adjust_mode {
+                                            let md = &mut self.dma_channels[i];
+                                            bytes_transferred += 1;
+                                            match md.adjust_mode {
                                                 DmaAddressAjustMode::Increment => {
-                                                    d.src_addr = d.src_addr.wrapping_add(1)
+                                                    md.src_addr = d.src_addr.wrapping_add(1)
                                                 }
                                                 DmaAddressAjustMode::Decrement => {
-                                                    d.src_addr = d.src_addr.wrapping_sub(1)
+                                                    md.src_addr = d.src_addr.wrapping_sub(1)
                                                 }
                                                 _ => {}
                                             }
-                                            d.byte_counter -= 1;
+                                            md.byte_counter = md.byte_counter.wrapping_sub(1);
+                                            if md.byte_counter == 0 {
+                                                break;
+                                            }
+                                            d = md.clone();
                                         }
+                                        // todo remove
+                                        self.ppu.vram_addr = 0;
                                     }
                                 });
                             }
@@ -192,8 +221,8 @@ impl Console {
         let mut wrapper = wrapper!(self);
         (0..num_instructions).for_each(|_| {
             self.cpu.step(&mut wrapper);
+            wrapper.ppu.advance_master_clock(40);
         });
-        wrapper.ppu.advance_master_clock(1);
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
         std::iter::from_fn(|| {
@@ -202,6 +231,7 @@ impl Console {
             } else {
                 let mut wrapper = wrapper!(self);
                 self.cpu.step(&mut wrapper);
+                wrapper.ppu.advance_master_clock(1);
                 Some(1)
             }
         })

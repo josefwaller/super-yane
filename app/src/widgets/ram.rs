@@ -1,17 +1,23 @@
 use iced::{
     Color, Length,
-    widget::{Scrollable, horizontal_space, keyed::Column, row, scrollable, text},
+    widget::{
+        Row, Scrollable, column, container, horizontal_space,
+        keyed::Column,
+        row,
+        scrollable::{Direction, Scrollbar},
+        text,
+    },
 };
 
 use crate::application::Message;
 
-pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<'_, Message> {
-    let bytes_per_line = 0x20;
+pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<Message> {
+    let bytes_per_line = 0x40;
     let num_lines = 30;
-    scrollable(Column::with_children(
+    Scrollable::new(Column::with_children(
         ram.chunks(bytes_per_line).enumerate().map(|(i, line)| {
             if (i + 1) * 12 < offset || (i + 1) * 12 > offset + num_lines * 12 {
-                (i, horizontal_space().height(12).into())
+                (i, Row::new().height(12).into())
             } else {
                 (
                     i,
@@ -29,4 +35,9 @@ pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<'_, Mess
             }
         }),
     ))
+    .on_scroll(|v| Message::ChangeVramPage(v.absolute_offset().y as usize))
+    .direction(Direction::Both {
+        vertical: Scrollbar::default(),
+        horizontal: Scrollbar::default(),
+    })
 }

@@ -7,7 +7,7 @@ use iced::{
     color, event,
     widget::{
         Column, Container, Row, Scrollable, Slider, button, column, container, horizontal_space,
-        image::{Handle, Image},
+        image::{FilterMethod, Handle, Image},
         keyed_column, pick_list, row, scrollable, slider,
         text::IntoFragment,
         vertical_space,
@@ -53,7 +53,12 @@ pub fn background_table(background: &Background, depth: usize) -> Element<'_, Me
             ppu_table_val!("Sub screen enabled", sub_screen_enable),
             ppu_table_val!("Tile size", tile_size),
             ppu_table_val!("Mosaic", mosaic),
-            ppu_table_val!("Tilemap Address", tilemap_addr, hex_fmt!()),
+            ppu_table_val!("Tilemap Address (Byte)", tilemap_addr, hex_fmt!()),
+            table_row!(
+                "Tilemap Address (Word)",
+                2 * background.tilemap_addr,
+                hex_fmt!()
+            ),
             ppu_table_val!("CHR Address", chr_addr, hex_fmt!()),
             ppu_table_val!("H offset", h_off, hex_fmt!()),
             ppu_table_val!("V offset", v_off, hex_fmt!()),
@@ -139,15 +144,14 @@ impl Application {
     }
     pub fn view(&self) -> Element<'_, Message> {
         debug!("{:}", self.vram_offset);
-        let data: [[u8; 4]; 8] = core::array::from_fn(|i| {
+        let data = self.console.ppu.screen_buffer.map(|color| {
             [
-                (i as u8 & 0x01) * 0xFF,
-                (i as u8 & 0x02) / 0x02 * 0xFF,
-                (i as u8 & 0x04) / 0x04 * 0xFF,
+                ((color & 0x001F) << 3) as u8,
+                ((color & 0x03E0) >> 2) as u8,
+                ((color & 0x7C00) >> 7) as u8,
                 0xFF,
             ]
         });
-        let data = self.console.ppu.screen_buffer.map(|i| data[i as usize]);
         column![
             row![
                 scrollable(column![self.cpu_data(), self.ppu_data(), self.dma_data()])
@@ -156,7 +160,8 @@ impl Application {
                     Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
                         .height(Length::Fill)
                         .width(Length::FillPortion(50))
-                        .content_fit(iced::ContentFit::Contain),
+                        .content_fit(iced::ContentFit::Contain)
+                        .filter_method(FilterMethod::Nearest),
                     row![
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
@@ -167,12 +172,9 @@ impl Application {
             ]
             .spacing(10)
             .height(Length::Fill),
-            row![
-                ram(&self.console.ppu.vram, self.vram_offset, COLORS[3])
-                    .on_scroll(|v| Message::ChangeVramPage(v.absolute_offset().y as usize))
-            ]
-            .spacing(10)
-            .height(Length::Fixed(200.0))
+            row![ram(&self.console.ppu.vram, self.vram_offset, COLORS[3])]
+                .spacing(10)
+                .height(Length::Fixed(200.0))
         ]
         .padding(10)
         .align_x(Center)
@@ -230,7 +232,12 @@ impl Application {
             ppu_val!("Brightness", brightness, hex_fmt!()),
             ppu_val!("Background Mode", bg_mode),
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
-            table_row!("VRAM address", 2 * self.console.ppu.vram_addr, "{:06X}"),
+            table_row!("VRAM address (byte)", self.console.ppu.vram_addr, "{:06X}"),
+            table_row!(
+                "VRAM address (word)",
+                2 * self.console.ppu.vram_addr,
+                "{:06X}"
+            ),
             table_row!(
                 "VRAM INC mode",
                 self.console.ppu.vram_increment_mode,

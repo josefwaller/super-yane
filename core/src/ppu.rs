@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use log::*;
 
 #[derive(Copy, Clone)]
@@ -63,7 +65,7 @@ pub struct Ppu {
     /// Screen buffer
     pub screen_buffer: [u16; 256 * 240],
     pub dot: usize,
-    pixel_buffer: Vec<u16>,
+    pixel_buffer: VecDeque<u16>,
 }
 
 impl Default for Ppu {
@@ -89,7 +91,7 @@ impl Default for Ppu {
             cgram_latch: None,
             screen_buffer: [0; 256 * 240],
             dot: 0,
-            pixel_buffer: vec![],
+            pixel_buffer: VecDeque::new(),
         }
     }
 }
@@ -97,7 +99,11 @@ impl Default for Ppu {
 impl Ppu {
     pub fn read_byte(&mut self, addr: usize) -> u8 {
         match addr {
-            0x4210 => u8::from(self.vblank) << 7,
+            0x4210 => {
+                let v = u8::from(self.vblank) << 7;
+                self.vblank = false;
+                return v;
+            }
             _ => 0,
         }
     }
@@ -110,7 +116,7 @@ impl Ppu {
         match addr {
             0x2100 => {
                 self.forced_blanking = bit!(3) == 1;
-                self.brightness = (value & 0x0F) as u32;
+                self.brightness = (value & 0x07) as u32;
             }
             0x2105 => {
                 // Copy background sizes
@@ -128,9 +134,9 @@ impl Ppu {
             }
             0x2107..=0x210A => {
                 let b = &mut self.backgrounds[addr - 0x2107];
-                b.num_horz_tilemaps = bit!(0) * 2;
-                b.num_vert_tilemaps = bit!(1);
-                b.tilemap_addr = ((value & 0xFC) as usize / 0x04) << 10;
+                b.num_horz_tilemaps = if bit!(0) == 0 { 1 } else { 2 };
+                b.num_vert_tilemaps = if bit!(1) == 0 { 1 } else { 2 };
+                b.tilemap_addr = ((value & 0xFC) as usize) << 8;
             }
             0x210B => {
                 self.backgrounds[0].chr_addr = (value as usize & 0x0F) << 12;
@@ -171,13 +177,16 @@ impl Ppu {
             }
             0x2116 => {
                 self.vram_addr = (self.vram_addr & 0x7F00) | (value as usize);
+                debug!("Writing to VRAM LOW {:02X} {:04X}", value, self.vram_addr);
             }
             0x2117 => {
-                self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100);
+                self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100) & 0x7FFF;
+                debug!("Writing to VRAM HIGH {:02X} {:04X}", value, self.vram_addr);
             }
             0x2118 => {
                 // Write the low byte
                 self.vram[2 * self.vram_addr] = value;
+                // debug!("Write {:X} to {:X} H", value, self.vram_addr);
                 if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
                     self.vram_addr = (self.vram_addr + 1) % 0x8000;
                 }
@@ -185,6 +194,7 @@ impl Ppu {
             0x2119 => {
                 // Write the high byte
                 self.vram[2 * self.vram_addr + 1] = value;
+                // debug!("{:X} {:X} L", self.vram_addr, value);
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
                     self.vram_addr = (self.vram_addr + 1) % 0x8000;
                 }
@@ -214,21 +224,45 @@ impl Ppu {
                 self.obj_subscreen_enable = bit!(4) == 1;
             }
             // Todo
-            0x2133 => {}
-            _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
+            0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
+            _ => {}
         }
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
             self.dot = (self.dot + 1) % (256 * 240);
-            if self.pixel_buffer.is_empty() {
-                let addr = self.backgrounds[0].tilemap_addr
-                    + self.dot / self.backgrounds[0].tile_size as usize;
-                // Load next pixel data
-                let byte = self.vram[addr];
-                (0..4).for_each(|_| self.pixel_buffer.push(byte as u16));
+            if self.dot == 0 {
+                self.vblank = true;
             }
-            self.screen_buffer[self.dot] = self.pixel_buffer.pop().unwrap_or(0xFFFF);
+            if self.pixel_buffer.is_empty() {
+                // let addr = self.backgrounds[0].tilemap_addr
+                //     + self.dot / self.backgrounds[0].tile_size as usize;
+                let x = (self.dot % 256) / 8;
+                let y = (self.dot / 256) / 8;
+                let fine_y = (self.dot / 256) % 8;
+                // 2 bytes/tile, 32 tiles/row
+                let addr = 2 * (32 * y + x);
+                // Load next byte
+                let tile =
+                    self.vram[(2 * self.backgrounds[0].tilemap_addr + addr) % self.vram.len()];
+                let slice_addr = (2 * self.backgrounds[0].chr_addr
+                    + 2 * fine_y as usize
+                    + 2 * 8 * tile as usize)
+                    % self.vram.len();
+                let slice_low = self.vram[slice_addr];
+                let slice_high = self.vram[slice_addr + 1];
+
+                let palette = [0x0000, 0xFFFF, 0x00FF, 0xFF00];
+
+                // let byte = self.vram[self.backgrounds[0].tilemap_addr + addr];
+                (0..8).for_each(|i| {
+                    // self.pixel_buffer.push(tile as u16);
+                    self.pixel_buffer
+                        .push_back(palette[(slice_low >> i) as usize & 0x01])
+                });
+            }
+            self.screen_buffer[self.dot] = self.pixel_buffer.pop_back().unwrap();
+            self.screen_buffer[(self.dot + 1) % self.screen_buffer.len()] = 0x01F;
         })
     }
 }
