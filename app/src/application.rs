@@ -108,6 +108,8 @@ pub enum Message {
     AdvanceInstructions(u32),
     /// Advance until hitting a certain opcode
     AdvanceUntilOpcode(u8),
+    /// Go back 1 state
+    Revert,
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
@@ -157,6 +159,12 @@ impl Application {
                     op == opcode
                 });
             }
+            Message::Revert => {
+                if self.previous_states.len() > 0 {
+                    self.console = self.previous_states[self.previous_states.len() - 1].clone();
+                    self.previous_states.pop_back();
+                }
+            }
             Message::AdvanceInstructions(num_instructions) => {
                 self.previous_states.push_back(self.console.clone());
                 self.console.advance_instructions(num_instructions);
@@ -169,7 +177,6 @@ impl Application {
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
-        debug!("{:}", self.vram_offset);
         let data = self.console.ppu.screen_buffer.map(|color| {
             [
                 ((color & 0x001F) << 3) as u8,
@@ -189,6 +196,7 @@ impl Application {
                         .content_fit(iced::ContentFit::Contain)
                         .filter_method(FilterMethod::Nearest),
                     row![
+                        button("|<").on_press(Message::Revert),
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
@@ -363,6 +371,7 @@ impl Application {
                     .iter()
                     .rev()
                     .take(10)
+                    .rev()
                     .map(|c| self.state_row(c, color!(0xAAAAFF))),
             )
             // Current state
