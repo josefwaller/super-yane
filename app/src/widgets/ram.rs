@@ -12,7 +12,7 @@ use iced::{
 use crate::application::Message;
 
 pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<Message> {
-    let bytes_per_line = 0x40;
+    let bytes_per_line = 0x20;
     let num_lines = 30;
     Scrollable::new(Column::with_children(
         ram.chunks(bytes_per_line).enumerate().map(|(i, line)| {

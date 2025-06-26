@@ -1,10 +1,11 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, string::FromUtf16Error};
 
+use crate::widgets::text_table;
 use iced::{
     Alignment::{self, Center},
-    Color, Element, Event,
+    Color, Element, Event, Font,
     Length::{self, FillPortion},
-    Renderer, Subscription, Theme,
+    Padding, Renderer, Subscription, Theme,
     alignment::Horizontal,
     color, event,
     widget::{
@@ -40,35 +41,26 @@ macro_rules! table_row {
     };
 }
 
-pub fn background_table(background: &Background, depth: usize) -> Element<'_, Message> {
-    macro_rules! ppu_table_val {
-        ($label: expr, $field: ident) => {
-            ppu_table_val!($label, $field, "{}")
-        };
-        ($label: expr, $field: ident, $format_str: expr) => {
-            table_row!($label, background.$field, $format_str)
-        };
-    }
-    vertical_table(
-        vec![
-            ppu_table_val!("Main screen enabled", main_screen_enable),
-            ppu_table_val!("Sub screen enabled", sub_screen_enable),
-            ppu_table_val!("Tile size", tile_size),
-            ppu_table_val!("Mosaic", mosaic),
-            ppu_table_val!("Tilemap Address (Byte)", tilemap_addr, hex_fmt!()),
-            table_row!(
-                "Tilemap Address (Word)",
-                2 * background.tilemap_addr,
-                hex_fmt!()
-            ),
-            ppu_table_val!("CHR Address", chr_addr, hex_fmt!()),
-            ppu_table_val!("H offset", h_off, hex_fmt!()),
-            ppu_table_val!("V offset", v_off, hex_fmt!()),
-            ppu_table_val!("# H Tilemaps", num_horz_tilemaps),
-            ppu_table_val!("# V Tilemaps", num_vert_tilemaps),
-        ],
-        150.0,
-        depth,
+pub fn background_table(background: &Background) -> impl Into<Element<'_, Message>> {
+    let b = background;
+    let rows = vec![
+        ("Main screen enabled", b.main_screen_enable.into()),
+        ("Sub screen enabled", b.sub_screen_enable.into()),
+        ("Tile size", b.tile_size),
+        ("Mosaic", b.mosaic.into()),
+        ("Tilemap Address (Byte)", b.tilemap_addr as u32),
+        ("Tilemap Address (Word)", 2 * b.tilemap_addr as u32),
+        ("CHR Address", b.chr_addr as u32),
+        ("H offset", b.h_off),
+        ("V offset", b.v_off),
+        ("# H Tilemaps", b.num_horz_tilemaps),
+        ("# V Tilemaps", b.num_vert_tilemaps),
+    ];
+    text_table(
+        rows.into_iter()
+            .map(|(s, v)| [(s.to_string(), Some(COLORS[1])), (format!("{}", v), None)])
+            .flatten(),
+        2,
     )
 }
 
@@ -98,7 +90,7 @@ pub fn vertical_table<'a>(
             .into(),
         )
     }))
-    .width(Length::Fill)
+    // .width(Length::Fill)
     .into()
 }
 
@@ -151,6 +143,11 @@ impl Application {
                         let op = self.console.cartridge.read_byte(
                             self.console.cpu.pbr as usize * 0x10000 + self.console.cpu.pc as usize,
                         );
+                        // Always break on BRKs
+                        if op == 0x00 {
+                            self.is_paused = true;
+                            break;
+                        }
                         match self.breakpoint_opcode {
                             Some(o) => {
                                 if o == op {
@@ -198,12 +195,17 @@ impl Application {
         });
         column![
             row![
-                scrollable(column![self.cpu_data(), self.ppu_data(), self.dma_data()])
-                    .width(Length::FillPortion(25)),
+                scrollable(column![
+                    self.cpu_data(),
+                    self.ppu_data().into(),
+                    self.dma_data()
+                ])
+                .spacing(0)
+                .width(Length::Shrink),
                 column![
                     Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
                         .height(Length::Fill)
-                        .width(Length::FillPortion(50))
+                        .width(Length::Fill)
                         .content_fit(iced::ContentFit::Contain)
                         .filter_method(FilterMethod::Nearest),
                     row![
@@ -212,10 +214,12 @@ impl Application {
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
                         button("To BRK")
-                            .on_press(Message::AdvanceUntilOpcode(wdc65816::opcodes::ADC_I))
+                            .on_press(Message::AdvanceUntilOpcode(wdc65816::opcodes::ADC_DIX))
                     ],
                 ],
-                self.next_instructions()
+                scrollable(self.next_instructions())
+                    .spacing(10)
+                    .width(Length::Shrink)
             ]
             .spacing(10)
             .height(Length::Fill),
@@ -264,7 +268,7 @@ impl Application {
             vertical_table(values, 50.0, 0)
         ]
     }
-    fn ppu_data(&self) -> Column<'_, Message> {
+    fn ppu_data(&self) -> impl Into<Element<'_, Message>> {
         macro_rules! ppu_val {
             ($label: expr, $field: ident, $format_str: expr) => {
                 table_row!($label, self.console.ppu.$field, $format_str)
@@ -294,18 +298,18 @@ impl Application {
         column![
             text("PPU").color(COLORS[4]),
             vertical_table(values, 150.0, 0),
-            text("Backgrounds:"),
-            vertical_table(
+            Column::with_children(
                 self.console
                     .ppu
                     .backgrounds
                     .iter()
                     .enumerate()
-                    .map(|(i, b)| (i.to_string(), background_table(b, 2)))
-                    .collect(),
-                20.0,
-                1,
-            )
+                    .map(|(i, b)| column![
+                        text(format!("Background {}", i)).color(COLORS[0]),
+                        container(background_table(b).into()).padding(Padding::new(0.).left(30))
+                    ]
+                    .into())
+            ),
         ]
     }
     fn dma_data(&self) -> Column<'_, Message> {
@@ -333,7 +337,12 @@ impl Application {
             .into()
         }))
     }
-    fn state_row(&self, console: &Console, color: Color) -> Row<Message> {
+    /// Represent a console's state (PC, PBR, opcode) as a table row
+    fn console_table_row(
+        &self,
+        console: &Console,
+        color: Option<Color>,
+    ) -> Vec<(String, Option<Color>)> {
         let addr = console.cpu.pbr as usize * 0x10000 + console.cpu.pc as usize;
         let opcode = console.cartridge.read_byte(addr);
         let data = opcode_data(
@@ -342,58 +351,51 @@ impl Application {
             console.cpu.p.xy_is_16bit(),
         );
         let c = &console.cartridge;
-        Row::with_children(
-            [
-                format!("{:02X}", console.cpu.pbr),
-                format!("{:04X}", console.cpu.pc),
-                format!("{:02X}", opcode),
-                data.name.to_string(),
-                format_address_mode(
-                    data.addr_mode,
-                    &[
-                        c.read_byte(addr.wrapping_add(1)),
-                        c.read_byte(addr.wrapping_add(2)),
-                        c.read_byte(addr.wrapping_add(3)),
-                    ],
-                    data.bytes,
-                ),
-            ]
-            .into_iter()
-            .map(|t| text(t).width(Length::Shrink).color(color).into()),
-        )
-        .spacing(10)
+        [
+            format!("{:02X}", console.cpu.pbr),
+            format!("{:04X}", console.cpu.pc),
+            format!("{:02X}", opcode),
+            data.name.to_string(),
+            format_address_mode(
+                data.addr_mode,
+                &[
+                    c.read_byte(addr.wrapping_add(1)),
+                    c.read_byte(addr.wrapping_add(2)),
+                    c.read_byte(addr.wrapping_add(3)),
+                ],
+                data.bytes,
+            ),
+        ]
+        .into_iter()
+        .map(|t| (t, color))
+        .collect()
     }
-    fn next_instructions(&self) -> Scrollable<Message> {
+    fn next_instructions(&self) -> impl Into<Element<Message>> {
         let mut c = self.console.clone();
-        let future_iterator = std::iter::from_fn(move || {
+        let future_iter = std::iter::from_fn(move || {
             c.advance_instructions(1);
-            Some(self.state_row(&c, color!(0xFFAAAA)))
+            Some(c.clone())
         });
-        scrollable(iced::widget::keyed::Column::with_children(
-            // Add the header row first
-            [Row::with_children(
-                ["PB ", "PC", "OP", "   ", ""]
-                    .into_iter()
-                    .map(|s| text(s).width(Length::Shrink).into()),
-            )]
-            .into_iter()
-            // Add previous states
+        let it = self
+            .previous_states
+            .iter()
+            .rev()
+            .take(20)
+            .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
+            .rev()
+            .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
             .chain(
-                self.previous_states
-                    .iter()
-                    .rev()
+                future_iter
                     .take(10)
-                    .rev()
-                    .map(|c| self.state_row(c, color!(0xAAAAFF))),
-            )
-            // Current state
-            .chain([self.state_row(&self.console, color!(0xFFFFFF))].into_iter())
-            // Add the upcoming (future) instructions
-            .chain(future_iterator.take(10))
-            .enumerate()
-            .map(|(i, r)| (i, r.into())),
-        ))
-        .width(Length::FillPortion(25))
+                    .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
+            );
+        text_table(
+            ["PBR", "PC", "OP", "", "       "]
+                .into_iter()
+                .map(|r| (r.to_string(), Some(COLORS[0])))
+                .chain(it.flatten()),
+            5,
+        )
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

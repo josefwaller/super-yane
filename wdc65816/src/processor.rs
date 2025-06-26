@@ -177,17 +177,6 @@ impl Processor {
         self.p.z = a == 0 && b == 0;
         self.p.c = c2;
         self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 != 0;
-        //         debug!(
-        //             "{:X} {:X} {:X} {:X} {:X} {:X} {:X}",
-        //             self.p.to_byte(),
-        //             self.b,
-        //             b,
-        //             high,
-        //             b ^ high,
-        //             self.b ^ b,
-        //             (self.b ^ b) & (high ^ b),
-        // ((self.b ^ b as u8) & (high ^ b)) & 0x80 == 0
-        //         );
         self.a = a;
         self.b = b;
     }
@@ -641,13 +630,20 @@ impl Processor {
     /// Direct Indirect addressing
     fn di(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.d(memory);
-        addr.with_bank(self.dbr)
+        read_u24(memory, addr)
     }
     /// Direct Indirect X Indexed addressing
     fn dix(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr = self.di(memory);
+        let addr = u24::from(
+            0x00,
+            self.d
+                .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16)
+                .wrapping_add(self.x()),
+        );
+        let addr = read_u16(memory, addr);
         memory.io();
-        addr.wrapping_add(self.x()).with_bank(self.dbr)
+        self.pc = self.pc.wrapping_add(1);
+        u24::from(self.dbr, addr)
     }
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl HasAddressBus) -> u24 {

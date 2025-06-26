@@ -234,4 +234,9 @@ impl Console {
         })
         .sum()
     }
+    /// Get the opcode that the console will execute on the next call to [`Console::advance_instructions``]
+    pub fn opcode(&self) -> u8 {
+        self.cartridge
+            .read_byte(self.cpu.pbr as usize * 0x10000 + self.cpu.pc as usize)
+    }
 }
