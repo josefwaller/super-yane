@@ -1,5 +1,5 @@
 use iced::{
-    Color, Length,
+    Color, Element, Length,
     widget::{
         Row, Scrollable, column, container, horizontal_space,
         keyed::Column,
@@ -11,7 +11,7 @@ use iced::{
 
 use crate::application::Message;
 
-pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<Message> {
+pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> impl Into<Element<Message>> {
     let bytes_per_line = 0x20;
     let num_lines = 30;
     Scrollable::new(Column::with_children(
@@ -36,6 +36,7 @@ pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> Scrollable<Message>
         }),
     ))
     .on_scroll(|v| Message::ChangeVramPage(v.absolute_offset().y as usize))
+    .spacing(0)
     .direction(Direction::Both {
         vertical: Scrollbar::default(),
         horizontal: Scrollbar::default(),

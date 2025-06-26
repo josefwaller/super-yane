@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, string::FromUtf16Error};
 
-use crate::widgets::text_table;
+use crate::{cell, widgets::text_table};
 use iced::{
     Alignment::{self, Center},
     Color, Element, Event, Font,
@@ -9,11 +9,12 @@ use iced::{
     alignment::Horizontal,
     color, event,
     widget::{
-        Column, Container, Row, Scrollable, Slider, button, column, container, horizontal_space,
+        Column, Container, Row, Scrollable, Slider, TextInput, button, checkbox, column, container,
+        horizontal_space,
         image::{FilterMethod, Handle, Image},
         keyed_column, pick_list, row, scrollable, slider,
         text::IntoFragment,
-        vertical_space,
+        text_input, vertical_space,
     },
     window,
 };
@@ -64,6 +65,12 @@ pub fn background_table(background: &Background) -> impl Into<Element<'_, Messag
     )
 }
 
+pub fn with_indent<'a, Message: 'a>(
+    e: impl Into<Element<'a, Message>>,
+) -> impl Into<Element<'a, Message>> {
+    container(e.into()).padding(Padding::new(0.0).left(30))
+}
+
 pub const COLORS: [Color; 5] = [
     color!(0x98c2d4),
     color!(0xd49e98),
@@ -94,25 +101,29 @@ pub fn vertical_table<'a>(
     .into()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
-    /// Advance until hitting a certain opcode
-    AdvanceUntilOpcode(u8),
+    AddBreakpoint(u8),
+    AddBreakpointsBySearch,
+    RemoveBreakpoint(u8),
+    SetOpcodeSearch(String),
     /// Go back 1 state
     Revert,
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
+    Reset,
 }
 
 pub struct Application {
     console: Console,
     vram_offset: usize,
     is_paused: bool,
-    breakpoint_opcode: Option<u8>,
+    breakpoint_opcodes: Vec<u8>,
     previous_states: VecDeque<Console>,
+    opcode_search: String,
 }
 
 impl Default for Application {
@@ -121,8 +132,9 @@ impl Default for Application {
             console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
             vram_offset: 0,
             is_paused: true,
-            breakpoint_opcode: None,
+            breakpoint_opcodes: vec![],
             previous_states: VecDeque::new(),
+            opcode_search: String::new(),
         }
     }
 }
@@ -140,29 +152,13 @@ impl Application {
                             self.previous_states.pop_front();
                         }
                         self.console.advance_instructions(1);
-                        let op = self.console.cartridge.read_byte(
-                            self.console.cpu.pbr as usize * 0x10000 + self.console.cpu.pc as usize,
-                        );
-                        // Always break on BRKs
-                        if op == 0x00 {
+                        let op = self.console.opcode();
+                        if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
                             self.is_paused = true;
                             break;
                         }
-                        match self.breakpoint_opcode {
-                            Some(o) => {
-                                if o == op {
-                                    self.is_paused = true;
-                                    break;
-                                }
-                            }
-                            None => {}
-                        }
                     }
                 }
-            }
-            Message::AdvanceUntilOpcode(opcode) => {
-                self.is_paused = false;
-                self.breakpoint_opcode = Some(opcode);
             }
             Message::Revert => {
                 if self.previous_states.len() > 0 {
@@ -176,9 +172,23 @@ impl Application {
             }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
             Message::ChangePaused(p) => {
-                self.breakpoint_opcode = None;
                 self.is_paused = p;
             }
+            Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
+            Message::AddBreakpointsBySearch => {
+                (0..=255).for_each(|op| {
+                    if opcode_data(op as u8, false, false)
+                        .name
+                        .contains(&self.opcode_search)
+                    {
+                        self.breakpoint_opcodes.push(op);
+                    }
+                });
+                self.opcode_search = String::new()
+            }
+            Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
+            Message::Reset => self.console.reset(),
+            Message::SetOpcodeSearch(s) => self.opcode_search = s,
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
@@ -196,7 +206,7 @@ impl Application {
         column![
             row![
                 scrollable(column![
-                    self.cpu_data(),
+                    self.cpu_data().into(),
                     self.ppu_data().into(),
                     self.dma_data()
                 ])
@@ -209,12 +219,11 @@ impl Application {
                         .content_fit(iced::ContentFit::Contain)
                         .filter_method(FilterMethod::Nearest),
                     row![
+                        button("RESET").on_press(Message::Reset),
                         button("|<").on_press(Message::Revert),
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
-                        button("To BRK")
-                            .on_press(Message::AdvanceUntilOpcode(wdc65816::opcodes::ADC_DIX))
                     ],
                 ],
                 scrollable(self.next_instructions())
@@ -223,49 +232,89 @@ impl Application {
             ]
             .spacing(10)
             .height(Length::Fill),
-            row![ram(&self.console.ppu.vram, self.vram_offset, COLORS[3])]
-                .spacing(10)
-                .height(Length::Fixed(200.0))
+            row![
+                ram(&self.console.ppu.vram, self.vram_offset, COLORS[3]).into(),
+                self.breakpoints().into()
+            ]
+            .spacing(10)
+            .height(Length::Fixed(200.0)),
         ]
         .padding(10)
         .align_x(Center)
         .width(Length::Fill)
         .into()
     }
-
-    fn cpu_data(&self) -> Column<'_, Message> {
-        let cpu = &self.console.cpu;
-        let values = vec![
-            table_row!("C", cpu.c(), "{:04X}"),
-            table_row!("X", cpu.x(), "{:04X}"),
-            table_row!("Y", cpu.y(), "{:04X}"),
-            table_row!("PBR", cpu.pbr, "{:02X}"),
-            table_row!("PC", cpu.pc, "{:04X}"),
-            table_row!("DBR", cpu.dbr, "{:02X}"),
-            table_row!("D", cpu.d, "{:04X}"),
-            table_row!("SP", cpu.s, "{:04X}"),
-            (
-                "P",
-                vertical_table(
-                    vec![
-                        table_row!("c", cpu.p.c, "{}"),
-                        table_row!("z", cpu.p.z, "{}"),
-                        table_row!("n", cpu.p.n, "{}"),
-                        table_row!("d", cpu.p.d, "{}"),
-                        table_row!("i", cpu.p.i, "{}"),
-                        table_row!("m", cpu.p.m, "{}"),
-                        table_row!("v", cpu.p.v, "{}"),
-                        table_row!("e", cpu.p.e, "{}"),
-                        table_row!("xb", cpu.p.xb, "{}"),
-                    ],
-                    20.0,
-                    1,
-                ),
+    fn breakpoints(&self) -> impl Into<Element<Message>> {
+        scrollable(column![
+            Element::<Message>::from(
+                text_input("Add breakpoint by search", &self.opcode_search)
+                    .on_input(Message::SetOpcodeSearch)
+                    .on_submit(Message::AddBreakpointsBySearch)
             ),
-        ];
+            Element::<Message>::from(Column::with_children(self.breakpoint_opcodes.iter().map(
+                |op| {
+                    let data = opcode_data(*op, false, false);
+                    checkbox(
+                        format!("{} {} ({:02X})", data.name, data.addr_mode, op),
+                        true,
+                    )
+                    .on_toggle(|_| Message::RemoveBreakpoint(*op))
+                    .into()
+                }
+            )))
+        ])
+    }
+
+    fn cpu_data(&self) -> impl Into<Element<Message>> {
+        let cpu = &self.console.cpu;
+        let values = text_table(
+            [
+                ("C", cpu.c(), 4),
+                ("X", cpu.x(), 4),
+                ("Y", cpu.y(), 4),
+                ("PBR", cpu.pbr.into(), 2),
+                ("PC", cpu.pc, 2),
+                ("DBR", cpu.dbr.into(), 2),
+                ("D", cpu.d, 2),
+                ("SP", cpu.s, 4),
+                ("P", cpu.p.to_byte().into(), 2),
+            ]
+            .into_iter()
+            .map(|(label, value, width)| {
+                [
+                    (label.to_string(), Some(COLORS[0])),
+                    (format!("{:0width$X}", value, width = width), None),
+                ]
+            })
+            .flatten(),
+            2,
+        );
+        let p_table = text_table(
+            [
+                ("c", cpu.p.c),
+                ("z", cpu.p.z),
+                ("n", cpu.p.n),
+                ("d", cpu.p.d),
+                ("i", cpu.p.i),
+                ("m", cpu.p.m),
+                ("v", cpu.p.v),
+                ("e", cpu.p.e),
+                ("xb", cpu.p.xb),
+            ]
+            .into_iter()
+            .map(|(label, value)| {
+                [
+                    (label.to_string(), Some(COLORS[1])),
+                    (format!("{}", value), None),
+                ]
+            })
+            .flatten(),
+            2,
+        );
         column![
             text("CPU").color(COLORS[4]),
-            vertical_table(values, 50.0, 0)
+            values.into(),
+            with_indent(p_table).into(),
         ]
     }
     fn ppu_data(&self) -> impl Into<Element<'_, Message>> {
@@ -306,7 +355,7 @@ impl Application {
                     .enumerate()
                     .map(|(i, b)| column![
                         text(format!("Background {}", i)).color(COLORS[0]),
-                        container(background_table(b).into()).padding(Padding::new(0.).left(30))
+                        with_indent(background_table(b)).into()
                     ]
                     .into())
             ),
@@ -390,7 +439,7 @@ impl Application {
                     .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
             );
         text_table(
-            ["PBR", "PC", "OP", "", "       "]
+            ["PBR", "PC", "OP", "", "        "]
                 .into_iter()
                 .map(|r| (r.to_string(), Some(COLORS[0])))
                 .chain(it.flatten()),

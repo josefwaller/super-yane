@@ -119,6 +119,16 @@ impl Processor {
             self.yl as u16
         }
     }
+    /// Force the XH and YH registers to 0x00 if the status register's xb flags are set
+    fn force_registers(&mut self) {
+        if self.p.a_is_8bit() {
+            // self.b = 0;
+        }
+        if self.p.xy_is_8bit() {
+            self.xh = 0;
+            self.yh = 0;
+        }
+    }
     /// Push a single byte to stack
     fn push_u8(&mut self, value: u8, memory: &mut impl HasAddressBus) {
         memory.write(self.s.into(), value);
@@ -443,6 +453,7 @@ impl Processor {
     /// Return from interrupt
     fn rti(&mut self, memory: &mut impl HasAddressBus) {
         self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+        self.force_registers();
         self.pc = self.pull_u16(memory);
         if !self.p.e {
             self.pbr = self.pull_u8(memory);
@@ -535,10 +546,12 @@ impl Processor {
     /// REset Processor status bits (REP)
     fn rep(&mut self, value: u8) {
         self.p = StatusRegister::from_byte(!value & self.p.to_byte(), self.p.e);
+        self.force_registers();
     }
     /// SEt Processor status bits (SEP)
     fn sep(&mut self, value: u8) {
         self.p = StatusRegister::from_byte(value | self.p.to_byte(), self.p.e);
+        self.force_registers();
     }
     /// Test and Reset Bits (TRB) 8-bit
     fn trb_8(&mut self, value: u8) -> u8 {
@@ -1118,6 +1131,7 @@ impl Processor {
             }
             PLP => {
                 self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+                self.force_registers();
             }
             PLX => pull_reg!(xl, xh, xy_is_16bit),
             PLY => pull_reg!(yl, yh, xy_is_16bit),

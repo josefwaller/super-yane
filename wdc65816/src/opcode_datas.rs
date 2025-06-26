@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::{fmt::Display, ops::Add};
 
 use crate::opcodes::*;
 
@@ -11,7 +11,6 @@ pub enum AddressMode {
     AbsoluteY,
     AbsoluteLong,
     AbsoluteLongX,
-    AbsoluteLongY,
     AbsoluteIndirect,
     AbsoluteIndirectX,
     // This is only ever used by JMP
@@ -26,6 +25,35 @@ pub enum AddressMode {
     DirectIndirectLongY,
     StackRelative,
     StackRelativeIndirectY,
+}
+
+impl Display for AddressMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AddressMode::*;
+        f.write_str(match *self {
+            Immediate => "#",
+            Implied => "i",
+            Accumulator => "A",
+            Absolute => "a",
+            AbsoluteX => "a,x",
+            AbsoluteY => "a,y",
+            AbsoluteLong => "al",
+            AbsoluteLongX => "al,x",
+            AbsoluteIndirect => "(a)",
+            AbsoluteIndirectX => "(a,x)",
+            AbsoluteIndirectLong => "[a]",
+            Direct => "d",
+            DirectX => "d,x",
+            DirectY => "d,y",
+            DirectIndirect => "(d)",
+            DirectIndirectX => "(d,x)",
+            DirectIndirectY => "(d),y",
+            DirectIndirectLong => "[d]",
+            DirectIndirectLongY => "[d],y",
+            StackRelative => "d,s",
+            StackRelativeIndirectY => "(d,s),y",
+        })
+    }
 }
 
 pub fn format_address_mode(addr_mode: AddressMode, bytes: &[u8], opcode_len: u32) -> String {
@@ -49,7 +77,6 @@ pub fn format_address_mode(addr_mode: AddressMode, bytes: &[u8], opcode_len: u32
         AbsoluteIndirectX => format!("({}, x)", abs),
         AbsoluteLong => long,
         AbsoluteLongX => format!("{}, x", long),
-        AbsoluteLongY => format!("{}, y", long),
         AbsoluteIndirectLong => format!("[{}]", abs),
         Accumulator => "ACC".to_string(),
         Direct => off,

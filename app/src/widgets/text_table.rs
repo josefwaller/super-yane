@@ -3,6 +3,16 @@ use iced::{
     widget::{Row, Text, keyed::Column as KeyedColumn},
 };
 
+#[macro_export]
+macro_rules! cell {
+    ($label: expr, $val: ident, $format_str: expr, $color: ident) => {
+        [
+            ($label.to_string(), color!($color)),
+            (format!($format_str, $val)),
+        ]
+    };
+}
+
 /// A simple table that renders text-only rows
 pub fn text_table<'a, Message: 'a>(
     rows_iter: impl Iterator<Item = (String, Option<Color>)>,

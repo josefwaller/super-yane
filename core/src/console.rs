@@ -239,4 +239,11 @@ impl Console {
         self.cartridge
             .read_byte(self.cpu.pbr as usize * 0x10000 + self.cpu.pc as usize)
     }
+    /// Reset the console
+    pub fn reset(&mut self) {
+        self.cpu.p.e = true;
+        self.cpu.pbr = 0x00;
+        self.cpu.pc = self.cartridge.read_byte(0xFFFC) as u16
+            + 0x100 * self.cartridge.read_byte(0xFFFD) as u16;
+    }
 }
