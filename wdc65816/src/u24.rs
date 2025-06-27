@@ -14,9 +14,12 @@ impl u24 {
             value: (bank as u32) * 0x10000 + lower as u32,
         }
     }
+    /// Create a new [`u24`] with the lower 16 bits of this [`u24`] and
+    /// the upper 8 bits provided.
     pub fn with_bank(&self, bank: u8) -> u24 {
         u24::from(bank, (self.value & 0xFFFF) as u16)
     }
+    /// Add a number, wrapping around the entire 24 bit range (0-0xFFFFFF)
     pub fn wrapping_add<T: Into<u32>>(&self, rhs: T) -> u24 {
         u24 {
             value: self.value.wrapping_add(rhs.into()) % OVERFLOW,

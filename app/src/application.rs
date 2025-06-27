@@ -106,13 +106,15 @@ pub fn vertical_table<'a>(
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
+    AdvanceBreakpoint,
     AddBreakpoint(u8),
     AddBreakpointsBySearch,
     RemoveBreakpoint(u8),
     ToggleVBlankBreakpoint(bool),
     SetOpcodeSearch(String),
     /// Go back 1 state
-    Revert,
+    PreviousInstruction,
+    PreviousBreakpoint,
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
@@ -125,9 +127,14 @@ pub struct Application {
     is_paused: bool,
     breakpoint_opcodes: Vec<u8>,
     previous_states: VecDeque<Console>,
+    previous_breakpoint_states: VecDeque<Console>,
     opcode_search: String,
     vblank_breakpoint: bool,
+    ignore_breakpoints: bool,
 }
+
+const NUM_PREVIOUS_STATES: usize = 50;
+const NUM_BREAKPOINT_STATES: usize = 20;
 
 impl Default for Application {
     fn default() -> Self {
@@ -136,52 +143,83 @@ impl Default for Application {
             vram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
-            previous_states: VecDeque::new(),
+            previous_states: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
+            previous_breakpoint_states: VecDeque::with_capacity(NUM_BREAKPOINT_STATES),
             opcode_search: String::new(),
             vblank_breakpoint: false,
+            ignore_breakpoints: false,
         }
     }
 }
 
 impl Application {
+    fn on_breakpoint(&mut self) {
+        self.is_paused = true;
+    }
+    fn is_in_breakpoint(&self) -> bool {
+        if !self.ignore_breakpoints {
+            if self.console.in_vblank() && self.vblank_breakpoint {
+                return true;
+            }
+            let op = self.console.opcode();
+            if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn advance(&mut self) {
+        self.previous_states.push_back(self.console.clone());
+        if self.previous_states.len() > NUM_PREVIOUS_STATES {
+            self.previous_states.pop_front();
+        }
+        if self.is_in_breakpoint() {
+            self.previous_breakpoint_states
+                .push_back(self.console.clone());
+            if self.previous_breakpoint_states.len() > NUM_BREAKPOINT_STATES {
+                self.previous_breakpoint_states.pop_front();
+            }
+        }
+        self.console.advance_instructions(1);
+        if self.is_in_breakpoint() {
+            self.on_breakpoint();
+        }
+    }
     pub fn update(&mut self, message: Message) {
         match message {
             // Message::OnEvent(e) => {}
             Message::NewFrame() => {
-                if !self.is_paused {
-                    // Todo: Determine how many per frame
-                    // Also use console.advance_until
-                    for _ in 0..100 {
-                        self.previous_states.push_back(self.console.clone());
-                        if self.previous_states.len() > 100 {
-                            self.previous_states.pop_front();
-                        }
-                        self.console.advance_instructions(1);
-                        if self.console.in_vblank() && self.vblank_breakpoint {
-                            self.is_paused = true;
-                            break;
-                        }
-                        let op = self.console.opcode();
-                        if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
-                            self.is_paused = true;
-                            break;
-                        }
+                // Todo: Determine how many per frame
+                // Also use console.advance_until
+                for _ in 0..100 {
+                    if !self.is_paused {
+                        self.advance();
                     }
                 }
             }
-            Message::Revert => {
+            Message::AdvanceBreakpoint => {
+                self.is_paused = false;
+                self.ignore_breakpoints = false;
+            }
+            Message::PreviousBreakpoint => {
+                if !self.previous_breakpoint_states.is_empty() {
+                    self.console = self.previous_breakpoint_states.pop_back().unwrap();
+                    self.is_paused = true;
+                }
+            }
+            Message::PreviousInstruction => {
                 if self.previous_states.len() > 0 {
-                    self.console = self.previous_states[self.previous_states.len() - 1].clone();
-                    self.previous_states.pop_back();
+                    self.console = self.previous_states.pop_back().unwrap();
+                    self.is_paused = true;
                 }
             }
             Message::AdvanceInstructions(num_instructions) => {
-                self.previous_states.push_back(self.console.clone());
-                self.console.advance_instructions(num_instructions);
+                (0..num_instructions).for_each(|_| self.advance());
             }
             Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
             Message::ChangePaused(p) => {
                 self.is_paused = p;
+                self.ignore_breakpoints = true;
             }
             Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
             Message::AddBreakpointsBySearch => {
@@ -230,10 +268,12 @@ impl Application {
                         .filter_method(FilterMethod::Nearest),
                     row![
                         button("RESET").on_press(Message::Reset),
-                        button("|<").on_press(Message::Revert),
+                        button("|<<").on_press(Message::PreviousBreakpoint),
+                        button("|<").on_press(Message::PreviousInstruction),
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
+                        button(">>|").on_press(Message::AdvanceBreakpoint)
                     ],
                 ])
                 .style(|_| iced::widget::container::background(
@@ -476,7 +516,7 @@ impl Application {
                     .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
             );
         text_table(
-            ["PBR", "PC", "OP", "", "        "]
+            ["PBR", "PC", "OP", "", "              "]
                 .into_iter()
                 .map(|r| (r.to_string(), Some(COLORS[0])))
                 .chain(it.flatten()),

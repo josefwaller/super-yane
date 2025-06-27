@@ -15,7 +15,7 @@ pub trait HasAddressBus {
     fn io(&mut self);
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Processor {
     /// Program Counter
     pub pc: u16,
@@ -41,6 +41,25 @@ pub struct Processor {
     pub dbr: u8,
     /// Stack Pointer
     pub s: u16,
+}
+
+impl Default for Processor {
+    fn default() -> Self {
+        Processor {
+            pc: 0,
+            pbr: 0,
+            a: 0,
+            b: 0,
+            xl: 0,
+            xh: 0,
+            yl: 0,
+            yh: 0,
+            p: StatusRegister::default(),
+            d: 0,
+            dbr: 0,
+            s: 0xFFFF,
+        }
+    }
 }
 
 impl Debug for Processor {
@@ -121,9 +140,6 @@ impl Processor {
     }
     /// Force the XH and YH registers to 0x00 if the status register's xb flags are set
     fn force_registers(&mut self) {
-        if self.p.a_is_8bit() {
-            // self.b = 0;
-        }
         if self.p.xy_is_8bit() {
             self.xh = 0;
             self.yh = 0;
@@ -132,14 +148,14 @@ impl Processor {
     /// Push a single byte to stack
     fn push_u8(&mut self, value: u8, memory: &mut impl HasAddressBus) {
         memory.write(self.s.into(), value);
-        self.s = self.s.wrapping_add(1);
+        self.s = self.s.wrapping_sub(1);
         // Force high to 0 in emulation mode
         if self.p.e {
-            self.s = self.s & 0xFF;
+            self.s = self.s & 0x1FF;
         }
     }
     fn pull_u8(&mut self, memory: &mut impl HasAddressBus) -> u8 {
-        self.s = self.s.wrapping_sub(1);
+        self.s = self.s.wrapping_add(1);
         if self.p.e {
             self.s = self.s & 0x1FF;
         }
@@ -172,7 +188,7 @@ impl Processor {
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
         let (a, c) = Processor::adc(self.a, value, self.p.c);
-        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 == 0;
+        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
         self.p.n = (a & 0x80) != 0;
         self.p.z = a == 0;
         self.p.c = c;
@@ -253,18 +269,18 @@ impl Processor {
     }
     /// ASL 8-bit
     fn asl_8(&mut self, value: u8) -> u8 {
-        let (value, carry) = value.overflowing_shl(1);
-        self.p.c = carry;
-        self.shift_rotate_flags_8(value);
-        value
+        let value = value.rotate_left(1);
+        self.p.c = (value & 0x01) != 0;
+        self.shift_rotate_flags_8(value & 0xFE);
+        value & 0xFE
     }
     /// ASL 16-bit
     fn asl_16(&mut self, low: u8, high: u8) -> (u8, u8) {
-        let (low, cl) = low.overflowing_shl(1);
-        let (high, ch) = high.overflowing_shl(1);
-        self.p.c = ch;
+        let val = (high as u32 * 0x100 + low as u32) << 1;
+        self.p.c = (val & 0x10000) != 0;
+        let (low, high) = ((val & 0xFF) as u8, ((val & 0xFF00) >> 8) as u8);
         self.shift_rotate_flags_16(low, high);
-        (low, high.wrapping_add(cl.into()))
+        (low, high)
     }
     /// Logical Shift Right (LSR) 8-bit
     fn lsr_8(&mut self, value: u8) -> u8 {
@@ -401,14 +417,16 @@ impl Processor {
             }
             self.push_u8(p.to_byte(), memory);
             self.pbr = 0x00;
-            self.pc = addr_8;
+            self.pc = read_u16(memory, u24::from(0, addr_8));
         } else {
             self.push_u8(self.pbr, memory);
             self.push_u16(self.pc.wrapping_add(1), memory);
             self.push_u8(self.p.to_byte(), memory);
             self.pbr = 0x00;
-            self.pc = addr_16;
+            self.pc = read_u16(memory, u24::from(0, addr_16));
         }
+        self.p.d = false;
+        self.p.i = true;
     }
     /// Decrement (DEC) 8-bit
     fn dec_8(&mut self, value: u8) -> u8 {
@@ -592,11 +610,9 @@ impl Processor {
     // Utility offset function for absolute indexed function
     fn a_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
-        let addr = addr.wrapping_add(register as u16);
-        // Extra unused read for X indexed
         memory.io();
         self.pc = self.pc.wrapping_add(2);
-        u24::from(self.dbr, addr)
+        u24::from(self.dbr, addr).wrapping_add(register)
     }
     /// Absolute X Indexed addressing
     fn ax(&mut self, memory: &mut impl HasAddressBus) -> u24 {
@@ -695,8 +711,9 @@ impl Processor {
     }
     /// Stack Reslative Indirect Y Indexed addressing
     fn sriy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr: u24 = self.sr(memory).with_bank(self.dbr).into();
-        addr.wrapping_add(self.y())
+        let addr = self.sr(memory);
+        let addr = read_u16(memory, addr);
+        u24::from(self.dbr, addr).wrapping_add(self.y())
     }
 
     /// Execute the next instruction in the program
@@ -932,7 +949,7 @@ impl Processor {
                 // > All other addressing modes of BIT affect the n, v, and z flags.
                 // > This is the only instruction in the 6502 family where the flags affected depends on the addressing mode.
                 // http://www.6502.org/tutorials/65c816opcodes.html#6.1.2.2
-                read_func!(bit_i_8, bit_i_16, i, a_is_8bit);
+                read_func_i!(bit_i_8, bit_i_16, a_is_8bit);
             }
             BIT_A => read_func!(bit_8, bit_16, a, a_is_8bit),
             BIT_D => read_func!(bit_8, bit_16, d, a_is_8bit),
@@ -1188,7 +1205,9 @@ impl Processor {
             STA_DILY => write_func!(sta_8, sta_16, dily, a_is_8bit),
             STA_SR => write_func!(sta_8, sta_16, sr, a_is_8bit),
             STA_SRIY => write_func!(sta_8, sta_16, sriy, a_is_8bit),
-            // STP => self.stp(),
+            STP => {
+                debug!("STP");
+            }
             STX_A => write_func!(stx_8, stx_16, a, xy_is_8bit),
             STX_D => write_func!(stx_8, stx_16, d, xy_is_8bit),
             STX_DY => write_func!(stx_8, stx_16, dy, xy_is_8bit),
@@ -1222,7 +1241,9 @@ impl Processor {
             TXY => trans_reg!(self.xl, self.xh, self.yl, self.yh, xy_is_16bit),
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
             TYX => trans_reg!(self.yl, self.yh, self.xl, self.xh, xy_is_16bit),
-            //WAI => self.wai(),
+            WAI => {
+                debug!("WAI")
+            }
             WDM => {
                 // Read and ignore next byte
                 read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1)));
