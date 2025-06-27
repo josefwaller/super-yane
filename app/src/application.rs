@@ -18,6 +18,7 @@ use iced::{
     },
     window,
 };
+use itertools::Itertools;
 use log::*;
 
 use iced::widget::text;
@@ -108,6 +109,7 @@ pub enum Message {
     AddBreakpoint(u8),
     AddBreakpointsBySearch,
     RemoveBreakpoint(u8),
+    ToggleVBlankBreakpoint(bool),
     SetOpcodeSearch(String),
     /// Go back 1 state
     Revert,
@@ -124,6 +126,7 @@ pub struct Application {
     breakpoint_opcodes: Vec<u8>,
     previous_states: VecDeque<Console>,
     opcode_search: String,
+    vblank_breakpoint: bool,
 }
 
 impl Default for Application {
@@ -135,6 +138,7 @@ impl Default for Application {
             breakpoint_opcodes: vec![],
             previous_states: VecDeque::new(),
             opcode_search: String::new(),
+            vblank_breakpoint: false,
         }
     }
 }
@@ -146,12 +150,17 @@ impl Application {
             Message::NewFrame() => {
                 if !self.is_paused {
                     // Todo: Determine how many per frame
+                    // Also use console.advance_until
                     for _ in 0..100 {
                         self.previous_states.push_back(self.console.clone());
                         if self.previous_states.len() > 100 {
                             self.previous_states.pop_front();
                         }
                         self.console.advance_instructions(1);
+                        if self.console.in_vblank() && self.vblank_breakpoint {
+                            self.is_paused = true;
+                            break;
+                        }
                         let op = self.console.opcode();
                         if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
                             self.is_paused = true;
@@ -189,6 +198,7 @@ impl Application {
             Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
             Message::Reset => self.console.reset(),
             Message::SetOpcodeSearch(s) => self.opcode_search = s,
+            Message::ToggleVBlankBreakpoint(v) => self.vblank_breakpoint = v,
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
@@ -212,7 +222,7 @@ impl Application {
                 ])
                 .spacing(0)
                 .width(Length::Shrink),
-                column![
+                container(column![
                     Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
                         .height(Length::Fill)
                         .width(Length::Fill)
@@ -225,10 +235,11 @@ impl Application {
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
                     ],
-                ],
-                scrollable(self.next_instructions())
-                    .spacing(10)
-                    .width(Length::Shrink)
+                ])
+                .style(|_| iced::widget::container::background(
+                    iced::Background::Color(Color::BLACK)
+                )),
+                container(self.next_instructions()).width(Length::Shrink)
             ]
             .spacing(10)
             .height(Length::Fill),
@@ -245,24 +256,50 @@ impl Application {
         .into()
     }
     fn breakpoints(&self) -> impl Into<Element<Message>> {
-        scrollable(column![
+        column![
             Element::<Message>::from(
-                text_input("Add breakpoint by search", &self.opcode_search)
-                    .on_input(Message::SetOpcodeSearch)
-                    .on_submit(Message::AddBreakpointsBySearch)
+                text_input("Filter", &self.opcode_search).on_input(Message::SetOpcodeSearch)
             ),
-            Element::<Message>::from(Column::with_children(self.breakpoint_opcodes.iter().map(
-                |op| {
-                    let data = opcode_data(*op, false, false);
-                    checkbox(
-                        format!("{} {} ({:02X})", data.name, data.addr_mode, op),
-                        true,
+            scrollable(Element::<Message>::from(Column::with_children(
+                self.breakpoint_opcodes
+                    .iter()
+                    .map(|op| {
+                        let data = opcode_data(*op, false, false);
+                        checkbox(
+                            format!("{} {} ({:02X})", data.name, data.addr_mode, op),
+                            true,
+                        )
+                        .on_toggle(|_| Message::RemoveBreakpoint(*op))
+                        .into()
+                    })
+                    .chain(
+                        [checkbox("VBlank", self.vblank_breakpoint)
+                            .on_toggle(Message::ToggleVBlankBreakpoint)
+                            .into()]
+                        .into_iter()
                     )
-                    .on_toggle(|_| Message::RemoveBreakpoint(*op))
-                    .into()
-                }
+                    .chain(
+                        (0..=255)
+                            .filter(|op| !self.breakpoint_opcodes.contains(op))
+                            .map(|op| opcode_data(op, false, false))
+                            .filter(|data| self.opcode_search.is_empty()
+                                || data
+                                    .name
+                                    .to_lowercase()
+                                    .contains(&self.opcode_search.to_lowercase()))
+                            .sorted()
+                            .map(|data| {
+                                checkbox(
+                                    format!("{} {} ({:02X})", data.name, data.addr_mode, data.code),
+                                    false,
+                                )
+                                .on_toggle(move |_| Message::AddBreakpoint(data.code))
+                                .into()
+                            })
+                    )
             )))
-        ])
+            .width(Length::Fill)
+        ]
     }
 
     fn cpu_data(&self) -> impl Into<Element<Message>> {

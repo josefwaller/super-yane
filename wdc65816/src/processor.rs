@@ -141,7 +141,7 @@ impl Processor {
     fn pull_u8(&mut self, memory: &mut impl HasAddressBus) -> u8 {
         self.s = self.s.wrapping_sub(1);
         if self.p.e {
-            self.s = self.s & 0xFF;
+            self.s = self.s & 0x1FF;
         }
         memory.read(self.s.into())
     }
@@ -660,8 +660,14 @@ impl Processor {
     }
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr: u24 = self.di(memory).into();
+        let addr = u24::from(
+            0x00,
+            self.d
+                .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16),
+        );
+        let addr = u24::from(self.dbr, read_u16(memory, addr));
         memory.io();
+        self.pc = self.pc.wrapping_add(1);
         addr.wrapping_add(self.y())
     }
     /// Direct Indirect Long addressing

@@ -1,7 +1,8 @@
-use std::{fmt::Display, ops::Add};
+use std::{cmp::Ordering, fmt::Display, ops::Add};
 
 use crate::opcodes::*;
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AddressMode {
     Immediate,
     Implied,
@@ -96,6 +97,28 @@ pub struct OpcodeData {
     pub name: &'static str,
     pub addr_mode: AddressMode,
     pub bytes: u32,
+}
+
+impl PartialEq for OpcodeData {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
+}
+impl Eq for OpcodeData {}
+
+impl PartialOrd for OpcodeData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OpcodeData {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.name.cmp(other.name) {
+            Ordering::Equal => self.addr_mode.cmp(&other.addr_mode),
+            o => o,
+        }
+    }
 }
 
 /// Get the data for a given opcode

@@ -246,4 +246,9 @@ impl Console {
         self.cpu.pc = self.cartridge.read_byte(0xFFFC) as u16
             + 0x100 * self.cartridge.read_byte(0xFFFD) as u16;
     }
+    /// Return [`true`] if the console is currently in VBlank, and [`false`] otherwise
+    pub fn in_vblank(&self) -> bool {
+        // Todo: Actually implement
+        self.ppu.vblank
+    }
 }
