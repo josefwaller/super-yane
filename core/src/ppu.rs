@@ -262,8 +262,10 @@ impl Ppu {
                 // let byte = self.vram[self.backgrounds[0].tilemap_addr + addr];
                 (0..8).for_each(|i| {
                     // self.pixel_buffer.push(tile as u16);
-                    self.pixel_buffer
-                        .push_back(palette[(slice_low >> i) as usize & 0x01])
+                    self.pixel_buffer.push_back({
+                        let v = palette[(slice_low >> i) as usize & 0x01];
+                        if v == 0 { self.cgram[0] } else { v }
+                    })
                 });
             }
             self.screen_buffer[self.dot] = self.pixel_buffer.pop_back().unwrap();
