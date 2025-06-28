@@ -6,3 +6,7 @@ edition = "2024"
 [dependencies]
 wdc65816 = { path = "../wdc65816" }
 log = { workspace = true }
+paste = "1.0.15"
+
+[dev-dependencies]
+insta = "1.43.1"

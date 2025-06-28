@@ -108,10 +108,10 @@ pub enum Message {
     AdvanceInstructions(u32),
     AdvanceBreakpoint,
     AddBreakpoint(u8),
-    AddBreakpointsBySearch,
     RemoveBreakpoint(u8),
     ToggleVBlankBreakpoint(bool),
     SetOpcodeSearch(String),
+    ToggleFutureStates(bool),
     /// Go back 1 state
     PreviousInstruction,
     PreviousBreakpoint,
@@ -131,6 +131,7 @@ pub struct Application {
     opcode_search: String,
     vblank_breakpoint: bool,
     ignore_breakpoints: bool,
+    emulate_future_states: bool,
 }
 
 const NUM_PREVIOUS_STATES: usize = 50;
@@ -139,7 +140,7 @@ const NUM_BREAKPOINT_STATES: usize = 20;
 impl Default for Application {
     fn default() -> Self {
         Application {
-            console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
+            console: Console::with_cartridge(include_bytes!("../../core/tests/roms/CPURET.sfc")),
             vram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
@@ -148,6 +149,7 @@ impl Default for Application {
             opcode_search: String::new(),
             vblank_breakpoint: false,
             ignore_breakpoints: false,
+            emulate_future_states: true,
         }
     }
 }
@@ -156,13 +158,16 @@ impl Application {
     fn on_breakpoint(&mut self) {
         self.is_paused = true;
     }
-    fn is_in_breakpoint(&self) -> bool {
+    fn is_in_breakpoint(&mut self) -> bool {
         if !self.ignore_breakpoints {
             if self.console.in_vblank() && self.vblank_breakpoint {
                 return true;
             }
             let op = self.console.opcode();
             if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
+                return true;
+            }
+            if self.console.cpu().s == 0x01F1 {
                 return true;
             }
         }
@@ -191,7 +196,7 @@ impl Application {
             Message::NewFrame() => {
                 // Todo: Determine how many per frame
                 // Also use console.advance_until
-                for _ in 0..100 {
+                for _ in 0..1000 {
                     if !self.is_paused {
                         self.advance();
                     }
@@ -222,28 +227,18 @@ impl Application {
                 self.ignore_breakpoints = true;
             }
             Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
-            Message::AddBreakpointsBySearch => {
-                (0..=255).for_each(|op| {
-                    if opcode_data(op as u8, false, false)
-                        .name
-                        .contains(&self.opcode_search)
-                    {
-                        self.breakpoint_opcodes.push(op);
-                    }
-                });
-                self.opcode_search = String::new()
-            }
             Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
             Message::Reset => self.console.reset(),
             Message::SetOpcodeSearch(s) => self.opcode_search = s,
             Message::ToggleVBlankBreakpoint(v) => self.vblank_breakpoint = v,
+            Message::ToggleFutureStates(v) => self.emulate_future_states = v,
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
-        let data = self.console.ppu.screen_buffer.map(|color| {
+        let data = self.console.ppu().screen_buffer.map(|color| {
             [
                 ((color & 0x001F) << 3) as u8,
                 ((color & 0x03E0) >> 2) as u8,
@@ -273,18 +268,26 @@ impl Application {
                         button(if self.is_paused { " >" } else { "||" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
-                        button(">>|").on_press(Message::AdvanceBreakpoint)
+                        button(">>|").on_press(Message::AdvanceBreakpoint),
+                        button(">>5000|").on_press(Message::AdvanceInstructions(5000))
                     ],
                 ])
                 .style(|_| iced::widget::container::background(
                     iced::Background::Color(Color::BLACK)
                 )),
-                container(self.next_instructions()).width(Length::Shrink)
+                column![
+                    container(self.next_instructions()).height(Length::Fill),
+                    container(
+                        checkbox("Emulate future states?", self.emulate_future_states)
+                            .on_toggle(Message::ToggleFutureStates)
+                    )
+                ]
+                .width(Length::Shrink)
             ]
             .spacing(10)
             .height(Length::Fill),
             row![
-                ram(&self.console.ppu.vram, self.vram_offset, COLORS[3]).into(),
+                ram(&self.console.ppu().vram, self.vram_offset, COLORS[3]).into(),
                 self.breakpoints().into()
             ]
             .spacing(10)
@@ -343,7 +346,7 @@ impl Application {
     }
 
     fn cpu_data(&self) -> impl Into<Element<Message>> {
-        let cpu = &self.console.cpu;
+        let cpu = self.console.cpu();
         let values = text_table(
             [
                 ("C", cpu.c(), 4),
@@ -397,7 +400,7 @@ impl Application {
     fn ppu_data(&self) -> impl Into<Element<'_, Message>> {
         macro_rules! ppu_val {
             ($label: expr, $field: ident, $format_str: expr) => {
-                table_row!($label, self.console.ppu.$field, $format_str)
+                table_row!($label, self.console.ppu().$field, $format_str)
             };
             ($label: expr, $field: ident) => {
                 ppu_val!($label, $field, "{}")
@@ -409,59 +412,66 @@ impl Application {
             ppu_val!("Brightness", brightness, hex_fmt!()),
             ppu_val!("Background Mode", bg_mode),
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
-            table_row!("VRAM address (byte)", self.console.ppu.vram_addr, "{:06X}"),
+            table_row!(
+                "VRAM address (byte)",
+                self.console.ppu().vram_addr,
+                "{:06X}"
+            ),
             table_row!(
                 "VRAM address (word)",
-                2 * self.console.ppu.vram_addr,
+                2 * self.console.ppu().vram_addr,
                 "{:06X}"
             ),
             table_row!(
                 "VRAM INC mode",
-                self.console.ppu.vram_increment_mode,
+                self.console.ppu().vram_increment_mode,
                 "{:?}"
             ),
         ];
         column![
             text("PPU").color(COLORS[4]),
             vertical_table(values, 150.0, 0),
-            Column::with_children(
-                self.console
-                    .ppu
-                    .backgrounds
-                    .iter()
-                    .enumerate()
-                    .map(|(i, b)| column![
+            Column::with_children(self.console.ppu().backgrounds.iter().enumerate().map(
+                |(i, b)| {
+                    column![
                         text(format!("Background {}", i)).color(COLORS[0]),
                         with_indent(background_table(b)).into()
                     ]
-                    .into())
-            ),
+                    .into()
+                }
+            )),
         ]
     }
     fn dma_data(&self) -> Column<'_, Message> {
-        Column::with_children(self.console.dma_channels.iter().enumerate().map(|(i, d)| {
-            row![
-                text(i.to_string()),
-                vertical_table(
-                    vec![
-                        table_row!("Transfer Pattern", d.transfer_pattern, "{:?}"),
-                        table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
-                        table_row!("Indirect", d.indirect, "{}"),
-                        table_row!("Direction", d.direction, "{:?}"),
-                        table_row!("Destination", d.dest_addr, "{:02X}"),
-                        table_row!(
-                            "Source",
-                            d.src_bank as usize * 0x10000 + d.src_addr as usize,
-                            "{:06X}"
-                        ),
-                        table_row!("Bytes Remaining", d.byte_counter, "{:04X}")
-                    ],
-                    150.0,
-                    0,
-                )
-            ]
-            .into()
-        }))
+        Column::with_children(
+            self.console
+                .dma_channels()
+                .iter()
+                .enumerate()
+                .map(|(i, d)| {
+                    row![
+                        text(i.to_string()),
+                        vertical_table(
+                            vec![
+                                table_row!("Transfer Pattern", d.transfer_pattern, "{:?}"),
+                                table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
+                                table_row!("Indirect", d.indirect, "{}"),
+                                table_row!("Direction", d.direction, "{:?}"),
+                                table_row!("Destination", d.dest_addr, "{:02X}"),
+                                table_row!(
+                                    "Source",
+                                    d.src_bank as usize * 0x10000 + d.src_addr as usize,
+                                    "{:06X}"
+                                ),
+                                table_row!("Bytes Remaining", d.byte_counter, "{:04X}")
+                            ],
+                            150.0,
+                            0,
+                        )
+                    ]
+                    .into()
+                }),
+        )
     }
     /// Represent a console's state (PC, PBR, opcode) as a table row
     fn console_table_row(
@@ -469,17 +479,17 @@ impl Application {
         console: &Console,
         color: Option<Color>,
     ) -> Vec<(String, Option<Color>)> {
-        let addr = console.cpu.pbr as usize * 0x10000 + console.cpu.pc as usize;
-        let opcode = console.cartridge.read_byte(addr);
+        let addr = console.pc();
+        let opcode = console.opcode();
         let data = opcode_data(
             opcode,
-            console.cpu.p.a_is_16bit(),
-            console.cpu.p.xy_is_16bit(),
+            console.cpu().p.a_is_16bit(),
+            console.cpu().p.xy_is_16bit(),
         );
-        let c = &console.cartridge;
+        let c = console;
         [
-            format!("{:02X}", console.cpu.pbr),
-            format!("{:04X}", console.cpu.pc),
+            format!("{:02X}", console.cpu().pbr),
+            format!("{:04X}", console.cpu().pc),
             format!("{:02X}", opcode),
             data.name.to_string(),
             format_address_mode(
@@ -512,7 +522,7 @@ impl Application {
             .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
             .chain(
                 future_iter
-                    .take(10)
+                    .take(if self.emulate_future_states { 10 } else { 0 })
                     .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
             );
         text_table(

@@ -98,7 +98,13 @@ impl Default for Ppu {
 }
 
 impl Ppu {
-    pub fn read_byte(&mut self, addr: usize) -> u8 {
+    pub fn read_byte(&self, addr: usize) -> u8 {
+        match addr {
+            0x4210 => u8::from(self.vblank) << 7,
+            _ => 0,
+        }
+    }
+    pub fn read_byte_mut(&mut self, addr: usize) -> u8 {
         match addr {
             0x4210 => {
                 let v = u8::from(self.vblank) << 7;

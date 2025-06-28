@@ -1,0 +1,1 @@
+These test roms are from Peter Lemon's excellent SNES repository: https://github.com/PeterLemon/SNES.

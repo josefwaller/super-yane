@@ -57,7 +57,7 @@ impl Default for Processor {
             p: StatusRegister::default(),
             d: 0,
             dbr: 0,
-            s: 0xFFFF,
+            s: 0x01FF,
         }
     }
 }
@@ -333,9 +333,10 @@ impl Processor {
     }
 
     /// Branch
-    fn branch(&mut self, memory: &mut impl HasAddressBus, offset: i16) {
+    fn branch(&mut self, memory: &mut impl HasAddressBus, offset: u16) {
         memory.io();
-        self.pc = (self.pc as i16).wrapping_add(offset) as u16;
+        // self.pc = ((self.pc as i32).wrapping_add(offset as i32) % u16::MAX as i32) as u16;
+        self.pc = self.pc.wrapping_add(offset);
     }
 
     /// Bit 8-bit
@@ -400,30 +401,24 @@ impl Processor {
     }
 
     /// Break to a given address
-    fn break_to(
-        &mut self,
-        memory: &mut impl HasAddressBus,
-        addr_16: u16,
-        addr_8: u16,
-        set_b: bool,
-    ) {
+    fn break_to(&mut self, memory: &mut impl HasAddressBus, addr_n: u16, addr_e: u16, set_b: bool) {
         if self.p.e {
             // Since we already incremented the PC by 1 we want to just add 1
             self.push_u16(self.pc.wrapping_add(1), memory);
             // Clone processor register to set B flag
-            let mut p = self.p;
+            let mut p = self.p.clone();
             if set_b {
                 p.xb = true;
             }
             self.push_u8(p.to_byte(), memory);
             self.pbr = 0x00;
-            self.pc = read_u16(memory, u24::from(0, addr_8));
+            self.pc = read_u16(memory, u24::from(0, addr_e));
         } else {
             self.push_u8(self.pbr, memory);
             self.push_u16(self.pc.wrapping_add(1), memory);
             self.push_u8(self.p.to_byte(), memory);
             self.pbr = 0x00;
-            self.pc = read_u16(memory, u24::from(0, addr_16));
+            self.pc = read_u16(memory, u24::from(0, addr_n));
         }
         self.p.d = false;
         self.p.i = true;
@@ -462,6 +457,7 @@ impl Processor {
     fn jmp(&mut self, bank: u8, addr: u16) {
         self.pbr = bank;
         self.pc = addr;
+        debug!("Jumped to {:02X} {:04X}", bank, addr);
     }
     /// Jump and Save Return/Jump to SubRoutine (JSR)
     fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
@@ -784,7 +780,8 @@ impl Processor {
                 let offset = read_u8(memory, u24::from(self.pbr, self.pc)) as i8;
                 self.pc = self.pc.wrapping_add(1);
                 if self.p.$flag == $value {
-                    self.branch(memory, offset as i16);
+                    debug!("{:X} {:X}", offset, (offset as i16) as u16);
+                    self.branch(memory, (offset as i16) as u16);
                 }
             }};
         }
@@ -903,6 +900,7 @@ impl Processor {
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
+        debug!("Executing {:2X}", opcode);
         self.pc = self.pc.wrapping_add(1);
 
         match opcode {
@@ -961,11 +959,11 @@ impl Processor {
             BRA => {
                 let addr = (read_u8(memory, u24::from(self.pbr, self.pc)) as i8) as i16;
                 self.pc = self.pc.wrapping_add(1);
-                self.branch(memory, addr);
+                self.branch(memory, addr as u16);
             }
             BRK => self.break_to(memory, 0xFFE6, 0xFFFE, true),
             BRL => {
-                let addr = (read_u16(memory, u24::from(self.pbr, self.pc)) as i8) as i16;
+                let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 self.pc = self.pc.wrapping_add(2);
                 self.branch(memory, addr);
             }
@@ -1206,7 +1204,7 @@ impl Processor {
             STA_SR => write_func!(sta_8, sta_16, sr, a_is_8bit),
             STA_SRIY => write_func!(sta_8, sta_16, sriy, a_is_8bit),
             STP => {
-                debug!("STP");
+                // self.pc = self.pc.wrapping_sub(1);
             }
             STX_A => write_func!(stx_8, stx_16, a, xy_is_8bit),
             STX_D => write_func!(stx_8, stx_16, d, xy_is_8bit),
