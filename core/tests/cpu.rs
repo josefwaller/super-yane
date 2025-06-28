@@ -38,3 +38,11 @@ rom_test! {msc}
 rom_test! {ora, 11 * 5000}
 rom_test! {psr}
 rom_test! {str, 19 * 50000}
+rom_test! {dec, 5 * 5000}
+rom_test! {inc, 5 * 5000}
+rom_test! {lsr, 4 * 5000}
+rom_test! {rol, 4 * 5000}
+rom_test! {ror, 4 * 5000}
+rom_test! {phl}
+rom_test! {trn, 10 * 5000}
+rom_test! {mov, 2 * 5000}

@@ -169,9 +169,6 @@ impl Application {
             if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
                 return true;
             }
-            if self.console.cpu().s == 0x01F1 {
-                return true;
-            }
         }
         return false;
     }
@@ -365,6 +362,7 @@ impl Application {
         let values = text_table(
             [
                 ("C", cpu.c(), 4),
+                ("C 16:", cpu.c_true(), 4),
                 ("X", cpu.x(), 4),
                 ("Y", cpu.y(), 4),
                 ("PBR", cpu.pbr.into(), 2),

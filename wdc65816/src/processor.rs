@@ -115,10 +115,15 @@ impl Processor {
 
     pub fn c(&self) -> u16 {
         if self.p.a_is_16bit() {
-            self.b as u16 * 0x100 + self.a as u16
+            self.c_true()
         } else {
             self.a as u16
         }
+    }
+    /// The "true" value of the C register, i.e. including the high bit regardless of
+    /// the value of the m bit.
+    pub fn c_true(&self) -> u16 {
+        self.b as u16 * 0x100 + self.a as u16
     }
     /// Get the X register as a u16
     /// If the X register is 8-bit, only the bottom 8-bits will be used
@@ -143,6 +148,9 @@ impl Processor {
         if self.p.xy_is_8bit() {
             self.xh = 0;
             self.yh = 0;
+        }
+        if self.p.e {
+            self.s = (self.s & 0x01FF);
         }
     }
     /// Push a single byte to stack
@@ -284,51 +292,47 @@ impl Processor {
     }
     /// Logical Shift Right (LSR) 8-bit
     fn lsr_8(&mut self, value: u8) -> u8 {
-        let (value, carry) = value.overflowing_shr(1);
-        self.p.c = carry;
+        self.p.c = (value & 0x01) != 0;
+        let value = value >> 1;
         self.shift_rotate_flags_8(value);
         value
     }
     /// Logical Shift Right (LSR) 16-bit
     fn lsr_16(&mut self, low: u8, high: u8) -> (u8, u8) {
-        let (high, ch) = high.overflowing_shr(1);
-        let (low, cl) = low.overflowing_shr(1);
-        self.p.c = cl;
+        self.p.c = (low & 0x01) != 0;
+        let low = (low >> 1) + 0x80 * (high & 0x01);
+        let high = high >> 1;
         self.shift_rotate_flags_16(low, high);
-        (low | (u8::from(ch) * 0x80), high)
+        (low, high)
     }
     /// Rotate Left (ROL) 8-bit
     fn rol_8(&mut self, value: u8) -> u8 {
-        let (value, carry) = value.overflowing_shl(1);
-        let value = value | u8::from(self.p.c);
-        self.p.c = carry;
+        let c = (value & 0x80) != 0;
+        let value = (value << 1) + u8::from(self.p.c);
+        self.p.c = c;
         self.shift_rotate_flags_8(value);
         value
     }
     /// Rotate Left (ROL) 16-bit
     fn rol_16(&mut self, low: u8, high: u8) -> (u8, u8) {
-        let (low, cl) = low.overflowing_shl(1);
-        let (high, ch) = high.overflowing_shl(1);
-        let low = low | u8::from(self.p.c);
-        let high = high | u8::from(cl);
-        self.p.c = ch;
+        // Low then high
+        let low = self.rol_8(low);
+        let high = self.rol_8(high);
         self.shift_rotate_flags_16(low, high);
         (low, high)
     }
     /// Rotate Right (ROR) 8-bit
     fn ror_8(&mut self, value: u8) -> u8 {
-        let (value, c) = value.overflowing_shr(1);
-        let value = value | (0x80 * u8::from(self.p.c));
+        let c = (value & 0x01) != 0;
+        let value = (value >> 1) + 0x80 * u8::from(self.p.c);
         self.p.c = c;
         self.shift_rotate_flags_8(value);
         value
     }
     fn ror_16(&mut self, low: u8, high: u8) -> (u8, u8) {
-        let (low, cl) = low.overflowing_shr(1);
-        let (high, ch) = high.overflowing_shr(1);
-        let low = low | (0x80 * u8::from(ch));
-        let high = high | (0x80 * u8::from(self.p.c));
-        self.p.c = cl;
+        // High then low
+        let high = self.ror_8(high);
+        let low = self.ror_8(low);
         (low, high)
     }
 
@@ -426,7 +430,7 @@ impl Processor {
     /// Decrement (DEC) 8-bit
     fn dec_8(&mut self, value: u8) -> u8 {
         let r = value.wrapping_sub(1);
-        self.p.n = (r & 0x80) == 0;
+        self.p.n = (r & 0x80) != 0;
         self.p.z = r == 0;
         r
     }
@@ -434,7 +438,7 @@ impl Processor {
     fn dec_16(&mut self, low: u8, high: u8) -> (u8, u8) {
         let (low, carry) = low.overflowing_sub(1);
         let high = high.wrapping_sub(carry.into());
-        self.p.n = (high & 0x80) == 0;
+        self.p.n = (high & 0x80) != 0;
         self.p.z = (high == 0) && (low == 0);
         (low, high)
     }
@@ -449,7 +453,7 @@ impl Processor {
     fn inc_16(&mut self, low: u8, high: u8) -> (u8, u8) {
         let (low, carry) = low.overflowing_add(1);
         let high = high.wrapping_add(carry.into());
-        self.p.n = (high & 0x80) == 0;
+        self.p.n = (high & 0x80) != 0;
         self.p.z = (high == 0) && (low == 0);
         (low, high)
     }
@@ -469,9 +473,6 @@ impl Processor {
         self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
         self.force_registers();
         self.pc = self.pull_u16(memory);
-        if !self.p.e {
-            self.pbr = self.pull_u8(memory);
-        }
     }
     /// ReTurn from Subroutine (RTS)
     fn rts(&mut self, memory: &mut impl HasAddressBus) {
@@ -855,6 +856,7 @@ impl Processor {
                 $dh = $sh;
                 self.p.n = $sh > 0x7F;
                 self.p.z = ($sl | $sh) == 0;
+                self.force_registers();
             }};
             // Source Low/High, dest low/high, flag
             ($sl: expr, $sh: expr, $dl: expr, $dh: expr, $flag: ident) => {{
@@ -865,18 +867,21 @@ impl Processor {
                     self.p.n = $sl > 0x7F;
                     self.p.z = $sl == 0;
                 }
+                self.force_registers();
             }};
             // Transfer 2 u8s into a u16
             ($le: expr, $r: ident) => {{
                 self.$r = u16::from_le_bytes($le);
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
+                self.force_registers();
             }};
             // Transfer a u16 into 2 u8s
             ($r: ident, $le: expr) => {{
                 $le = self.$r.to_le_bytes();
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
+                self.force_registers();
             }};
         }
         macro_rules! block_func {
@@ -887,20 +892,19 @@ impl Processor {
                 memory.write(u24::from(dest_bank, self.y()).into(), data);
                 [self.a, self.b] = dec_16(self.a, self.b);
                 [self.xl, self.xh] = $xy_func(self.xl, self.xh);
-                [self.yl, self.yl] = $xy_func(self.yl, self.yh);
+                [self.yl, self.yh] = $xy_func(self.yl, self.yh);
                 memory.io();
                 memory.io();
                 if self.a == 0xFF && self.b == 0xFF {
-                    // Loop
-                    self.pc = self.pc.wrapping_sub(1);
-                } else {
                     // Go to next instruction
                     self.pc = self.pc.wrapping_add(2);
+                } else {
+                    // Loop
+                    self.pc = self.pc.wrapping_sub(1);
                 }
             }};
         }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
-        debug!("Executing {:2X}", opcode);
         self.pc = self.pc.wrapping_add(1);
 
         match opcode {
@@ -1117,9 +1121,7 @@ impl Processor {
             }
             PEI => {
                 // Push low
-                self.push_u8(read_u8(memory, u24::from(self.pbr, self.pc)), memory);
-                // Push high (0)
-                self.push_u8(0x00, memory);
+                self.push_u16(read_u16(memory, u24::from(self.pbr, self.pc)), memory);
                 self.pc = self.pc.wrapping_add(1);
             }
             PER => {
@@ -1219,7 +1221,11 @@ impl Processor {
             TAX => trans_reg!(self.a, self.b, self.xl, self.xh, xy_is_16bit),
             TAY => trans_reg!(self.a, self.b, self.yl, self.yh, xy_is_16bit),
             TCD => trans_reg!([self.a, self.b], d),
-            TCS => trans_reg!([self.a, self.b], s),
+            TCS => {
+                // This one done manually since transferring to S does not set any flags
+                self.s = u16::from_le_bytes([self.a, self.b]);
+                self.force_registers();
+            }
             TDC => trans_reg!(d, [self.a, self.b]),
             TRB_A => read_write_func!(trb_8, trb_16, a, a_is_16bit),
             TRB_D => read_write_func!(trb_8, trb_16, d, a_is_16bit),
@@ -1232,9 +1238,9 @@ impl Processor {
             }
             TXA => trans_reg!(self.xl, self.xh, self.a, self.b, a_is_16bit),
             TXS => {
-                let [low, high];
-                trans_reg!(self.xl, self.xh, low, high);
-                self.s = u16::from_le_bytes([low, high]);
+                // This one dones manually since it does not set any flags
+                self.s = u16::from_le_bytes([self.xl, self.xh]);
+                self.force_registers();
             }
             TXY => trans_reg!(self.xl, self.xh, self.yl, self.yh, xy_is_16bit),
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),

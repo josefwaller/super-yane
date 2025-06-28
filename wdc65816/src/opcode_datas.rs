@@ -26,6 +26,7 @@ pub enum AddressMode {
     DirectIndirectLongY,
     StackRelative,
     StackRelativeIndirectY,
+    BlockMove,
 }
 
 impl Display for AddressMode {
@@ -53,6 +54,7 @@ impl Display for AddressMode {
             DirectIndirectLongY => "[d],y",
             StackRelative => "d,s",
             StackRelativeIndirectY => "(d,s),y",
+            BlockMove => "#,#",
         })
     }
 }
@@ -90,6 +92,7 @@ pub fn format_address_mode(addr_mode: AddressMode, bytes: &[u8], opcode_len: u32
         DirectIndirectLongY => format!("[{}], y", off),
         StackRelative => format!("({}, s)", off),
         StackRelativeIndirectY => format!("({}, s), y", off),
+        BlockMove => format!("{:02X},{:02X}", bytes[0], bytes[1]),
     }
 }
 pub struct OpcodeData {
@@ -991,13 +994,13 @@ pub fn opcode_data(opcode: u8, a: bool, xy: bool) -> OpcodeData {
         MVN => OpcodeData {
             code: 84,
             name: "MVN",
-            addr_mode: AddressMode::Implied,
+            addr_mode: AddressMode::BlockMove,
             bytes: 3,
         },
         MVP => OpcodeData {
             code: 68,
             name: "MVP",
-            addr_mode: AddressMode::Implied,
+            addr_mode: AddressMode::BlockMove,
             bytes: 3,
         },
         NOP => OpcodeData {
