@@ -23,6 +23,7 @@ use log::*;
 
 use iced::widget::text;
 
+use rfd::FileDialog;
 use super_yane::{Console, ppu::Background};
 use wdc65816::{format_address_mode, opcode_data};
 
@@ -118,6 +119,7 @@ pub enum Message {
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
+    LoadRom,
     Reset,
 }
 
@@ -232,6 +234,18 @@ impl Application {
             Message::SetOpcodeSearch(s) => self.opcode_search = s,
             Message::ToggleVBlankBreakpoint(v) => self.vblank_breakpoint = v,
             Message::ToggleFutureStates(v) => self.emulate_future_states = v,
+            Message::LoadRom => match FileDialog::new()
+                .add_filter("Super FamiCon files", &["sfc"])
+                .pick_file()
+            {
+                Some(p) => {
+                    let bytes = std::fs::read(&p)
+                        .expect(format!("Unable to read file '{:?}': ", p).as_str());
+                    self.console = Console::with_cartridge(&bytes);
+                    self.console.reset();
+                }
+                None => {}
+            },
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
@@ -262,6 +276,7 @@ impl Application {
                         .content_fit(iced::ContentFit::Contain)
                         .filter_method(FilterMethod::Nearest),
                     row![
+                        button("OPEN").on_press(Message::LoadRom),
                         button("RESET").on_press(Message::Reset),
                         button("|<<").on_press(Message::PreviousBreakpoint),
                         button("|<").on_press(Message::PreviousInstruction),
