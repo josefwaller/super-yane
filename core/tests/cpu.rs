@@ -29,3 +29,12 @@ rom_test! {bra}
 rom_test! {jmp}
 rom_test! {ldr, 19 * 5000}
 rom_test! {ret}
+rom_test! {and, 12 * 5000}
+rom_test! {asl, 4 * 5000}
+rom_test! { bit, 7 * 5000}
+rom_test! {cmp, 17 * 5000}
+rom_test! {eor, 11 * 5000}
+rom_test! {msc}
+rom_test! {ora, 11 * 5000}
+rom_test! {psr}
+rom_test! {str, 19 * 50000}
