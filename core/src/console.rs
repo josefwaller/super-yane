@@ -52,11 +52,11 @@ pub struct ExternalArchitecture {
 impl ExternalArchitecture {
     // Reads a byte without advancing anything
     // Returns the value, and how many master clocks were needed to access the memory
-    pub fn read_byte(&self, a: usize) -> (u8, u32) {
-        if (0x7E0000..0x800000).contains(&a) {
-            (self.ram[a - 0x7E0000], 12)
-        } else if a < 0x400000 {
-            let a = a & 0xFFFF;
+    pub fn read_byte(&self, addr: usize) -> (u8, u32) {
+        if (0x7E0000..0x800000).contains(&addr) {
+            (self.ram[addr - 0x7E0000], 12)
+        } else if addr < 0x400000 {
+            let a = addr & 0xFFFF;
             if a < 0x2000 {
                 (self.ram[a], 12)
             } else if a < 0x2100 {
@@ -66,10 +66,10 @@ impl ExternalArchitecture {
             } else if a < 0x8000 {
                 (self.ppu.read_byte(a), 12)
             } else {
-                (self.cartridge.read_byte(a), 12)
+                (self.cartridge.read_byte(addr), 12)
             }
         } else {
-            (self.cartridge.read_byte(a), 12)
+            (self.cartridge.read_byte(addr), 12)
         }
     }
     // Writes a byte without advancing anything
@@ -198,7 +198,7 @@ impl HasAddressBus for ExternalArchitecture {
     fn io(&mut self) {}
     fn read(&mut self, address: usize) -> u8 {
         // Todo find a better solution
-        if address == 0x4210 {
+        if address & 0x800000 < 0x400000 && address & 0xFFFF == 0x4210 {
             self.ppu.read_byte_mut(address)
         } else {
             let (v, clks) = self.read_byte(address);
@@ -289,10 +289,7 @@ impl Console {
     }
     /// Reset the console
     pub fn reset(&mut self) {
-        self.cpu.p.e = true;
-        self.cpu.pbr = 0x00;
-        self.cpu.pc = self.rest.cartridge.read_byte(0xFFFC) as u16
-            + 0x100 * self.rest.cartridge.read_byte(0xFFFD) as u16;
+        self.cpu.reset(&mut self.rest);
     }
     /// Return [`true`] if the console is currently in VBlank, and [`false`] otherwise
     pub fn in_vblank(&self) -> bool {

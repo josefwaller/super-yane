@@ -142,7 +142,7 @@ const NUM_BREAKPOINT_STATES: usize = 20;
 impl Default for Application {
     fn default() -> Self {
         Application {
-            console: Console::with_cartridge(include_bytes!("../../core/tests/roms/CPURET.sfc")),
+            console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
             vram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
@@ -158,17 +158,17 @@ impl Default for Application {
 
 impl Application {
     fn on_breakpoint(&mut self) {
-        self.is_paused = true;
+        if !self.ignore_breakpoints {
+            self.is_paused = true;
+        }
     }
     fn is_in_breakpoint(&mut self) -> bool {
-        if !self.ignore_breakpoints {
-            if self.console.in_vblank() && self.vblank_breakpoint {
-                return true;
-            }
-            let op = self.console.opcode();
-            if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
-                return true;
-            }
+        if self.console.in_vblank() && self.vblank_breakpoint {
+            return true;
+        }
+        let op = self.console.opcode();
+        if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
+            return true;
         }
         return false;
     }
@@ -208,6 +208,7 @@ impl Application {
             Message::PreviousBreakpoint => {
                 if !self.previous_breakpoint_states.is_empty() {
                     self.console = self.previous_breakpoint_states.pop_back().unwrap();
+                    self.previous_states.clear();
                     self.is_paused = true;
                 }
             }
@@ -362,7 +363,6 @@ impl Application {
         let values = text_table(
             [
                 ("C", cpu.c(), 4),
-                ("C 16:", cpu.c_true(), 4),
                 ("X", cpu.x(), 4),
                 ("Y", cpu.y(), 4),
                 ("PBR", cpu.pbr.into(), 2),
@@ -370,6 +370,7 @@ impl Application {
                 ("DBR", cpu.dbr.into(), 2),
                 ("D", cpu.d, 2),
                 ("SP", cpu.s, 4),
+                ("C 16:", cpu.c_true(), 4),
                 ("P", cpu.p.to_byte().into(), 2),
             ]
             .into_iter()

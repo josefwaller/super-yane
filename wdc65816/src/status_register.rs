@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct StatusRegister {
     /// Carry flag
     pub c: bool,
@@ -21,6 +21,21 @@ pub struct StatusRegister {
     /// Break flag or Index register width flag
     /// 1 = 8-bit, 0=16-bit
     pub xb: bool,
+}
+impl Default for StatusRegister {
+    fn default() -> Self {
+        StatusRegister {
+            c: false,
+            z: false,
+            n: false,
+            d: false,
+            i: false,
+            m: false,
+            v: false,
+            e: true,
+            xb: false,
+        }
+    }
 }
 
 impl StatusRegister {

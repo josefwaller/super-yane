@@ -150,7 +150,7 @@ impl Processor {
             self.yh = 0;
         }
         if self.p.e {
-            self.s = (self.s & 0x01FF);
+            self.s = self.s & 0x01FF;
         }
     }
     /// Push a single byte to stack
@@ -181,8 +181,7 @@ impl Processor {
         [low, high]
     }
     fn pull_u16(&mut self, memory: &mut impl HasAddressBus) -> u16 {
-        let [low, high] = self.pull_u16_le(memory);
-        low as u16 + 0x100 * high as u16
+        u16::from_le_bytes(self.pull_u16_le(memory))
     }
     /// Push a 16-bit value to the stack
     fn push_u16(&mut self, value: u16, memory: &mut impl HasAddressBus) {
@@ -195,12 +194,15 @@ impl Processor {
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
-        let (a, c) = Processor::adc(self.a, value, self.p.c);
-        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
-        self.p.n = (a & 0x80) != 0;
-        self.p.z = a == 0;
-        self.p.c = c;
-        self.a = a;
+        if self.p.d {
+        } else {
+            let (a, c) = Processor::adc(self.a, value, self.p.c);
+            self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
+            self.p.n = (a & 0x80) != 0;
+            self.p.z = a == 0;
+            self.p.c = c;
+            self.a = a;
+        }
     }
     /// Add with Carry 16-bit
     fn adc_16(&mut self, low: u8, high: u8) {
@@ -461,7 +463,6 @@ impl Processor {
     fn jmp(&mut self, bank: u8, addr: u16) {
         self.pbr = bank;
         self.pc = addr;
-        debug!("Jumped to {:02X} {:04X}", bank, addr);
     }
     /// Jump and Save Return/Jump to SubRoutine (JSR)
     fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
@@ -706,7 +707,7 @@ impl Processor {
         self.pc = self.pc.wrapping_add(1);
         u24::from(0x0, addr)
     }
-    /// Stack Reslative Indirect Y Indexed addressing
+    /// Stack Relative Indirect Y Indexed addressing
     fn sriy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.sr(memory);
         let addr = read_u16(memory, addr);
@@ -720,9 +721,9 @@ impl Processor {
     /// Update the program counter accordingly.
     pub fn step<T: HasAddressBus>(&mut self, memory: &mut T) {
         macro_rules! read_func {
-            ($f_8: ident, $f_16: ident, $addr: ident, $flag: ident) => {{
+            ($f_8: ident, $f_16: ident, $addr: ident, $flag_8: ident) => {{
                 let addr = self.$addr(memory);
-                if self.p.$flag() {
+                if self.p.$flag_8() {
                     self.$f_8(memory.read(addr.into()));
                 } else {
                     self.$f_16(
@@ -781,7 +782,6 @@ impl Processor {
                 let offset = read_u8(memory, u24::from(self.pbr, self.pc)) as i8;
                 self.pc = self.pc.wrapping_add(1);
                 if self.p.$flag == $value {
-                    debug!("{:X} {:X}", offset, (offset as i16) as u16);
                     self.branch(memory, (offset as i16) as u16);
                 }
             }};
@@ -1032,16 +1032,18 @@ impl Processor {
             JMP_A => self.jmp(self.pbr, read_u16(memory, u24::from(self.pbr, self.pc))),
             JMP_AI => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
-                self.jmp(0x00, read_u16(memory, u24::from(0x00, addr)));
+                self.jmp(self.pbr, read_u16(memory, u24::from(0x00, addr)));
             }
             JMP_AIX => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
-                self.jmp(self.pbr, read_u16(memory, u24::from(0x00, addr)));
+                self.jmp(self.pbr, read_u16(memory, u24::from(self.pbr, addr)));
             }
-            JMP_AL => self.jmp(
-                read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2))),
-                read_u16(memory, u24::from(self.pbr, self.pc)),
-            ),
+            JMP_AL => {
+                self.jmp(
+                    read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2))),
+                    read_u16(memory, u24::from(self.pbr, self.pc)),
+                );
+            }
             JMP_AIL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 self.jmp(
@@ -1055,7 +1057,7 @@ impl Processor {
             }
             JSR_AIX => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
-                let addr = read_u16(memory, u24::from(0x00, addr));
+                let addr = read_u16(memory, u24::from(self.pbr, addr));
                 self.jsr(memory, self.pbr, addr);
             }
             JSL => {
@@ -1262,15 +1264,16 @@ impl Processor {
             }
             XCE => {
                 std::mem::swap(&mut self.p.c, &mut self.p.e);
-                if self.p.e {
-                    self.p.xb = true;
-                    self.p.m = true;
-                    self.xh = 0;
-                    self.yh = 0;
-                    self.s = self.s & 0xFF;
-                }
+                self.force_registers();
             }
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
+    }
+    pub fn reset(&mut self, rest: &mut impl HasAddressBus) {
+        self.p.e = true;
+        self.pbr = 0x00;
+        self.pc = u16::from_le_bytes([rest.read(0xFFFC), rest.read(0xFFFD)]);
+        self.dbr = 0;
+        self.d = 0;
     }
 }
