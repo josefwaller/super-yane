@@ -354,6 +354,10 @@ impl Application {
                 },
                 Color::WHITE,
                 color!(0xAAAAAA),
+                match self.ram_display {
+                    RamDisplay::VideoRam => 0,
+                    RamDisplay::WorkRam => 0x7E0000,
+                },
             )
             .into(),
         ])
