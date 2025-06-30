@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, string::FromUtf16Error};
+use std::{collections::VecDeque, fmt::Display, string::FromUtf16Error};
 
 use crate::{cell, widgets::text_table};
 use iced::{
@@ -104,6 +104,25 @@ pub fn vertical_table<'a>(
 }
 
 #[derive(Debug, Clone, PartialEq)]
+enum RamDisplay {
+    WorkRam,
+    VideoRam,
+}
+impl Display for RamDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RamDisplay::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                WorkRam => "WRAM",
+                VideoRam => "VRAM",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
@@ -119,13 +138,14 @@ pub enum Message {
     // OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
+    SetRamDisplay(RamDisplay),
     LoadRom,
     Reset,
 }
 
 pub struct Application {
     console: Console,
-    vram_offset: usize,
+    ram_offset: usize,
     is_paused: bool,
     breakpoint_opcodes: Vec<u8>,
     previous_states: VecDeque<Console>,
@@ -134,6 +154,7 @@ pub struct Application {
     vblank_breakpoint: bool,
     ignore_breakpoints: bool,
     emulate_future_states: bool,
+    ram_display: RamDisplay,
 }
 
 const NUM_PREVIOUS_STATES: usize = 50;
@@ -143,7 +164,7 @@ impl Default for Application {
     fn default() -> Self {
         Application {
             console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
-            vram_offset: 0,
+            ram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
             previous_states: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
@@ -152,6 +173,7 @@ impl Default for Application {
             vblank_breakpoint: false,
             ignore_breakpoints: false,
             emulate_future_states: true,
+            ram_display: RamDisplay::VideoRam,
         }
     }
 }
@@ -221,7 +243,7 @@ impl Application {
             Message::AdvanceInstructions(num_instructions) => {
                 (0..num_instructions).for_each(|_| self.advance());
             }
-            Message::ChangeVramPage(new_vram_page) => self.vram_offset = new_vram_page,
+            Message::ChangeVramPage(new_vram_page) => self.ram_offset = new_vram_page,
             Message::ChangePaused(p) => {
                 self.is_paused = p;
                 self.ignore_breakpoints = true;
@@ -244,6 +266,10 @@ impl Application {
                 }
                 None => {}
             },
+            Message::SetRamDisplay(d) => {
+                self.ram_display = d;
+                self.ram_offset = 0;
+            }
         }
         while self.previous_states.len() > 100 {
             self.previous_states.pop_front();
@@ -299,17 +325,33 @@ impl Application {
             ]
             .spacing(10)
             .height(Length::Fill),
-            row![
-                ram(&self.console.ppu().vram, self.vram_offset, COLORS[3]).into(),
-                self.breakpoints().into()
-            ]
-            .spacing(10)
-            .height(Length::Fixed(200.0)),
+            row![self.ram_view().into(), self.breakpoints().into()]
+                .spacing(10)
+                .height(Length::Fixed(200.0)),
         ]
         .padding(10)
         .align_x(Center)
         .width(Length::Fill)
         .into()
+    }
+    fn ram_view(&self) -> impl Into<Element<Message>> {
+        Column::with_children([
+            pick_list(
+                [RamDisplay::VideoRam, RamDisplay::WorkRam],
+                Some(self.ram_display.clone()),
+                Message::SetRamDisplay,
+            )
+            .into(),
+            ram(
+                match self.ram_display {
+                    RamDisplay::VideoRam => &self.console.ppu().vram,
+                    RamDisplay::WorkRam => self.console.ram(),
+                },
+                self.ram_offset,
+                COLORS[3],
+            )
+            .into(),
+        ])
     }
     fn breakpoints(&self) -> impl Into<Element<Message>> {
         column![
