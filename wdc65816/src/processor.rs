@@ -335,6 +335,7 @@ impl Processor {
         // High then low
         let high = self.ror_8(high);
         let low = self.ror_8(low);
+        self.shift_rotate_flags_16(low, high);
         (low, high)
     }
 
@@ -474,6 +475,9 @@ impl Processor {
         self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
         self.force_registers();
         self.pc = self.pull_u16(memory);
+        if !self.p.e {
+            self.pbr = self.pull_u8(memory);
+        }
     }
     /// ReTurn from Subroutine (RTS)
     fn rts(&mut self, memory: &mut impl HasAddressBus) {
@@ -571,18 +575,22 @@ impl Processor {
     }
     /// Test and Reset Bits (TRB) 8-bit
     fn trb_8(&mut self, value: u8) -> u8 {
+        self.p.z = (self.a & value) == 0;
         !self.a & value
     }
     /// Test and Reset Bits (TRB) 16-bit
     fn trb_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        self.p.z = ((self.a & low) | (self.b & high)) == 0;
         (!self.a & low, !self.b & high)
     }
     /// Test and Set Bits (TSB) 8-bit
     fn tsb_8(&mut self, value: u8) -> u8 {
+        self.p.z = (self.a & value) == 0;
         self.a | value
     }
     /// Test and Set Bits (TSB) 16-bit
     fn tsb_16(&mut self, low: u8, high: u8) -> (u8, u8) {
+        self.p.z = ((self.a & low) | (self.b & high)) == 0;
         (self.a | low, self.b | high)
     }
 
@@ -836,6 +844,8 @@ impl Processor {
             // Always 8-bit
             ($r: expr) => {{
                 $r = self.pull_u8(memory);
+                self.p.n = ($r & 0x80) != 0;
+                self.p.z = $r == 0;
             }};
             // Variable length
             ($rl: ident, $rh: ident, $flag_16: ident) => {{
@@ -843,8 +853,12 @@ impl Processor {
                     let [low, high] = self.pull_u16_le(memory);
                     self.$rl = low;
                     self.$rh = high;
+                    self.p.n = (high & 0x80) != 0;
+                    self.p.z = high == 0 && low == 0;
                 } else {
                     self.$rl = self.pull_u8(memory);
+                    self.p.n = (self.$rl & 0x80) != 0;
+                    self.p.z = self.$rl == 0;
                 }
             }};
         }
@@ -886,8 +900,9 @@ impl Processor {
         }
         macro_rules! block_func {
             ($xy_func: ident) => {{
-                let src_bank = read_u8(memory, u24::from(self.pbr, self.pc));
-                let dest_bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1)));
+                let dest_bank = read_u8(memory, u24::from(self.pbr, self.pc));
+                self.dbr = dest_bank;
+                let src_bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(1)));
                 let data = read_u8(memory, u24::from(src_bank, self.x()));
                 memory.write(u24::from(dest_bank, self.y()).into(), data);
                 [self.a, self.b] = dec_16(self.a, self.b);
@@ -1116,23 +1131,23 @@ impl Processor {
             ORA_SR => read_func!(ora_8, ora_16, sr, a_is_8bit),
             ORA_SRIY => read_func!(ora_8, ora_16, sriy, a_is_8bit),
             PEA => {
-                let addr = u24::from(self.pbr, self.pc);
+                // Push the opcode onto the stack
+                let addr = self.i(memory);
                 let value = read_u16(memory, addr);
                 self.push_u16(value, memory);
-                self.pc = self.pc.wrapping_add(2);
+                self.pc = self.pc.wrapping_add(1);
             }
             PEI => {
-                // Push low
-                self.push_u16(read_u16(memory, u24::from(self.pbr, self.pc)), memory);
-                self.pc = self.pc.wrapping_add(1);
+                let pointer = self.d(memory);
+                self.push_u16(read_u16(memory, pointer), memory);
             }
             PER => {
                 // Add operand to address of next instruction
-                let addr = self
+                let value = self
                     .pc
-                    .wrapping_sub(1)
+                    .wrapping_add(2)
                     .wrapping_add(read_u16(memory, u24::from(self.pbr, self.pc)));
-                self.push_u16(addr, memory);
+                self.push_u16(value, memory);
                 self.pc = self.pc.wrapping_add(2);
             }
             PHA => push_reg!(a, b, a_is_16bit),

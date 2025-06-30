@@ -348,7 +348,12 @@ impl Application {
                     RamDisplay::WorkRam => self.console.ram(),
                 },
                 self.ram_offset,
-                COLORS[3],
+                match self.ram_display {
+                    RamDisplay::VideoRam => COLORS[3],
+                    RamDisplay::WorkRam => COLORS[2],
+                },
+                Color::WHITE,
+                color!(0xAAAAAA),
             )
             .into(),
         ])

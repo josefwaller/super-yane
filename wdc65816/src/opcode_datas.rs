@@ -1102,19 +1102,19 @@ pub fn opcode_data(opcode: u8, a: bool, xy: bool) -> OpcodeData {
         PEA => OpcodeData {
             code: 244,
             name: "PEA",
-            addr_mode: AddressMode::Implied,
+            addr_mode: AddressMode::Immediate,
             bytes: 3,
         },
         PEI => OpcodeData {
             code: 212,
             name: "PEI",
-            addr_mode: AddressMode::Implied,
+            addr_mode: AddressMode::Immediate,
             bytes: 2,
         },
         PER => OpcodeData {
             code: 98,
             name: "PER",
-            addr_mode: AddressMode::Implied,
+            addr_mode: AddressMode::Immediate,
             bytes: 3,
         },
         PHA => OpcodeData {

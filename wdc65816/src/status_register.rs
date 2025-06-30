@@ -84,8 +84,8 @@ impl StatusRegister {
         set_bit!(1, self.z);
         set_bit!(2, self.i);
         set_bit!(3, self.d);
-        set_bit!(4, self.xb);
-        set_bit!(5, self.m);
+        set_bit!(4, self.xb || self.e);
+        set_bit!(5, self.m || self.e);
         set_bit!(6, self.v);
         set_bit!(7, self.n);
 

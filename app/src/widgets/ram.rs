@@ -11,18 +11,24 @@ use iced::{
 
 use crate::application::Message;
 
-pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> impl Into<Element<Message>> {
+pub fn ram(
+    ram: &[u8],
+    offset: usize,
+    label_color: Color,
+    byte_color: Color,
+    zero_color: Color,
+) -> impl Into<Element<Message>> {
     let bytes_per_line = 0x20;
     let num_lines = 30;
     column![
-        row![
-            text(
-                (0..(bytes_per_line))
-                    .into_iter()
-                    .fold("     +".to_string(), |acc, e| format!("{} {:02X}", acc, e))
-            )
-            .color(label_color)
-        ],
+        Row::with_children((0..(bytes_per_line + 1)).into_iter().map(|i| {
+            if i == 0 {
+                text("     +").into()
+            } else {
+                text(format!("{:02X}", i - 1)).color(label_color).into()
+            }
+        }))
+        .spacing(10),
         Scrollable::new(Column::with_children(
             ram.chunks(bytes_per_line).enumerate().map(|(i, line)| {
                 if (i + 1) * 12 < offset || (i + 1) * 12 > offset + num_lines * 12 {
@@ -30,14 +36,18 @@ pub fn ram(ram: &[u8], offset: usize, label_color: Color) -> impl Into<Element<M
                 } else {
                     (
                         i,
-                        row![
-                            text(format!("0x{:04X}", i * bytes_per_line)).color(label_color),
-                            text(
-                                line.iter()
-                                    .fold(String::new(), |acc, e| format!("{} {:02X}", acc, e)),
-                            )
-                            .wrapping(text::Wrapping::None)
-                        ]
+                        Row::with_children(
+                            [text(format!("0x{:04X}", i * bytes_per_line))
+                                .color(label_color)
+                                .into()]
+                            .into_iter()
+                            .chain(line.iter().map(|l| {
+                                text(format!("{:02X}", l))
+                                    .color(if *l == 0 { zero_color } else { byte_color })
+                                    .into()
+                            })),
+                        )
+                        .spacing(10)
                         .height(Length::Fixed(16.0))
                         .into(),
                     )

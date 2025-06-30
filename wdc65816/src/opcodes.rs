@@ -322,7 +322,7 @@ pub const ORA_DILY: u8 = 0x17;
 pub const ORA_SR: u8 = 0x03;
 /// OR Accumulator with Memory SR Indirect Indexed, Y
 pub const ORA_SRIY: u8 = 0x13;
-///  Push Effective Absolute Address
+///  Push Effective Address
 pub const PEA: u8 = 0xF4;
 ///  Push Effective Indirect Address
 pub const PEI: u8 = 0xD4;
