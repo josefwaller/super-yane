@@ -155,6 +155,7 @@ pub struct Application {
     ignore_breakpoints: bool,
     emulate_future_states: bool,
     ram_display: RamDisplay,
+    total_instructions: u32,
 }
 
 const NUM_PREVIOUS_STATES: usize = 50;
@@ -163,7 +164,7 @@ const NUM_BREAKPOINT_STATES: usize = 20;
 impl Default for Application {
     fn default() -> Self {
         Application {
-            console: Console::with_cartridge(include_bytes!("../roms/cputest-basic.sfc")),
+            console: Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc")),
             ram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
@@ -174,6 +175,7 @@ impl Default for Application {
             ignore_breakpoints: false,
             emulate_future_states: true,
             ram_display: RamDisplay::VideoRam,
+            total_instructions: 0,
         }
     }
 }
@@ -207,6 +209,7 @@ impl Application {
             }
         }
         self.console.advance_instructions(1);
+        self.total_instructions += 1;
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
@@ -308,8 +311,14 @@ impl Application {
                             .on_press(Message::ChangePaused(!self.is_paused)),
                         button(">|").on_press(Message::AdvanceInstructions(1)),
                         button(">>|").on_press(Message::AdvanceBreakpoint),
-                        button(">>5000|").on_press(Message::AdvanceInstructions(5000))
+                        button(">>5,000").on_press(Message::AdvanceInstructions(5000)),
+                        button(">>50,000").on_press(Message::AdvanceInstructions(50000)),
                     ],
+                    row![text(format!(
+                        "Total Cycles: {:08}, total instructions: {:08}",
+                        self.console.total_master_clocks(),
+                        self.total_instructions
+                    ))]
                 ])
                 .style(|_| iced::widget::container::background(
                     iced::Background::Color(Color::BLACK)

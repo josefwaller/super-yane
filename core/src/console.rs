@@ -48,6 +48,7 @@ pub struct ExternalArchitecture {
     pub ppu: Ppu,
     /// DMA Channels
     pub dma_channels: [DmaChannel; 8],
+    total_master_clocks: u32,
 }
 impl ExternalArchitecture {
     // Reads a byte without advancing anything
@@ -191,11 +192,14 @@ impl ExternalArchitecture {
         }
     }
     fn advance(&mut self, master_clocks: u32) {
+        self.total_master_clocks += master_clocks;
         self.ppu.advance_master_clock(master_clocks);
     }
 }
 impl HasAddressBus for ExternalArchitecture {
-    fn io(&mut self) {}
+    fn io(&mut self) {
+        // self.advance(6);
+    }
     fn read(&mut self, address: usize) -> u8 {
         // Todo find a better solution
         if address & 0x800000 < 0x400000 && address & 0xFFFF == 0x4210 {
@@ -242,6 +246,7 @@ impl Console {
     rest_field! {ram, [u8; 0x20000]}
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
+    rest_field! {total_master_clocks, u32}
     pub fn cpu(&self) -> &Processor {
         &self.cpu
     }
@@ -256,6 +261,7 @@ impl Console {
                 cartridge: Cartridge::from_data(cartridge_data),
                 ppu: Ppu::default(),
                 dma_channels: core::array::from_fn(|_| DmaChannel::default()),
+                total_master_clocks: 0,
             },
         };
         c.cpu.pc =
