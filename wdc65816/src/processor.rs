@@ -187,28 +187,37 @@ impl Processor {
     fn push_u16(&mut self, value: u16, memory: &mut impl HasAddressBus) {
         self.push_u16_le(value.to_le_bytes(), memory);
     }
-    fn adc(a: u8, b: u8, c: bool) -> (u8, bool) {
-        let (a, c2) = a.overflowing_add(b);
-        let (a, c3) = a.overflowing_add(c.into());
-        (a, c2 || c3)
+    fn adc(a: u8, b: u8, c: bool, d: bool) -> (u8, bool) {
+        if d {
+            let mut low = (a & 0xF) + (b & 0xF) + u8::from(c);
+            if low > 0x09 {
+                low += 0x06;
+            }
+            let mut res = (a as u16 & 0xF0) + (b as u16 & 0xF0) + low as u16;
+            if res > 0x9F {
+                res += 0x60;
+            }
+            ((res & 0xFF) as u8, res > 0x9F)
+        } else {
+            let (a, c2) = a.overflowing_add(b);
+            let (a, c3) = a.overflowing_add(c.into());
+            (a, c2 || c3)
+        }
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
-        if self.p.d {
-        } else {
-            let (a, c) = Processor::adc(self.a, value, self.p.c);
-            self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
-            self.p.n = (a & 0x80) != 0;
-            self.p.z = a == 0;
-            self.p.c = c;
-            self.a = a;
-        }
+        let (a, c) = Processor::adc(self.a, value, self.p.c, self.p.d);
+        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
+        self.p.n = (a & 0x80) != 0;
+        self.p.z = a == 0;
+        self.p.c = c;
+        self.a = a;
     }
     /// Add with Carry 16-bit
     fn adc_16(&mut self, low: u8, high: u8) {
-        let (a, c) = Processor::adc(self.a, low, self.p.c);
+        let (a, c) = Processor::adc(self.a, low, self.p.c, self.p.d);
         self.a = a;
-        let (b, c2) = Processor::adc(self.b, high, c);
+        let (b, c2) = Processor::adc(self.b, high, c, self.p.d);
         self.p.n = (b & 0x80) != 0;
         self.p.z = a == 0 && b == 0;
         self.p.c = c2;
@@ -216,13 +225,55 @@ impl Processor {
         self.a = a;
         self.b = b;
     }
+    fn sbc_d(&self, a: u8, b: u8, c: bool) -> (u8, bool) {
+        // Note carry (c) is inverted here (0 = borrow, 1 = no borrow)
+        let (low, c) = if (a & 0xF) >= (b & 0xF) + u8::from(!c) {
+            ((a & 0x0F) - (b & 0x0F) - u8::from(!c), true)
+        } else {
+            (0xA + (a & 0xF) - (b & 0xF) - u8::from(!c), false)
+        };
+        let (high, c) = if (a & 0xF0) >= (b & 0xF0) + 0x10 * u8::from(!c) {
+            ((a & 0xF0) - (b & 0xF0) - 0x10 * u8::from(!c), true)
+        } else {
+            (
+                0xA0u8
+                    .wrapping_add(a & 0xF0)
+                    .wrapping_sub(b & 0xF0)
+                    .wrapping_sub(0x10 * u8::from(!c)),
+                false,
+            )
+        };
+        ((high & 0xF0) | (low & 0x0F), c)
+    }
     /// SuBtract with Carry (SBC) 8-bit
     fn sbc_8(&mut self, value: u8) {
+        // Temporarily store some values so we can use the binary adc to set some flags even if we are in decimal mode
+        let (a, c, d) = (self.a, self.p.c, self.p.d);
+        self.p.d = false;
         self.adc_8(value ^ 0xFF);
+        if d {
+            (self.a, _) = self.sbc_d(a, value, c);
+            self.p.n = self.a > 0x7F;
+            self.p.z = self.a == 0;
+            self.p.d = true;
+        }
     }
     /// SuBtract with Carry (SBC) 16-bit
     fn sbc_16(&mut self, low: u8, high: u8) {
-        self.adc_16(low ^ 0xFF, high ^ 0xFF)
+        // Store some values for the same reason as in sbc_8
+        let (a, b, c, d) = (self.a, self.b, self.p.c, self.p.d);
+        self.p.d = false;
+        self.adc_16(low ^ 0xFF, high ^ 0xFF);
+        // Overwrite result and some flags if in decimal mode
+        if d {
+            self.p.d = true;
+            let (low, c) = self.sbc_d(a, low, c);
+            let (high, _) = self.sbc_d(b, high, c);
+            self.a = low;
+            self.b = high;
+            self.p.n = self.b > 0x7F;
+            self.p.z = self.a == 0 && self.b == 0;
+        }
     }
     /// Set common flags for AND, EOR, and ORA 8-bit
     fn bitwise_flags_8(&mut self) {
