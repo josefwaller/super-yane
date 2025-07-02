@@ -279,14 +279,26 @@ impl Application {
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
-        let data = self.console.ppu().screen_buffer.map(|color| {
-            [
-                ((color & 0x001F) << 3) as u8,
-                ((color & 0x03E0) >> 2) as u8,
-                ((color & 0x7C00) >> 7) as u8,
-                0xFF,
-            ]
-        });
+        let data: Vec<[u8; 4]> = self
+            .console
+            .ppu()
+            .screen_buffer
+            .iter()
+            .enumerate()
+            .map(|(i, color)| {
+                if i == self.console.ppu().dot {
+                    // Highlight the current pixel
+                    return [0xFF, 0x00, 0x00, 0xFF];
+                } else {
+                    [
+                        ((color & 0x001F) << 3) as u8,
+                        ((color & 0x03E0) >> 2) as u8,
+                        ((color & 0x7C00) >> 7) as u8,
+                        0xFF,
+                    ]
+                }
+            })
+            .collect();
         column![
             row![
                 scrollable(column![

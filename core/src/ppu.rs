@@ -269,7 +269,6 @@ impl Ppu {
                 });
             }
             self.screen_buffer[self.dot] = self.pixel_buffer.pop_back().unwrap();
-            self.screen_buffer[(self.dot + 1) % self.screen_buffer.len()] = 0x01F;
         })
     }
 }
