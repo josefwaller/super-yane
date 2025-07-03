@@ -440,10 +440,11 @@ impl Application {
                 ("PBR", cpu.pbr.into(), 2),
                 ("PC", cpu.pc, 2),
                 ("DBR", cpu.dbr.into(), 2),
-                ("D", cpu.d, 2),
+                ("D", cpu.dr(), 4),
                 ("SP", cpu.s, 4),
                 ("C 16:", cpu.c_true(), 4),
-                ("P", cpu.p.to_byte().into(), 2),
+                ("P", cpu.p.to_byte(true).into(), 2),
+                ("P actual", cpu.p.to_byte(false).into(), 2),
             ]
             .into_iter()
             .map(|(label, value, width)| {

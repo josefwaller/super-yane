@@ -1,3 +1,5 @@
+use log::*;
+
 #[derive(Debug, Clone, Copy)]
 pub struct StatusRegister {
     /// Carry flag
@@ -40,13 +42,13 @@ impl Default for StatusRegister {
 
 impl StatusRegister {
     pub fn a_is_8bit(&self) -> bool {
-        self.m
+        self.m || self.e
     }
     pub fn a_is_16bit(&self) -> bool {
         !self.a_is_8bit()
     }
     pub fn xy_is_8bit(&self) -> bool {
-        self.e || self.xb
+        self.xb || self.e
     }
     pub fn xy_is_16bit(&self) -> bool {
         !self.xy_is_8bit()
@@ -63,14 +65,14 @@ impl StatusRegister {
             i: bit!(2),
             d: bit!(3),
             // The M and X flags are forced to 1 if E is 1
-            xb: bit!(4) || e,
-            m: bit!(5) || e,
+            xb: bit!(4),
+            m: bit!(5),
             v: bit!(6),
             n: bit!(7),
             e,
         }
     }
-    pub fn to_byte(&self) -> u8 {
+    pub fn to_byte(&self, force_bytes: bool) -> u8 {
         let mut value = 0;
 
         macro_rules! set_bit {
@@ -84,8 +86,8 @@ impl StatusRegister {
         set_bit!(1, self.z);
         set_bit!(2, self.i);
         set_bit!(3, self.d);
-        set_bit!(4, self.xb || self.e);
-        set_bit!(5, self.m || self.e);
+        set_bit!(4, self.xb || (force_bytes && self.e));
+        set_bit!(5, self.m || (force_bytes && self.e));
         set_bit!(6, self.v);
         set_bit!(7, self.n);
 

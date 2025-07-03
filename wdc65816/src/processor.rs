@@ -35,8 +35,10 @@ pub struct Processor {
     pub yh: u8,
     /// Status Register
     pub p: StatusRegister,
-    /// Direct Register
-    pub d: u16,
+    /// Direct Register low
+    pub dl: u8,
+    /// Direct Register high
+    pub dh: u8,
     /// Data Bank Register
     pub dbr: u8,
     /// Stack Pointer
@@ -55,7 +57,8 @@ impl Default for Processor {
             yl: 0,
             yh: 0,
             p: StatusRegister::default(),
-            d: 0,
+            dl: 0,
+            dh: 0,
             dbr: 0,
             s: 0x01FF,
         }
@@ -66,13 +69,15 @@ impl Debug for Processor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "PC={:2X},C={:2X},X={:2X},Y={:2X},P={:X},D={:2X},DBR={:X},S={:2X}",
+            "PC={:2X},C={:04X},X={:04X},Y={:04X},P={:X},P.e={},D={:02X}{:02X},DBR={:X},S={:2X}",
             self.pc,
             self.c(),
             self.x(),
             self.y(),
-            self.p.to_byte(),
-            self.d,
+            self.p.to_byte(false),
+            u8::from(self.p.e),
+            self.dl,
+            self.dh,
             self.dbr,
             self.s
         )
@@ -142,6 +147,11 @@ impl Processor {
         } else {
             self.yl as u16
         }
+    }
+    // Todo rename
+    /// D Register
+    pub fn dr(&self) -> u16 {
+        self.dh as u16 * 0x100 + self.dl as u16
     }
     /// Force the XH and YH registers to 0x00 if the status register's xb flags are set
     fn force_registers(&mut self) {
@@ -616,12 +626,12 @@ impl Processor {
     }
     /// REset Processor status bits (REP)
     fn rep(&mut self, value: u8) {
-        self.p = StatusRegister::from_byte(!value & self.p.to_byte(), self.p.e);
+        self.p = StatusRegister::from_byte(!value & self.p.to_byte(false), self.p.e);
         self.force_registers();
     }
     /// SEt Processor status bits (SEP)
     fn sep(&mut self, value: u8) {
-        self.p = StatusRegister::from_byte(value | self.p.to_byte(), self.p.e);
+        self.p = StatusRegister::from_byte(value | self.p.to_byte(false), self.p.e);
         self.force_registers();
     }
     /// Test and Reset Bits (TRB) 8-bit
@@ -693,17 +703,24 @@ impl Processor {
     fn d(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let offset = read_u8(memory, u24::from(self.pbr, self.pc));
         // Extra cycle if direct register low is not 0
-        if self.d & 0xFF != 0 {
+        if self.dl != 0 {
             memory.io();
         }
         self.pc = self.pc.wrapping_add(1);
-        u24::from(0x00, self.d.wrapping_add(offset as u16))
+        u24::from(0x00, self.dr().wrapping_add(offset as u16))
     }
     // Direct addressing with offset
     fn d_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
-        let addr = self.d(memory);
         memory.io();
-        addr.wrapping_add(register).with_bank(0x00)
+        if self.p.e && self.dl == 0 {
+            let offset = read_u8(memory, u24::from(self.pbr, self.pc));
+            self.pc = self.pc.wrapping_add(1);
+            u24::from_le_bytes([offset.wrapping_add(self.x() as u8), self.dh, 0x00])
+        } else {
+            // TODO: Maybe: This should always have bank 0, so when loading two banks it should wrap around the page boundary
+            let addr = self.d(memory);
+            addr.wrapping_add(register).with_bank(0x00)
+        }
     }
     /// Direct X Indexed addressing
     fn dx(&mut self, memory: &mut impl HasAddressBus) -> u24 {
@@ -715,38 +732,72 @@ impl Processor {
     }
     /// Direct Indirect addressing
     fn di(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr = self.d(memory);
-        read_u24(memory, addr)
+        let offset = read_u8(memory, u24::from(self.pbr, self.pc));
+        self.pc = self.pc.wrapping_add(1);
+        if self.p.e && self.dl == 0 {
+            let low = read_u8(memory, u24::from_le_bytes([offset, self.dh, 0x00]));
+            let high = read_u8(
+                memory,
+                u24::from_le_bytes([offset.wrapping_add(1), self.dh, 0x00]),
+            );
+            u24::from(self.dbr, u16::from_le_bytes([low, high]))
+        } else {
+            let addr = read_u16(
+                memory,
+                u24::from(0x00, self.dr().wrapping_add(offset as u16)),
+            );
+            u24::from(self.dbr, addr)
+        }
     }
     /// Direct Indirect X Indexed addressing
     fn dix(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr = u24::from(
-            0x00,
-            self.d
-                .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16)
-                .wrapping_add(self.x()),
-        );
-        let addr = read_u16(memory, addr);
-        memory.io();
+        let offset = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc = self.pc.wrapping_add(1);
-        u24::from(self.dbr, addr)
+        memory.io();
+        if self.p.e {
+            if self.dl == 0 {
+                let addr = offset.wrapping_add(self.x() as u8);
+                u24::from(
+                    self.dbr,
+                    u16::from_le_bytes([
+                        read_u8(memory, u24::from_le_bytes([addr, self.dh, 0x00])),
+                        read_u8(
+                            memory,
+                            u24::from_le_bytes([addr.wrapping_add(1), self.dh, 0x00]),
+                        ),
+                    ]),
+                )
+            } else {
+                let [al, ah] = (offset as u16)
+                    .wrapping_add(self.x())
+                    .wrapping_add(self.dr())
+                    .to_le_bytes();
+                let low = read_u8(memory, u24::from_le_bytes([al, ah, 0x00]));
+                let high = read_u8(memory, u24::from_le_bytes([al.wrapping_add(1), ah, 0x00]));
+                u24::from(self.dbr, u16::from_le_bytes([low, high]))
+            }
+        } else {
+            let addr = u24::from(
+                0x00,
+                self.dr()
+                    .wrapping_add(self.x() as u16)
+                    .wrapping_add(offset as u16),
+            );
+            let low = read_u8(memory, addr);
+            let high = read_u8(memory, addr.wrapping_add(1u32).with_bank(0x00));
+            u24::from_le_bytes([low, high, self.dbr])
+        }
     }
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        let addr = u24::from(
-            0x00,
-            self.d
-                .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16),
-        );
-        let addr = u24::from(self.dbr, read_u16(memory, addr));
+        let addr = self.di(memory);
         memory.io();
-        self.pc = self.pc.wrapping_add(1);
         addr.wrapping_add(self.y())
     }
     /// Direct Indirect Long addressing
     fn dil(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self
-            .d
+            .dr()
             .wrapping_add(read_u8(memory, u24::from(self.pbr, self.pc)) as u16);
         self.pc = self.pc.wrapping_add(1);
         // Read the value of the pointer from memory
@@ -1340,6 +1391,7 @@ impl Processor {
         self.pbr = 0x00;
         self.pc = u16::from_le_bytes([rest.read(0xFFFC), rest.read(0xFFFD)]);
         self.dbr = 0;
-        self.d = 0;
+        self.dl = 0;
+        self.dh = 0;
     }
 }

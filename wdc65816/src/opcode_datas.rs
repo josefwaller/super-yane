@@ -807,7 +807,7 @@ pub fn opcode_data(opcode: u8, a: bool, xy: bool) -> OpcodeData {
         },
         JSL => OpcodeData {
             code: 34,
-            name: "JSR",
+            name: "JSL",
             addr_mode: AddressMode::AbsoluteLong,
             bytes: 4,
         },
