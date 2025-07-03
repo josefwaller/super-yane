@@ -160,42 +160,83 @@ impl Processor {
             self.yh = 0;
         }
         if self.p.e {
-            self.s = self.s & 0x01FF;
+            self.s = 0x100 + (self.s & 0xFF);
         }
+    }
+
+    /// Push some bytes to the stack
+    /// This is (will be) the core of all stack pushing functions
+    fn push_bytes(&mut self, bytes: &[u8], is_old: bool, memory: &mut impl HasAddressBus) {
+        if self.p.e && !is_old {
+            // Push all the bytes onto the stack
+            for b in bytes {
+                memory.write(self.s.into(), *b);
+                self.s = self.s.wrapping_sub(1);
+            }
+            self.s = 0x100 | (self.s & 0xFF);
+        } else {
+            for b in bytes {
+                memory.write(self.s.into(), *b);
+                self.s = self.s.wrapping_sub(1);
+                if self.p.e {
+                    self.s = 0x100 + (self.s & 0xFF);
+                }
+            }
+        }
+    }
+    fn pull_bytes(
+        &mut self,
+        num_bytes: usize,
+        is_old: bool,
+        memory: &mut impl HasAddressBus,
+    ) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(num_bytes);
+        if self.p.e && !is_old {
+            // Pull all the bytes from the stack
+            for _ in 0..num_bytes {
+                self.s = self.s.wrapping_add(1);
+                bytes.push(memory.read(self.s.into()));
+            }
+            self.s = 0x100 | (self.s & 0xFF);
+        } else {
+            for _ in 0..num_bytes {
+                self.s = self.s.wrapping_add(1);
+                if self.p.e {
+                    self.s = 0x100 + (self.s & 0xFF);
+                }
+                bytes.push(memory.read(self.s.into()));
+            }
+        }
+        bytes
     }
     /// Push a single byte to stack
-    fn push_u8(&mut self, value: u8, memory: &mut impl HasAddressBus) {
-        memory.write(self.s.into(), value);
-        self.s = self.s.wrapping_sub(1);
-        // Force high to 0 in emulation mode
-        if self.p.e {
-            self.s = self.s & 0x1FF;
-        }
+    /// `is_old` is true if the opcode also existed on the 6502, and false otherwise
+    fn push_u8(&mut self, value: u8, is_old: bool, memory: &mut impl HasAddressBus) {
+        self.push_bytes(&[value], is_old, memory);
     }
-    fn pull_u8(&mut self, memory: &mut impl HasAddressBus) -> u8 {
-        self.s = self.s.wrapping_add(1);
-        if self.p.e {
-            self.s = self.s & 0x1FF;
-        }
-        memory.read(self.s.into())
+    fn pull_u8(&mut self, is_old: bool, memory: &mut impl HasAddressBus) -> u8 {
+        self.pull_bytes(1, is_old, memory)[0]
     }
     // Push a u16 as two bytes in LE format
-    fn push_u16_le(&mut self, [low, high]: [u8; 2], memory: &mut impl HasAddressBus) {
-        self.push_u8(high, memory);
-        self.push_u8(low, memory);
+    fn push_u16_le(&mut self, [low, high]: [u8; 2], is_old: bool, memory: &mut impl HasAddressBus) {
+        // Switch the order
+        self.push_bytes(&[high, low], is_old, memory);
     }
     // Pull a u16 as two bytes in LE format
-    fn pull_u16_le(&mut self, memory: &mut impl HasAddressBus) -> [u8; 2] {
-        let low = self.pull_u8(memory);
-        let high = self.pull_u8(memory);
-        [low, high]
+    fn pull_u16_le(&mut self, is_old: bool, memory: &mut impl HasAddressBus) -> [u8; 2] {
+        let v = self.pull_bytes(2, is_old, memory);
+        [v[0], v[1]]
     }
-    fn pull_u16(&mut self, memory: &mut impl HasAddressBus) -> u16 {
-        u16::from_le_bytes(self.pull_u16_le(memory))
+    fn pull_u16(&mut self, is_old: bool, memory: &mut impl HasAddressBus) -> u16 {
+        u16::from_le_bytes(self.pull_u16_le(is_old, memory))
     }
     /// Push a 16-bit value to the stack
-    fn push_u16(&mut self, value: u16, memory: &mut impl HasAddressBus) {
-        self.push_u16_le(value.to_le_bytes(), memory);
+    fn push_u16(&mut self, value: u16, is_old: bool, memory: &mut impl HasAddressBus) {
+        self.push_u16_le(value.to_le_bytes(), is_old, memory);
+    }
+    /// Push a u24 in LE format to the stack
+    fn push_u24_le(&mut self, value: [u8; 3], is_old: bool, memory: &mut impl HasAddressBus) {
+        self.push_bytes(&value, is_old, memory);
     }
     fn adc(a: u8, b: u8, c: bool, d: bool) -> (u8, bool) {
         if d {
@@ -472,19 +513,19 @@ impl Processor {
     fn break_to(&mut self, memory: &mut impl HasAddressBus, addr_n: u16, addr_e: u16, set_b: bool) {
         if self.p.e {
             // Since we already incremented the PC by 1 we want to just add 1
-            self.push_u16(self.pc.wrapping_add(1), memory);
+            self.push_u16(self.pc.wrapping_add(1), true, memory);
             // Clone processor register to set B flag
             let mut p = self.p.clone();
             if set_b {
                 p.xb = true;
             }
-            self.push_u8(p.to_byte(), memory);
+            self.push_u8(p.to_byte(true), true, memory);
             self.pbr = 0x00;
             self.pc = read_u16(memory, u24::from(0, addr_e));
         } else {
-            self.push_u8(self.pbr, memory);
-            self.push_u16(self.pc.wrapping_add(1), memory);
-            self.push_u8(self.p.to_byte(), memory);
+            self.push_u8(self.pbr, false, memory);
+            self.push_u16(self.pc.wrapping_add(1), false, memory);
+            self.push_u8(self.p.to_byte(true), false, memory);
             self.pbr = 0x00;
             self.pc = read_u16(memory, u24::from(0, addr_n));
         }
@@ -527,27 +568,27 @@ impl Processor {
         self.pc = addr;
     }
     /// Jump and Save Return/Jump to SubRoutine (JSR)
-    fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
-        self.push_u16(self.pc.wrapping_add(1), memory);
+    fn jsr(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16, is_old: bool) {
+        self.push_u16(self.pc.wrapping_add(1), is_old, memory);
         self.jmp(bank, addr)
     }
     /// Return from interrupt
     fn rti(&mut self, memory: &mut impl HasAddressBus) {
-        self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+        self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
         self.force_registers();
-        self.pc = self.pull_u16(memory);
+        self.pc = self.pull_u16(self.p.e, memory);
         if !self.p.e {
-            self.pbr = self.pull_u8(memory);
+            self.pbr = self.pull_u8(false, memory);
         }
     }
     /// ReTurn from Subroutine (RTS)
     fn rts(&mut self, memory: &mut impl HasAddressBus) {
-        self.pc = self.pull_u16(memory).wrapping_add(1);
+        self.pc = self.pull_u16(self.p.e, memory).wrapping_add(1);
     }
     /// ReTurn from subroutine Long (RTL)
     fn rtl(&mut self, memory: &mut impl HasAddressBus) {
-        self.pc = self.pull_u16(memory).wrapping_add(1);
-        self.pbr = self.pull_u8(memory);
+        self.pc = self.pull_u16(false, memory).wrapping_add(1);
+        self.pbr = self.pull_u8(false, memory);
     }
     /// Set the load flags after loading an 8-bit value
     fn set_load_flags_8(&mut self, value: u8) {
@@ -930,35 +971,35 @@ impl Processor {
         }
         macro_rules! push_reg {
             // Always 8-bit
-            ($r: expr) => {{
-                self.push_u8($r, memory);
+            ($r: expr, $wrap: expr) => {{
+                self.push_u8($r, $wrap, memory);
             }};
             // Variable length
-            ($rl: ident, $rh: ident, $flag_16: ident) => {{
+            ($rl: ident, $rh: ident, $wrap: expr, $flag_16: ident) => {{
                 if self.p.$flag_16() {
-                    self.push_u16_le([self.$rl, self.$rh], memory);
+                    self.push_u16_le([self.$rl, self.$rh], $wrap, memory);
                 } else {
-                    self.push_u8(self.$rl, memory);
+                    self.push_u8(self.$rl, $wrap, memory);
                 }
             }};
         }
         macro_rules! pull_reg {
             // Always 8-bit
-            ($r: expr) => {{
-                $r = self.pull_u8(memory);
+            ($r: expr, $wrap: expr) => {{
+                $r = self.pull_u8($wrap, memory);
                 self.p.n = ($r & 0x80) != 0;
                 self.p.z = $r == 0;
             }};
             // Variable length
-            ($rl: ident, $rh: ident, $flag_16: ident) => {{
+            ($rl: ident, $rh: ident, $wrap: expr, $flag_16: ident) => {{
                 if self.p.$flag_16() {
-                    let [low, high] = self.pull_u16_le(memory);
+                    let [low, high] = self.pull_u16_le($wrap, memory);
                     self.$rl = low;
                     self.$rh = high;
                     self.p.n = (high & 0x80) != 0;
                     self.p.z = high == 0 && low == 0;
                 } else {
-                    self.$rl = self.pull_u8(memory);
+                    self.$rl = self.pull_u8($wrap, memory);
                     self.p.n = (self.$rl & 0x80) != 0;
                     self.p.z = self.$rl == 0;
                 }
@@ -1170,16 +1211,20 @@ impl Processor {
             }
             JSR_A => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
-                self.jsr(memory, self.pbr, addr);
+                self.jsr(memory, self.pbr, addr, true);
             }
             JSR_AIX => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
                 let addr = read_u16(memory, u24::from(self.pbr, addr));
-                self.jsr(memory, self.pbr, addr);
+                self.jsr(memory, self.pbr, addr, false);
             }
             JSL => {
-                self.push_u8(self.pbr, memory);
-                self.push_u16(self.pc.wrapping_add(2), memory);
+                let pc = self.pc.wrapping_add(2);
+                self.push_u24_le(
+                    [self.pbr, (pc >> 8) as u8, (pc & 0xFF) as u8],
+                    false,
+                    memory,
+                );
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
                 self.jmp(bank, addr);
@@ -1236,12 +1281,12 @@ impl Processor {
                 // Push the opcode onto the stack
                 let addr = self.i(memory);
                 let value = read_u16(memory, addr);
-                self.push_u16(value, memory);
+                self.push_u16(value, false, memory);
                 self.pc = self.pc.wrapping_add(1);
             }
             PEI => {
                 let pointer = self.d(memory);
-                self.push_u16(read_u16(memory, pointer), memory);
+                self.push_u16(read_u16(memory, pointer), false, memory);
             }
             PER => {
                 // Add operand to address of next instruction
@@ -1249,34 +1294,34 @@ impl Processor {
                     .pc
                     .wrapping_add(2)
                     .wrapping_add(read_u16(memory, u24::from(self.pbr, self.pc)));
-                self.push_u16(value, memory);
+                self.push_u16(value, false, memory);
                 self.pc = self.pc.wrapping_add(2);
             }
-            PHA => push_reg!(a, b, a_is_16bit),
-            PHB => push_reg!(self.dbr),
+            PHA => push_reg!(a, b, self.p.e, a_is_16bit),
+            PHB => push_reg!(self.dbr, self.p.e),
             // Custom for 16-bit value
-            PHD => self.push_u16(self.d, memory),
-            PHK => push_reg!(self.pbr),
-            PHP => push_reg!(self.p.to_byte()),
-            PHX => push_reg!(xl, xh, xy_is_16bit),
-            PHY => push_reg!(yl, yh, xy_is_16bit),
-            PLA => pull_reg!(a, b, a_is_16bit),
+            PHD => self.push_u16(self.dr(), false, memory),
+            PHK => push_reg!(self.pbr, self.p.e),
+            PHP => push_reg!(self.p.to_byte(true), self.p.e),
+            PHX => push_reg!(xl, xh, self.p.e, xy_is_16bit),
+            PHY => push_reg!(yl, yh, self.p.e, xy_is_16bit),
+            PLA => pull_reg!(a, b, self.p.e, a_is_16bit),
             PLB => {
-                pull_reg!(self.dbr);
+                pull_reg!(self.dbr, false);
                 self.p.n = self.dbr > 0x7F;
                 self.p.z = self.dbr == 0;
             }
             PLD => {
-                self.d = self.pull_u16(memory);
-                self.p.n = self.d > 0x7FFF;
-                self.p.z = self.d == 0;
+                [self.dl, self.dh] = self.pull_u16(false, memory).to_le_bytes();
+                self.p.n = self.dr() > 0x7FFF;
+                self.p.z = self.dr() == 0;
             }
             PLP => {
-                self.p = StatusRegister::from_byte(self.pull_u8(memory), self.p.e);
+                self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
                 self.force_registers();
             }
-            PLX => pull_reg!(xl, xh, xy_is_16bit),
-            PLY => pull_reg!(yl, yh, xy_is_16bit),
+            PLX => pull_reg!(xl, xh, self.p.e, xy_is_16bit),
+            PLY => pull_reg!(yl, yh, self.p.e, xy_is_16bit),
             REP_I => read_func_8!(rep, i),
             ROL_ACC => acc_func!(rol_8, rol_16),
             ROL_A => read_write_func!(rol_8, rol_16, a, a_is_8bit),
@@ -1339,13 +1384,13 @@ impl Processor {
             STZ_DX => write_func!(stz_8, stz_16, dx, a_is_8bit),
             TAX => trans_reg!(self.a, self.b, self.xl, self.xh, xy_is_16bit),
             TAY => trans_reg!(self.a, self.b, self.yl, self.yh, xy_is_16bit),
-            TCD => trans_reg!([self.a, self.b], d),
+            TCD => trans_reg!(self.a, self.b, self.dl, self.dh),
             TCS => {
                 // This one done manually since transferring to S does not set any flags
                 self.s = u16::from_le_bytes([self.a, self.b]);
                 self.force_registers();
             }
-            TDC => trans_reg!(d, [self.a, self.b]),
+            TDC => trans_reg!(self.dl, self.dh, self.a, self.b),
             TRB_A => read_write_func!(trb_8, trb_16, a, a_is_16bit),
             TRB_D => read_write_func!(trb_8, trb_16, d, a_is_16bit),
             TSB_A => read_write_func!(tsb_8, tsb_16, a, a_is_16bit),

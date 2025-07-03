@@ -25,6 +25,11 @@ impl u24 {
             value: self.value.wrapping_add(rhs.into()) % OVERFLOW,
         }
     }
+    pub fn from_le_bytes(bytes: [u8; 3]) -> u24 {
+        u24 {
+            value: (bytes[0] as u32) | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16),
+        }
+    }
 }
 impl Add<u32> for u24 {
     type Output = u24;
