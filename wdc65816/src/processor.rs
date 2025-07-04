@@ -5,6 +5,7 @@ use log::*;
 
 use std::default::Default;
 use std::fmt::Debug;
+use std::mem;
 
 pub trait HasAddressBus {
     /// Read a single byte from memory
@@ -439,8 +440,12 @@ impl Processor {
     /// Branch
     fn branch(&mut self, memory: &mut impl HasAddressBus, offset: u16) {
         memory.io();
-        // self.pc = ((self.pc as i32).wrapping_add(offset as i32) % u16::MAX as i32) as u16;
-        self.pc = self.pc.wrapping_add(offset);
+        let pc = self.pc.wrapping_add(offset);
+        // Extra cycle if branching across page boundaries in emulation mode
+        if self.p.e && pc & 0xFF00 != self.pc & 0xFF00 {
+            memory.io();
+        }
+        self.pc = pc;
     }
 
     /// Bit 8-bit
@@ -528,6 +533,8 @@ impl Processor {
     }
     /// Return from interrupt
     fn rti(&mut self, memory: &mut impl HasAddressBus) {
+        memory.io();
+        memory.io();
         self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
         self.force_registers();
         self.pc = self.pull_u16(self.p.e, memory);
@@ -577,10 +584,14 @@ impl Processor {
     }
     /// ReTurn from Subroutine (RTS)
     fn rts(&mut self, memory: &mut impl HasAddressBus) {
+        memory.io();
+        memory.io();
         self.pc = self.pull_u16(self.p.e, memory).wrapping_add(1);
     }
     /// ReTurn from subroutine Long (RTL)
     fn rtl(&mut self, memory: &mut impl HasAddressBus) {
+        memory.io();
+        memory.io();
         let bytes = self.pull_bytes(3, false, memory);
         // Low, then high, then bank
         self.pc = u16::from_le_bytes([bytes[0], bytes[1]]).wrapping_add(1);
@@ -757,6 +768,7 @@ impl Processor {
     fn d_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
         memory.io();
         if self.p.e && self.dl == 0 {
+            memory.io();
             let offset = read_u8(memory, u24::from(self.pbr, self.pc));
             self.pc = self.pc.wrapping_add(1);
             u24::from_le_bytes([offset.wrapping_add(register as u8), self.dh, 0x00])
@@ -865,6 +877,7 @@ impl Processor {
     fn sriy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.sr(memory);
         let addr = read_u16(memory, addr);
+        memory.io();
         u24::from(self.dbr, addr).wrapping_add(self.y())
     }
 
@@ -918,6 +931,7 @@ impl Processor {
         macro_rules! read_write_func {
             ($func_8: ident, $func_16: ident, $get_addr: ident, $flag: ident) => {{
                 let address = self.$get_addr(memory);
+                memory.io();
                 if self.p.a_is_8bit() {
                     let value = self.$func_8(memory.read(address.into()));
                     memory.write(address.into(), value);
@@ -948,6 +962,7 @@ impl Processor {
         }
         macro_rules! reg_func {
             ($rl: ident, $rh: ident, $is_16: ident, $f_8: ident, $f_16: ident) => {{
+                memory.io();
                 if self.p.$is_16() {
                     let (low, high) = self.$f_16(self.$rl, self.$rh);
                     self.$rl = low;
@@ -975,10 +990,12 @@ impl Processor {
         macro_rules! push_reg {
             // Always 8-bit
             ($r: expr, $wrap: expr) => {{
+                memory.io();
                 self.push_u8($r, $wrap, memory);
             }};
             // Variable length
             ($rl: ident, $rh: ident, $wrap: expr, $flag_16: ident) => {{
+                memory.io();
                 if self.p.$flag_16() {
                     self.push_u16_le([self.$rl, self.$rh], $wrap, memory);
                 } else {
@@ -989,12 +1006,16 @@ impl Processor {
         macro_rules! pull_reg {
             // Always 8-bit
             ($r: expr, $wrap: expr) => {{
+                memory.io();
+                memory.io();
                 $r = self.pull_u8($wrap, memory);
                 self.p.n = ($r & 0x80) != 0;
                 self.p.z = $r == 0;
             }};
             // Variable length
             ($rl: ident, $rh: ident, $wrap: expr, $flag_16: ident) => {{
+                memory.io();
+                memory.io();
                 if self.p.$flag_16() {
                     let [low, high] = self.pull_u16_le($wrap, memory);
                     self.$rl = low;
@@ -1197,6 +1218,7 @@ impl Processor {
             }
             JMP_AIX => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
+                memory.io();
                 self.jmp(self.pbr, read_u16(memory, u24::from(self.pbr, addr)));
             }
             JMP_AL => {
@@ -1204,6 +1226,7 @@ impl Processor {
                     read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2))),
                     read_u16(memory, u24::from(self.pbr, self.pc)),
                 );
+                memory.io();
             }
             JMP_AIL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
@@ -1214,17 +1237,20 @@ impl Processor {
             }
             JSR_A => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
+                memory.io();
                 self.jsr(memory, self.pbr, addr, true);
             }
             JSR_AIX => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc)).wrapping_add(self.x());
                 let addr = read_u16(memory, u24::from(self.pbr, addr));
+                memory.io();
                 self.jsr(memory, self.pbr, addr, false);
             }
             JSL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
                 self.jsl(memory, bank, addr);
+                memory.io();
             }
             LDA_I => read_func_i!(lda_8, lda_16, a_is_8bit),
             LDA_A => read_func!(lda_8, lda_16, a, a_is_8bit),
@@ -1282,6 +1308,7 @@ impl Processor {
                 self.pc = self.pc.wrapping_add(1);
             }
             PEI => {
+                // IO cycle here is handled by the d call
                 let pointer = self.d(memory);
                 self.push_u16(read_u16(memory, pointer), false, memory);
             }
@@ -1291,6 +1318,7 @@ impl Processor {
                     .pc
                     .wrapping_add(2)
                     .wrapping_add(read_u16(memory, u24::from(self.pbr, self.pc)));
+                memory.io();
                 self.push_u16(value, false, memory);
                 self.pc = self.pc.wrapping_add(2);
             }
