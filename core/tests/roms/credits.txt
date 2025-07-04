@@ -1,2 +1,2 @@
 These test roms are from Peter Lemon's excellent SNES repository: https://github.com/PeterLemon/SNES.
-The CPUTEST-BASIC and CPUTEST-ADVANCED are from the also excellent SNES-test repository: https://github.com/gilyon/snes-tests.
+The CPUTEST-BASIC and CPUTEST-FULL are from the also excellent SNES-test repository: https://github.com/gilyon/snes-tests.

@@ -234,31 +234,26 @@ impl Processor {
     fn push_u16(&mut self, value: u16, is_old: bool, memory: &mut impl HasAddressBus) {
         self.push_u16_le(value.to_le_bytes(), is_old, memory);
     }
-    /// Push a u24 in LE format to the stack
-    fn push_u24_le(&mut self, value: [u8; 3], is_old: bool, memory: &mut impl HasAddressBus) {
-        self.push_bytes(&value, is_old, memory);
-    }
-    fn adc(a: u8, b: u8, c: bool, d: bool) -> (u8, bool) {
+    // Returns (result, carry, signed overflow)
+    fn adc(a: u8, b: u8, c: bool, d: bool) -> (u8, bool, bool) {
         if d {
             let mut low = (a & 0xF) + (b & 0xF) + u8::from(c);
             if low > 0x09 {
-                low += 0x06;
+                low = ((low + 0x06) & 0x0F) + 0x10;
             }
-            let mut res = (a as u16 & 0xF0) + (b as u16 & 0xF0) + low as u16;
-            if res > 0x9F {
-                res += 0x60;
-            }
-            ((res & 0xFF) as u8, res > 0x9F)
+            let res = (a as u16 & 0xF0) + (b as u16 & 0xF0) + low as u16;
+            let r = if res > 0x9F { res + 0x60 } else { res };
+            ((r & 0xFF) as u8, r > 0x9F, r & 0x80 != 0)
         } else {
-            let (a, c2) = a.overflowing_add(b);
-            let (a, c3) = a.overflowing_add(c.into());
-            (a, c2 || c3)
+            let (r, c2) = a.overflowing_add(b);
+            let (r, c3) = r.overflowing_add(c.into());
+            (r, c2 || c3, ((a ^ r as u8) & (b ^ r)) & 0x80 != 0)
         }
     }
     /// Add with Carry 8-bit
     fn adc_8(&mut self, value: u8) {
-        let (a, c) = Processor::adc(self.a, value, self.p.c, self.p.d);
-        self.p.v = ((self.a ^ a as u8) & (value ^ a)) & 0x80 != 0;
+        let (a, c, v) = Processor::adc(self.a, value, self.p.c, self.p.d);
+        self.p.v = v;
         self.p.n = (a & 0x80) != 0;
         self.p.z = a == 0;
         self.p.c = c;
@@ -266,13 +261,13 @@ impl Processor {
     }
     /// Add with Carry 16-bit
     fn adc_16(&mut self, low: u8, high: u8) {
-        let (a, c) = Processor::adc(self.a, low, self.p.c, self.p.d);
+        let (a, c, _) = Processor::adc(self.a, low, self.p.c, self.p.d);
         self.a = a;
-        let (b, c2) = Processor::adc(self.b, high, c, self.p.d);
+        let (b, c2, v) = Processor::adc(self.b, high, c, self.p.d);
         self.p.n = (b & 0x80) != 0;
         self.p.z = a == 0 && b == 0;
         self.p.c = c2;
-        self.p.v = ((self.b ^ b as u8) & (high ^ b)) & 0x80 != 0;
+        self.p.v = v;
         self.a = a;
         self.b = b;
     }
@@ -508,7 +503,6 @@ impl Processor {
     fn cpy_16(&mut self, low: u8, high: u8) {
         self.compare_16((self.yl, self.yh), (low, high));
     }
-
     /// Break to a given address
     fn break_to(&mut self, memory: &mut impl HasAddressBus, addr_n: u16, addr_e: u16, set_b: bool) {
         if self.p.e {
@@ -531,6 +525,15 @@ impl Processor {
         }
         self.p.d = false;
         self.p.i = true;
+    }
+    /// Return from interrupt
+    fn rti(&mut self, memory: &mut impl HasAddressBus) {
+        self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
+        self.force_registers();
+        self.pc = self.pull_u16(self.p.e, memory);
+        if !self.p.e {
+            self.pbr = self.pull_u8(false, memory);
+        }
     }
     /// Decrement (DEC) 8-bit
     fn dec_8(&mut self, value: u8) -> u8 {
@@ -572,23 +575,23 @@ impl Processor {
         self.push_u16(self.pc.wrapping_add(1), is_old, memory);
         self.jmp(bank, addr)
     }
-    /// Return from interrupt
-    fn rti(&mut self, memory: &mut impl HasAddressBus) {
-        self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
-        self.force_registers();
-        self.pc = self.pull_u16(self.p.e, memory);
-        if !self.p.e {
-            self.pbr = self.pull_u8(false, memory);
-        }
-    }
     /// ReTurn from Subroutine (RTS)
     fn rts(&mut self, memory: &mut impl HasAddressBus) {
         self.pc = self.pull_u16(self.p.e, memory).wrapping_add(1);
     }
     /// ReTurn from subroutine Long (RTL)
     fn rtl(&mut self, memory: &mut impl HasAddressBus) {
-        self.pc = self.pull_u16(false, memory).wrapping_add(1);
-        self.pbr = self.pull_u8(false, memory);
+        let bytes = self.pull_bytes(3, false, memory);
+        // Low, then high, then bank
+        self.pc = u16::from_le_bytes([bytes[0], bytes[1]]).wrapping_add(1);
+        self.pbr = bytes[2];
+    }
+    /// Jump to Subroutine Long (JSL)
+    fn jsl(&mut self, memory: &mut impl HasAddressBus, bank: u8, addr: u16) {
+        let [low, high] = self.pc.wrapping_add(2).to_le_bytes();
+        // Bank, then high, then low
+        self.push_bytes(&[self.pbr, high, low], false, memory);
+        self.jmp(bank, addr);
     }
     /// Set the load flags after loading an 8-bit value
     fn set_load_flags_8(&mut self, value: u8) {
@@ -756,7 +759,7 @@ impl Processor {
         if self.p.e && self.dl == 0 {
             let offset = read_u8(memory, u24::from(self.pbr, self.pc));
             self.pc = self.pc.wrapping_add(1);
-            u24::from_le_bytes([offset.wrapping_add(self.x() as u8), self.dh, 0x00])
+            u24::from_le_bytes([offset.wrapping_add(register as u8), self.dh, 0x00])
         } else {
             // TODO: Maybe: This should always have bank 0, so when loading two banks it should wrap around the page boundary
             let addr = self.d(memory);
@@ -1219,15 +1222,9 @@ impl Processor {
                 self.jsr(memory, self.pbr, addr, false);
             }
             JSL => {
-                let pc = self.pc.wrapping_add(2);
-                self.push_u24_le(
-                    [self.pbr, (pc >> 8) as u8, (pc & 0xFF) as u8],
-                    false,
-                    memory,
-                );
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 let bank = read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2)));
-                self.jmp(bank, addr);
+                self.jsl(memory, bank, addr);
             }
             LDA_I => read_func_i!(lda_8, lda_16, a_is_8bit),
             LDA_A => read_func!(lda_8, lda_16, a, a_is_8bit),

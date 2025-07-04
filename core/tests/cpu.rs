@@ -47,3 +47,4 @@ rom_test! {phl}
 rom_test! {trn, 10 * 5000}
 rom_test! {mov, 2 * 5000}
 rom_test! {test_basic, 215000}
+rom_test! {test_full, 7 * 50_000}
