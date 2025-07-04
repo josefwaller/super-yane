@@ -46,5 +46,5 @@ rom_test! {rol, 100_000}
 rom_test! {ror, 100_000}
 rom_test! {str, 550_000}
 rom_test! {trn, 350_000}
-rom_test! {test_basic, 215000}
-rom_test! {test_full, 7 * 50_000}
+rom_test! {test_basic, 1_400_000}
+rom_test! {test_full, 1_950_000}
