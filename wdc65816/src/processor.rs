@@ -1342,7 +1342,7 @@ impl Processor {
                 self.p.z = self.dr() == 0;
             }
             PLP => {
-                self.p = StatusRegister::from_byte(self.pull_u8(self.p.e, memory), self.p.e);
+                self.p = StatusRegister::from_byte(self.pull_u8(true, memory), self.p.e);
                 self.force_registers();
             }
             PLX => pull_reg!(xl, xh, self.p.e, xy_is_16bit),

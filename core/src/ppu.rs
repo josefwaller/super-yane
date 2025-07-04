@@ -2,6 +2,9 @@ use std::collections::VecDeque;
 
 use log::*;
 
+const DOTS_PER_SCANLINE: usize = 341;
+const SCANLINES: usize = 262;
+
 #[derive(Copy, Clone)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
@@ -235,40 +238,52 @@ impl Ppu {
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
-            self.dot = (self.dot + 1) % (256 * 240);
-            if self.dot == 0 {
-                self.vblank = true;
-            }
-            if self.pixel_buffer.is_empty() {
-                // let addr = self.backgrounds[0].tilemap_addr
-                //     + self.dot / self.backgrounds[0].tile_size as usize;
-                let x = (self.dot % 256) / 8;
-                let y = (self.dot / 256) / 8;
-                let fine_y = (self.dot / 256) % 8;
-                // 2 bytes/tile, 32 tiles/row
-                let addr = 2 * (32 * y + x);
-                // Load next byte
-                let tile =
-                    self.vram[(2 * self.backgrounds[0].tilemap_addr + addr) % self.vram.len()];
-                let slice_addr = (2 * self.backgrounds[0].chr_addr
-                    + 2 * fine_y as usize
-                    + 2 * 8 * tile as usize)
-                    % self.vram.len();
-                let slice_low = self.vram[slice_addr];
-                let slice_high = self.vram[slice_addr + 1];
+            self.dot = (self.dot + 1) % (4 * (DOTS_PER_SCANLINE * SCANLINES));
+            if self.dot % 4 == 0 {
+                // Note the visual picture starts at dot 88
+                let x = (self.dot / 4).wrapping_sub(22) % DOTS_PER_SCANLINE;
+                let y = (self.dot / 4) / DOTS_PER_SCANLINE;
+                if y == 241 && x == 0 {
+                    self.vblank = true;
+                }
+                if x == 0 {
+                    // Clear out data from previous line
+                    self.pixel_buffer.clear();
+                }
+                if x < 256 && y < 240 {
+                    let x = x.wrapping_add(1);
+                    if self.pixel_buffer.is_empty() {
+                        let tile_x = x / 8;
+                        let tile_y = y / 8;
+                        let fine_y = y % 8;
+                        // 2 bytes/tile, 32 tiles/row
+                        let addr = 2 * (32 * tile_y + tile_x);
+                        // Load next byte
+                        let tile = self.vram
+                            [(2 * self.backgrounds[0].tilemap_addr + addr) % self.vram.len()];
+                        let slice_addr = (2 * self.backgrounds[0].chr_addr
+                            + 2 * fine_y as usize
+                            + 2 * 8 * tile as usize)
+                            % self.vram.len();
+                        let slice_low = self.vram[slice_addr];
+                        let slice_high = self.vram[slice_addr + 1];
 
-                let palette = [0x0000, 0xFFFF, 0x00FF, 0xFF00];
+                        let palette = [0x0000, 0xFFFF, 0x00FF, 0xFF00];
 
-                // let byte = self.vram[self.backgrounds[0].tilemap_addr + addr];
-                (0..8).for_each(|i| {
-                    // self.pixel_buffer.push(tile as u16);
-                    self.pixel_buffer.push_back({
-                        let v = palette[(slice_low >> i) as usize & 0x01];
-                        if v == 0 { self.cgram[0] } else { v }
-                    })
-                });
+                        (0..8).for_each(|i| {
+                            self.pixel_buffer.push_back({
+                                let v = palette[(slice_low >> i) as usize & 0x01];
+                                if v == 0 { self.cgram[0] } else { v }
+                            })
+                        });
+                    }
+                    let x = x.wrapping_sub(1);
+                    self.screen_buffer[256 * y + x] = self.pixel_buffer.pop_back().unwrap();
+                }
             }
-            self.screen_buffer[self.dot] = self.pixel_buffer.pop_back().unwrap();
         })
+    }
+    pub fn is_in_vblank(&self) -> bool {
+        self.dot > 88 + 240 * DOTS_PER_SCANLINE
     }
 }

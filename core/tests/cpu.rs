@@ -22,29 +22,29 @@ macro_rules! rom_test {
         }
         }
     };
-    ($name: expr) => { rom_test!{$name, 5000} }
+    ($name: expr) => { rom_test!{$name, 100 * 5000} }
 }
 
-rom_test! {bra}
-rom_test! {jmp}
-rom_test! {ldr, 19 * 5000}
-rom_test! {ret}
-rom_test! {and, 12 * 5000}
-rom_test! {asl, 4 * 5000}
-rom_test! { bit, 7 * 5000}
-rom_test! {cmp, 17 * 5000}
-rom_test! {eor, 11 * 5000}
-rom_test! {msc}
-rom_test! {ora, 11 * 5000}
-rom_test! {psr}
-rom_test! {str, 19 * 50000}
-rom_test! {dec, 5 * 5000}
-rom_test! {inc, 5 * 5000}
-rom_test! {lsr, 4 * 5000}
-rom_test! {rol, 4 * 5000}
-rom_test! {ror, 4 * 5000}
+rom_test! {and, 350_000}
+rom_test! {asl, 100_000}
+rom_test! { bit, 400_000}
+rom_test! {bra, 50_000}
+rom_test! {cmp, 500_000}
+rom_test! {dec, 150_000}
+rom_test! {eor, 350_000}
+rom_test! {inc, 150_000}
+rom_test! {jmp, 50_000}
+rom_test! {ldr, 600_000}
+rom_test! {lsr, 100_000}
+rom_test! {mov, 50_000}
+rom_test! {msc, 50_000}
+rom_test! {ora, 350_000}
 rom_test! {phl}
-rom_test! {trn, 10 * 5000}
-rom_test! {mov, 2 * 5000}
+rom_test! {psr, 50_000}
+rom_test! {ret, 50_000}
+rom_test! {rol, 100_000}
+rom_test! {ror, 100_000}
+rom_test! {str, 550_000}
+rom_test! {trn, 350_000}
 rom_test! {test_basic, 215000}
 rom_test! {test_full, 7 * 50_000}

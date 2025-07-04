@@ -197,10 +197,10 @@ impl Application {
         return false;
     }
     fn advance(&mut self) {
-        self.previous_states.push_back(self.console.clone());
-        if self.previous_states.len() > NUM_PREVIOUS_STATES {
-            self.previous_states.pop_front();
-        }
+        // self.previous_states.push_back(self.console.clone());
+        // if self.previous_states.len() > NUM_PREVIOUS_STATES {
+        //     self.previous_states.pop_front();
+        // }
         if self.is_in_breakpoint() {
             self.previous_breakpoint_states
                 .push_back(self.console.clone());
@@ -218,10 +218,11 @@ impl Application {
         match message {
             // Message::OnEvent(e) => {}
             Message::NewFrame() => {
-                // Todo: Determine how many per frame
-                // Also use console.advance_until
-                for _ in 0..1000 {
-                    if !self.is_paused {
+                if !self.is_paused {
+                    while self.console.ppu().is_in_vblank() && !self.is_paused {
+                        self.advance();
+                    }
+                    while !self.console.ppu().is_in_vblank() && !self.is_paused {
                         self.advance();
                     }
                 }
@@ -265,7 +266,9 @@ impl Application {
                     let bytes = std::fs::read(&p)
                         .expect(format!("Unable to read file '{:?}': ", p).as_str());
                     self.console = Console::with_cartridge(&bytes);
-                    self.console.reset();
+                    // self.console.reset();
+                    self.previous_states.clear();
+                    self.total_instructions = 0;
                 }
                 None => {}
             },
