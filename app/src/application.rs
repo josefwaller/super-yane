@@ -148,8 +148,10 @@ pub struct Application {
     ram_offset: usize,
     is_paused: bool,
     breakpoint_opcodes: Vec<u8>,
-    previous_states: VecDeque<Console>,
     previous_breakpoint_states: VecDeque<Console>,
+    previous_console: Box<Console>,
+    previous_console_lag: u32,
+    previous_states: VecDeque<Console>,
     opcode_search: String,
     vblank_breakpoint: bool,
     ignore_breakpoints: bool,
@@ -158,17 +160,17 @@ pub struct Application {
     total_instructions: u32,
 }
 
-const NUM_PREVIOUS_STATES: usize = 50;
 const NUM_BREAKPOINT_STATES: usize = 20;
+const INSTRUCTIONS_PER_PREV_CONSOLE: u32 = 1000;
 
 impl Default for Application {
     fn default() -> Self {
+        let default_console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
         Application {
-            console: Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc")),
+            console: default_console.clone(),
             ram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
-            previous_states: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             previous_breakpoint_states: VecDeque::with_capacity(NUM_BREAKPOINT_STATES),
             opcode_search: String::new(),
             vblank_breakpoint: false,
@@ -176,6 +178,9 @@ impl Default for Application {
             emulate_future_states: true,
             ram_display: RamDisplay::VideoRam,
             total_instructions: 0,
+            previous_console: Box::new(default_console.clone()),
+            previous_console_lag: 0,
+            previous_states: VecDeque::with_capacity(500),
         }
     }
 }
@@ -183,8 +188,20 @@ impl Default for Application {
 impl Application {
     fn on_breakpoint(&mut self) {
         if !self.ignore_breakpoints {
-            self.is_paused = true;
+            self.pause();
         }
+    }
+    fn pause(&mut self) {
+        self.is_paused = true;
+        // Emulate previous states
+        let mut c = *self.previous_console.clone();
+        self.previous_states = (0..500)
+            .map(|_| {
+                let r = c.clone();
+                c.advance_instructions(1);
+                r
+            })
+            .collect();
     }
     fn is_in_breakpoint(&mut self) -> bool {
         if self.console.in_vblank() && self.vblank_breakpoint {
@@ -197,10 +214,6 @@ impl Application {
         return false;
     }
     fn advance(&mut self) {
-        // self.previous_states.push_back(self.console.clone());
-        // if self.previous_states.len() > NUM_PREVIOUS_STATES {
-        //     self.previous_states.pop_front();
-        // }
         if self.is_in_breakpoint() {
             self.previous_breakpoint_states
                 .push_back(self.console.clone());
@@ -210,6 +223,11 @@ impl Application {
         }
         self.console.advance_instructions(1);
         self.total_instructions += 1;
+        self.previous_console_lag += 1;
+        while self.previous_console_lag > 500 {
+            self.previous_console.advance_instructions(1);
+            self.previous_console_lag -= 1;
+        }
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
@@ -234,27 +252,39 @@ impl Application {
             Message::PreviousBreakpoint => {
                 if !self.previous_breakpoint_states.is_empty() {
                     self.console = self.previous_breakpoint_states.pop_back().unwrap();
-                    self.previous_states.clear();
                     self.is_paused = true;
                 }
             }
             Message::PreviousInstruction => {
                 if self.previous_states.len() > 0 {
                     self.console = self.previous_states.pop_back().unwrap();
+                    self.previous_console_lag -= 1;
                     self.is_paused = true;
                 }
             }
             Message::AdvanceInstructions(num_instructions) => {
-                (0..num_instructions).for_each(|_| self.advance());
+                (0..num_instructions).for_each(|_| {
+                    self.previous_states.push_back(self.console.clone());
+                    self.advance();
+                });
             }
             Message::ChangeVramPage(new_vram_page) => self.ram_offset = new_vram_page,
             Message::ChangePaused(p) => {
-                self.is_paused = p;
-                self.ignore_breakpoints = true;
+                if p {
+                    self.pause();
+                } else {
+                    self.is_paused = false;
+                    self.ignore_breakpoints = true;
+                }
             }
             Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
             Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
-            Message::Reset => self.console.reset(),
+            Message::Reset => {
+                self.console.reset();
+                self.previous_console = Box::new(self.console.clone());
+                self.previous_console_lag = 0;
+                self.previous_states.clear();
+            }
             Message::SetOpcodeSearch(s) => self.opcode_search = s,
             Message::ToggleVBlankBreakpoint(v) => self.vblank_breakpoint = v,
             Message::ToggleFutureStates(v) => self.emulate_future_states = v,
@@ -266,7 +296,8 @@ impl Application {
                     let bytes = std::fs::read(&p)
                         .expect(format!("Unable to read file '{:?}': ", p).as_str());
                     self.console = Console::with_cartridge(&bytes);
-                    // self.console.reset();
+                    self.previous_console = Box::new(self.console.clone());
+                    self.previous_console_lag = 0;
                     self.previous_states.clear();
                     self.total_instructions = 0;
                 }
@@ -276,9 +307,6 @@ impl Application {
                 self.ram_display = d;
                 self.ram_offset = 0;
             }
-        }
-        while self.previous_states.len() > 100 {
-            self.previous_states.pop_front();
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
@@ -597,31 +625,39 @@ impl Application {
         .collect()
     }
     fn next_instructions(&self) -> impl Into<Element<Message>> {
-        let mut c = self.console.clone();
-        let future_iter = std::iter::from_fn(move || {
-            c.advance_instructions(1);
-            Some(c.clone())
-        });
-        let it = self
-            .previous_states
-            .iter()
-            .rev()
-            .take(20)
-            .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
-            .rev()
-            .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
-            .chain(
-                future_iter
-                    .take(if self.emulate_future_states { 10 } else { 0 })
-                    .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
-            );
-        text_table(
-            ["PBR", "PC", "OP", "", "              "]
-                .into_iter()
-                .map(|r| (r.to_string(), Some(COLORS[0])))
-                .chain(it.flatten()),
-            5,
-        )
+        if self.is_paused {
+            let mut c = self.console.clone();
+            let future_iter = std::iter::from_fn(move || {
+                c.advance_instructions(1);
+                Some(c.clone())
+            });
+            let it = self
+                .previous_states
+                .iter()
+                .rev()
+                .take(20)
+                .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
+                .rev()
+                .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
+                .chain(
+                    future_iter
+                        .take(if self.emulate_future_states { 10 } else { 0 })
+                        .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
+                );
+            container(text_table(
+                ["PBR", "PC", "OP", "", "              "]
+                    .into_iter()
+                    .map(|r| (r.to_string(), Some(COLORS[0])))
+                    .chain(it.flatten()),
+                5,
+            ))
+        } else {
+            container(text("Running..."))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Center)
+                .align_y(Center)
+        }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

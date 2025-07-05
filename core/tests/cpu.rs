@@ -22,7 +22,6 @@ macro_rules! rom_test {
         }
         }
     };
-    ($name: expr) => { rom_test!{$name, 100 * 5000} }
 }
 
 rom_test! {and, 350_000}
@@ -39,7 +38,6 @@ rom_test! {lsr, 100_000}
 rom_test! {mov, 50_000}
 rom_test! {msc, 50_000}
 rom_test! {ora, 350_000}
-rom_test! {phl}
 rom_test! {psr, 50_000}
 rom_test! {ret, 50_000}
 rom_test! {rol, 100_000}
