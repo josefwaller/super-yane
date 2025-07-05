@@ -193,15 +193,7 @@ impl Application {
     }
     fn pause(&mut self) {
         self.is_paused = true;
-        // Emulate previous states
-        let mut c = *self.previous_console.clone();
-        self.previous_states = (0..500)
-            .map(|_| {
-                let r = c.clone();
-                c.advance_instructions(1);
-                r
-            })
-            .collect();
+        self.refresh_prev_states();
     }
     fn is_in_breakpoint(&mut self) -> bool {
         if self.console.in_vblank() && self.vblank_breakpoint {
@@ -231,6 +223,18 @@ impl Application {
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
+    }
+    pub fn refresh_prev_states(&mut self) {
+        // Emulate previous states
+        let mut c = *self.previous_console.clone();
+        debug!("{}", self.previous_console_lag);
+        self.previous_states = (0..self.previous_console_lag)
+            .map(|_| {
+                let r = c.clone();
+                c.advance_instructions(1);
+                r
+            })
+            .collect();
     }
     pub fn update(&mut self, message: Message) {
         match message {
@@ -264,7 +268,6 @@ impl Application {
             }
             Message::AdvanceInstructions(num_instructions) => {
                 (0..num_instructions).for_each(|_| {
-                    self.previous_states.push_back(self.console.clone());
                     self.advance();
                 });
             }
@@ -307,6 +310,9 @@ impl Application {
                 self.ram_display = d;
                 self.ram_offset = 0;
             }
+        }
+        if self.is_paused {
+            self.refresh_prev_states();
         }
     }
     pub fn view(&self) -> Element<'_, Message> {

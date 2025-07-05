@@ -26,7 +26,7 @@ macro_rules! rom_test {
 
 rom_test! {and, 350_000}
 rom_test! {asl, 100_000}
-rom_test! { bit, 400_000}
+rom_test! {bit, 400_000}
 rom_test! {bra, 50_000}
 rom_test! {cmp, 500_000}
 rom_test! {dec, 150_000}
@@ -42,6 +42,7 @@ rom_test! {psr, 50_000}
 rom_test! {ret, 50_000}
 rom_test! {rol, 100_000}
 rom_test! {ror, 100_000}
+rom_test! {sbc, 350_000}
 rom_test! {str, 550_000}
 rom_test! {trn, 350_000}
 rom_test! {test_basic, 1_400_000}
