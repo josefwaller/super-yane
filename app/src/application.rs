@@ -254,10 +254,10 @@ impl Application {
                 self.ignore_breakpoints = false;
             }
             Message::PreviousBreakpoint => {
-                if !self.previous_breakpoint_states.is_empty() {
-                    self.console = self.previous_breakpoint_states.pop_back().unwrap();
-                    self.is_paused = true;
-                }
+                //     if !self.previous_breakpoint_states.is_empty() {
+                //         self.console = self.previous_breakpoint_states.pop_back().unwrap();
+                //         self.is_paused = true;
+                //     }
             }
             Message::PreviousInstruction => {
                 if self.previous_states.len() > 0 {

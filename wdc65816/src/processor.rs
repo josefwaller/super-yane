@@ -243,12 +243,14 @@ impl Processor {
                 low = ((low + 0x06) & 0x0F) + 0x10;
             }
             let res = (a as u16 & 0xF0) + (b as u16 & 0xF0) + low as u16;
+            // Calculate the signed overflow before converting to BCD
+            let v = ((a as u16 ^ res) & (b as u16 ^ res)) & 0x80 != 0;
             let r = if res > 0x9F { res + 0x60 } else { res };
-            ((r & 0xFF) as u8, r > 0x9F, r & 0x80 != 0)
+            ((r & 0xFF) as u8, r > 0x9F, v)
         } else {
             let (r, c2) = a.overflowing_add(b);
             let (r, c3) = r.overflowing_add(c.into());
-            (r, c2 || c3, ((a ^ r as u8) & (b ^ r)) & 0x80 != 0)
+            (r, c2 || c3, ((a ^ r) & (b ^ r)) & 0x80 != 0)
         }
     }
     /// Add with Carry 8-bit

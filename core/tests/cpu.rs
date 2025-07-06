@@ -23,7 +23,7 @@ macro_rules! rom_test {
         }
     };
 }
-
+rom_test! {adc, 500_000}
 rom_test! {and, 350_000}
 rom_test! {asl, 100_000}
 rom_test! {bit, 400_000}
