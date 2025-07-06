@@ -38,6 +38,7 @@ rom_test! {lsr, 100_000}
 rom_test! {mov, 50_000}
 rom_test! {msc, 50_000}
 rom_test! {ora, 350_000}
+rom_test! {phl, 400_000}
 rom_test! {psr, 50_000}
 rom_test! {ret, 50_000}
 rom_test! {rol, 100_000}
