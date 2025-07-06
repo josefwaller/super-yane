@@ -107,12 +107,13 @@ impl Ppu {
             _ => 0,
         }
     }
-    pub fn read_byte_mut(&mut self, addr: usize) -> u8 {
+    pub fn read_byte_mut(&mut self, addr: usize, open_bus: u8) -> u8 {
         match addr {
+            // Todo: This shouldn't be in PPU
             0x4210 => {
                 let v = u8::from(self.vblank) << 7;
                 self.vblank = false;
-                return v;
+                return v | (open_bus & 0x70);
             }
             _ => 0,
         }
