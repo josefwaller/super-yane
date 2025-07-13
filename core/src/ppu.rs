@@ -263,11 +263,9 @@ impl Ppu {
         let direct_color = false;
         let temp: [u16; 256] = core::array::from_fn(|i| i as u16);
 
-        let PALETTE = [0x0000, 0xFFFF, 0xFF00, 0x00FF];
-
         let palette = match bpp {
-            2 => &PALETTE,
-            4 => &self.cgram[palette..palette + 16],
+            2 => &self.cgram[(4 * palette)..(4 * palette + 4)],
+            4 => &self.cgram[(16 * palette)..(16 * palette + 16)],
             8 => {
                 if direct_color {
                     &temp
@@ -351,7 +349,7 @@ impl Ppu {
                     let pixel = order
                         .iter()
                         .find(|(i, prio)| pixels[*i].is_some_and(|(v, p)| p == *prio))
-                        .map_or(self.cgram[0], |(i, _)| pixels[*i].unwrap().0);
+                        .map_or(self.cgram[0], |(i, _)| pixels[*i].unwrap().0 & 0x7FFF);
                     self.screen_buffer[256 * y + x] = pixel;
                 }
             }
