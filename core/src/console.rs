@@ -86,18 +86,21 @@ impl ExternalArchitecture {
             // Check for non-rom area
             if a < 0x400000 && a & 0xFFFF < 0x8000 {
                 let a = a % 0x8000;
-                if a < 0x2000 {
-                    self.ram[a] = value;
-                    12
-                } else if a < 0x2100 {
-                    // Open bus?
-                    12
-                } else if a < 0x2140 {
-                    // PPU Registers
-                    self.ppu.write_byte(a, value);
-                    12
-                } else if a < 0x4400 {
-                    if a == 0x420B {
+                match a {
+                    (0..0x2000) => {
+                        self.ram[a] = value;
+                        12
+                    }
+                    (0x2000..0x2100) => {
+                        // Open bus?
+                        12
+                    }
+                    (0x2100..0x2140) => {
+                        // PPU Registers
+                        self.ppu.write_byte(a, value);
+                        12
+                    }
+                    0x420B => {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
                                 let mut d = self.dma_channels[i].clone();
@@ -135,7 +138,7 @@ impl ExternalArchitecture {
                         // Todo: determine how many clock cycles consumed
                         return 12;
                     }
-                    if a >= 0x4300 {
+                    0x4300..0x4308 => {
                         let lsb = a & 0x0F;
                         let r = (a & 0xF0) >> 4;
                         if r > 7 {
@@ -180,11 +183,8 @@ impl ExternalArchitecture {
                             }
                             12
                         }
-                    } else {
-                        12
                     }
-                } else {
-                    12
+                    _ => 12,
                 }
             } else {
                 // self.cartridge.read_byte(a)

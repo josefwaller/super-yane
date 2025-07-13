@@ -304,7 +304,6 @@ impl Ppu {
                         .for_each(|b| b.pixel_buffer.clear());
                 }
                 if x < 256 && y < 240 {
-                    // let x = x.wrapping_add(1);
                     // Structured (background_number, bpp)
                     let backgrounds = match self.bg_mode {
                         0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
@@ -317,7 +316,6 @@ impl Ppu {
                             self.extend_background_byte_buffer(*i, (x, y), *bpp);
                         }
                     }
-                    // let x = x.wrapping_sub(1);
                     let pixels: Vec<Option<(u16, bool)>> = backgrounds
                         .iter()
                         .map(|(i, p)| {
