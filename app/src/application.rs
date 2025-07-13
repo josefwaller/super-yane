@@ -61,7 +61,12 @@ pub fn background_table(background: &Background) -> impl Into<Element<'_, Messag
     ];
     text_table(
         rows.into_iter()
-            .map(|(s, v)| [(s.to_string(), Some(COLORS[1])), (format!("{}", v), None)])
+            .map(|(s, v)| {
+                [
+                    (s.to_string(), Some(COLORS[1])),
+                    (format!("{:02X}", v), None),
+                ]
+            })
             .flatten(),
         2,
     )

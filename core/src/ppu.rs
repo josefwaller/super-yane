@@ -5,7 +5,7 @@ use log::*;
 const DOTS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
     pub tile_size: u32,
@@ -18,6 +18,8 @@ pub struct Background {
     pub v_off: u32,
     pub main_screen_enable: bool,
     pub sub_screen_enable: bool,
+    /// Buffer for pixel data, used by PPU to render the background
+    pixel_buffer: VecDeque<Option<(u16, bool)>>,
 }
 impl Default for Background {
     fn default() -> Self {
@@ -32,6 +34,7 @@ impl Default for Background {
             v_off: 0,
             main_screen_enable: false,
             sub_screen_enable: false,
+            pixel_buffer: VecDeque::new(),
         }
     }
 }
@@ -80,7 +83,7 @@ impl Default for Ppu {
             brightness: 4,
             bg_mode: 0,
             bg3_prio: false,
-            backgrounds: [Background::default(); 4],
+            backgrounds: core::array::from_fn(|_| Background::default()),
             mosaic_size: 1,
             bg_h_off: 0,
             bg_v_off: 0,
@@ -135,7 +138,7 @@ impl Ppu {
                     self.backgrounds[i].tile_size = if bit!(i + 4) == 1 { 16 } else { 8 };
                 });
                 self.bg3_prio = (value & 0x08) != 0;
-                self.bg_mode = (value & 0x0F) as u32;
+                self.bg_mode = (value & 0x07) as u32;
             }
             0x2106 => {
                 (0..4).for_each(|i| {
@@ -237,6 +240,55 @@ impl Ppu {
             _ => {}
         }
     }
+    fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
+        let b = &mut self.backgrounds[index];
+        // These are here since they will have to change once the background scrolling is implemented
+        let tile_x = x / 8;
+        let tile_y = y / 8;
+        let fine_y = y % 8;
+        // 2 bytes/tile, 32 tiles/row
+        let addr = 2 * (32 * tile_y + tile_x);
+        // Load next byte
+        let tile_addr = 2 * b.tilemap_addr + addr;
+        // Load the tile data
+        let tile_low = self.vram[tile_addr % self.vram.len()];
+        let tile_high = self.vram[(tile_addr + 1) % self.vram.len()];
+        let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
+        let palette = (tile_high as usize & 0x1C) >> 2;
+        let priority = tile_high & 20 != 0;
+        let slice_addr = (2 * b.chr_addr + bpp * fine_y as usize + bpp * 8 * tile_index as usize)
+            % self.vram.len();
+        let slices = &self.vram[slice_addr..slice_addr + bpp];
+        // Todo: Make this actuall change
+        let direct_color = false;
+        let temp: [u16; 256] = core::array::from_fn(|i| i as u16);
+
+        let PALETTE = [0x0000, 0xFFFF, 0xFF00, 0x00FF];
+
+        let palette = match bpp {
+            2 => &PALETTE,
+            4 => &self.cgram[palette..palette + 16],
+            8 => {
+                if direct_color {
+                    &temp
+                } else {
+                    &self.cgram
+                }
+            }
+            _ => panic!("Unsupported bpp: {}", bpp),
+        };
+        (0..8).for_each(|i| {
+            // Currently this is just hardwired 2bpp
+            b.pixel_buffer.push_back({
+                let v = palette[slices
+                    .iter()
+                    .map(|s| ((*s as usize) >> (7 - i)) & 0x01)
+                    .sum::<usize>()
+                    % palette.len()];
+                if v == 0 { None } else { Some((v, priority)) }
+            })
+        });
+    }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
             self.dot = (self.dot + 1) % (4 * (DOTS_PER_SCANLINE * SCANLINES));
@@ -249,37 +301,58 @@ impl Ppu {
                 }
                 if x == 0 {
                     // Clear out data from previous line
-                    self.pixel_buffer.clear();
+                    self.backgrounds
+                        .iter_mut()
+                        .for_each(|b| b.pixel_buffer.clear());
                 }
                 if x < 256 && y < 240 {
-                    let x = x.wrapping_add(1);
-                    if self.pixel_buffer.is_empty() {
-                        let tile_x = x / 8;
-                        let tile_y = y / 8;
-                        let fine_y = y % 8;
-                        // 2 bytes/tile, 32 tiles/row
-                        let addr = 2 * (32 * tile_y + tile_x);
-                        // Load next byte
-                        let tile = self.vram
-                            [(2 * self.backgrounds[0].tilemap_addr + addr) % self.vram.len()];
-                        let slice_addr = (2 * self.backgrounds[0].chr_addr
-                            + 2 * fine_y as usize
-                            + 2 * 8 * tile as usize)
-                            % self.vram.len();
-                        let slice_low = self.vram[slice_addr];
-                        let slice_high = self.vram[slice_addr + 1];
-
-                        let palette = [0x0000, 0xFFFF, 0x00FF, 0xFF00];
-
-                        (0..8).for_each(|i| {
-                            self.pixel_buffer.push_back({
-                                let v = palette[(slice_low >> i) as usize & 0x01];
-                                if v == 0 { self.cgram[0] } else { v }
-                            })
-                        });
+                    // let x = x.wrapping_add(1);
+                    // Structured (background_number, bpp)
+                    let backgrounds = match self.bg_mode {
+                        0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
+                        3 => [(0, 8), (1, 4)].to_vec(),
+                        5 => [(0, 4), (1, 2)].to_vec(),
+                        _ => todo!("Background mode {} not implemented", self.bg_mode),
+                    };
+                    for (i, bpp) in backgrounds.iter() {
+                        if self.backgrounds[*i].pixel_buffer.is_empty() {
+                            self.extend_background_byte_buffer(*i, (x, y), *bpp);
+                        }
                     }
-                    let x = x.wrapping_sub(1);
-                    self.screen_buffer[256 * y + x] = self.pixel_buffer.pop_back().unwrap();
+                    // let x = x.wrapping_sub(1);
+                    let pixels: Vec<Option<(u16, bool)>> = backgrounds
+                        .iter()
+                        .map(|(i, p)| {
+                            // Should be impossible to there to be no pixels right now
+                            let b = &mut self.backgrounds[*i];
+                            if b.main_screen_enable || b.sub_screen_enable {
+                                b.pixel_buffer.pop_front().unwrap()
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let order = match self.bg_mode {
+                        0 => [
+                            (0, true),
+                            (1, true),
+                            (0, false),
+                            (1, false),
+                            (2, true),
+                            (3, true),
+                            (2, false),
+                            (3, false),
+                        ]
+                        .to_vec(),
+                        3 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
+                        5 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
+                        _ => todo!("Background mode {} not implemented", self.bg_mode),
+                    };
+                    let pixel = order
+                        .iter()
+                        .find(|(i, prio)| pixels[*i].is_some_and(|(v, p)| p == *prio))
+                        .map_or(self.cgram[0], |(i, _)| pixels[*i].unwrap().0);
+                    self.screen_buffer[256 * y + x] = pixel;
                 }
             }
         })
