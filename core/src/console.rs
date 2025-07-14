@@ -138,6 +138,10 @@ impl ExternalArchitecture {
                         // Todo: determine how many clock cycles consumed
                         return 12;
                     }
+                    0x420C => {
+                        debug!("Value written to HDMA enable: {:02X}", value);
+                        12
+                    }
                     0x4300..0x4308 => {
                         let lsb = a & 0x0F;
                         let r = (a & 0xF0) >> 4;

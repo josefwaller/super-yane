@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use log::*;
 
-const DOTS_PER_SCANLINE: usize = 341;
+const PIXELS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
 
 #[derive(Clone)]
@@ -237,35 +237,52 @@ impl Ppu {
             }
             // Todo
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
+            0x213B => debug!("Writing to CGRAM read"),
             _ => {}
         }
     }
+    fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
+        let low = self.vram[addr % self.vram.len()];
+        let high = self.vram[(addr + 1) % self.vram.len()];
+        core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01))
+    }
     fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
-        let b = &mut self.backgrounds[index];
+        // Get an immutable reference to the background
+        let b = &self.backgrounds[index];
         // These are here since they will have to change once the background scrolling is implemented
         let tile_x = x / 8;
         let tile_y = y / 8;
         let fine_y = y % 8;
         // 2 bytes/tile, 32 tiles/row
+        // Note that there's always 2 bytes per tile of the TILEMAP, regardless of how many bpp the tile will use
         let addr = 2 * (32 * tile_y + tile_x);
-        // Load next byte
+        // Load the tile
         let tile_addr = 2 * b.tilemap_addr + addr;
-        // Load the tile data
         let tile_low = self.vram[tile_addr % self.vram.len()];
         let tile_high = self.vram[(tile_addr + 1) % self.vram.len()];
         let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
-        let palette = (tile_high as usize & 0x1C) >> 2;
+        let palette_index = (tile_high as usize & 0x1C) >> 2;
         let priority = tile_high & 20 != 0;
-        let slice_addr = (2 * b.chr_addr + bpp * fine_y as usize + bpp * 8 * tile_index as usize)
+        let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
-        let slices = &self.vram[slice_addr..slice_addr + bpp];
-        // Todo: Make this actuall change
+        // Get all the slices
+        let slices = (0..(bpp.ilog2() as usize))
+            .map(|i| self.get_2bpp_slice_at(slice_addr + 16 * i))
+            .collect::<Vec<[u8; 8]>>();
+        // Todo: Make this actually change
         let direct_color = false;
-        let temp: [u16; 256] = core::array::from_fn(|i| i as u16);
+        let temp: [u16; 256] = core::array::from_fn(|i| {
+            let i = i as u16;
+            let r = i & 0x07;
+            let g = i & 0x38;
+            let b = i & 0xC0;
+            (r << 2) | (g << 6) | (b << 7)
+        });
 
+        // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
-            2 => &self.cgram[(4 * palette)..(4 * palette + 4)],
-            4 => &self.cgram[(16 * palette)..(16 * palette + 16)],
+            2 => &self.cgram[(4 * palette_index)..(4 * palette_index + 4)],
+            4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
             8 => {
                 if direct_color {
                     &temp
@@ -275,25 +292,32 @@ impl Ppu {
             }
             _ => panic!("Unsupported bpp: {}", bpp),
         };
+        // Get a mutable reference to the background now
+        let b = &mut self.backgrounds[index];
         (0..8).for_each(|i| {
-            // Currently this is just hardwired 2bpp
             b.pixel_buffer.push_back({
-                let v = palette[slices
+                let v = slices
                     .iter()
-                    .map(|s| ((*s as usize) >> (7 - i)) & 0x01)
-                    .sum::<usize>()
-                    % palette.len()];
-                if v == 0 { None } else { Some((v, priority)) }
+                    .enumerate()
+                    .map(|(j, s)| 
+                    // Shifted left by 2 since each slice will have 2 bits per pixel
+                    (s[i] as usize) << (2 * j))
+                    .sum::<usize>();
+                if v == 0 {
+                    None
+                } else {
+                    Some((palette[v], priority))
+                }
             })
         });
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
-            self.dot = (self.dot + 1) % (4 * (DOTS_PER_SCANLINE * SCANLINES));
+            self.dot = (self.dot + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
             if self.dot % 4 == 0 {
                 // Note the visual picture starts at dot 88
-                let x = (self.dot / 4).wrapping_sub(22) % DOTS_PER_SCANLINE;
-                let y = (self.dot / 4) / DOTS_PER_SCANLINE;
+                let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
+                let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
                 if y == 241 && x == 0 {
                     self.vblank = true;
                 }
@@ -354,6 +378,6 @@ impl Ppu {
         })
     }
     pub fn is_in_vblank(&self) -> bool {
-        self.dot > 88 + 240 * DOTS_PER_SCANLINE
+        self.dot > 88 + 240 * PIXELS_PER_SCANLINE
     }
 }

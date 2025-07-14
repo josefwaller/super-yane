@@ -112,6 +112,7 @@ pub fn vertical_table<'a>(
 enum RamDisplay {
     WorkRam,
     VideoRam,
+    ColorRam,
 }
 impl Display for RamDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -122,6 +123,7 @@ impl Display for RamDisplay {
             match self {
                 WorkRam => "WRAM",
                 VideoRam => "VRAM",
+                ColorRam => "CGRAM",
             }
         )
     }
@@ -398,31 +400,58 @@ impl Application {
         .into()
     }
     fn ram_view(&self) -> impl Into<Element<Message>> {
+        // let cgram = self
+        //     .console
+        //     .ppu()
+        //     .cgram
+        //     .map(|c| c.to_le_bytes())
+        //     .iter()
+        //     .flatten()
+        //     .collect();
         Column::with_children([
             pick_list(
-                [RamDisplay::VideoRam, RamDisplay::WorkRam],
+                [
+                    RamDisplay::VideoRam,
+                    RamDisplay::WorkRam,
+                    RamDisplay::ColorRam,
+                ],
                 Some(self.ram_display.clone()),
                 Message::SetRamDisplay,
             )
             .into(),
-            ram(
-                match self.ram_display {
-                    RamDisplay::VideoRam => &self.console.ppu().vram,
-                    RamDisplay::WorkRam => self.console.ram(),
-                },
-                self.ram_offset,
-                match self.ram_display {
-                    RamDisplay::VideoRam => COLORS[3],
-                    RamDisplay::WorkRam => COLORS[2],
-                },
-                Color::WHITE,
-                color!(0xAAAAAA),
-                match self.ram_display {
-                    RamDisplay::VideoRam => 0,
-                    RamDisplay::WorkRam => 0x7E0000,
-                },
-            )
-            .into(),
+            if self.ram_display == RamDisplay::ColorRam {
+                ram(
+                    &self.console.ppu().cgram,
+                    self.ram_offset,
+                    COLORS[1],
+                    Color::WHITE,
+                    color!(0xAAAAAA),
+                    0,
+                )
+                .into()
+            } else {
+                ram(
+                    match self.ram_display {
+                        RamDisplay::VideoRam => &self.console.ppu().vram,
+                        RamDisplay::WorkRam => self.console.ram(),
+                        RamDisplay::ColorRam => &[],
+                    },
+                    self.ram_offset,
+                    match self.ram_display {
+                        RamDisplay::VideoRam => COLORS[3],
+                        RamDisplay::WorkRam => COLORS[2],
+                        RamDisplay::ColorRam => COLORS[1],
+                    },
+                    Color::WHITE,
+                    color!(0xAAAAAA),
+                    match self.ram_display {
+                        RamDisplay::VideoRam => 0,
+                        RamDisplay::WorkRam => 0x7E0000,
+                        RamDisplay::ColorRam => 0,
+                    },
+                )
+                .into()
+            },
         ])
     }
     fn breakpoints(&self) -> impl Into<Element<Message>> {

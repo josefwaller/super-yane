@@ -1,3 +1,5 @@
+use std::fmt::UpperHex;
+
 use iced::{
     Color, Element, Length,
     widget::{
@@ -11,14 +13,17 @@ use iced::{
 
 use crate::application::Message;
 
-pub fn ram(
-    ram: &[u8],
+pub fn ram<T: UpperHex + Copy>(
+    ram: &[T],
     offset: usize,
     label_color: Color,
     byte_color: Color,
     zero_color: Color,
     addr_offset: usize,
-) -> impl Into<Element<Message>> {
+) -> impl Into<Element<Message>>
+where
+    u32: From<T>,
+{
     let bytes_per_line = 0x20;
     let num_lines = 30;
     // +2 for the '0x' prefix
@@ -50,7 +55,11 @@ pub fn ram(
                             .into_iter()
                             .chain(line.iter().map(|l| {
                                 text(format!("{:02X}", l))
-                                    .color(if *l == 0 { zero_color } else { byte_color })
+                                    .color(if u32::from(*l) == 0 {
+                                        zero_color
+                                    } else {
+                                        byte_color
+                                    })
                                     .into()
                             })),
                         )
