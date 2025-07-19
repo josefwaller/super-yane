@@ -1,46 +1,12 @@
 use log::*;
 use wdc65816::{HasAddressBus, Processor};
 
-use crate::{Cartridge, Ppu};
+use crate::{
+    Cartridge, Ppu,
+    dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
+};
 use paste::paste;
 
-#[derive(Copy, Clone, Default, Debug)]
-pub enum DmaAddressAjustMode {
-    #[default]
-    Increment,
-    Decrement,
-    Fixed,
-}
-
-#[derive(Clone)]
-pub struct DmaChannel {
-    pub transfer_pattern: Vec<u32>,
-    pub adjust_mode: DmaAddressAjustMode,
-    pub indirect: bool,
-    pub direction: bool,
-    pub dest_addr: usize,
-    /// The lower 16 bits of the DMA address
-    pub src_addr: u16,
-    /// The bank of the DMA address
-    pub src_bank: u8,
-    /// The byte counter, or number of bytes to transfer
-    pub byte_counter: u16,
-}
-
-impl Default for DmaChannel {
-    fn default() -> Self {
-        DmaChannel {
-            transfer_pattern: vec![0],
-            adjust_mode: DmaAddressAjustMode::Increment,
-            indirect: false,
-            direction: false,
-            dest_addr: 0,
-            src_addr: 0,
-            src_bank: 0,
-            byte_counter: 0,
-        }
-    }
-}
 #[derive(Clone)]
 pub struct ExternalArchitecture {
     pub ram: [u8; 0x20000],
@@ -117,10 +83,10 @@ impl ExternalArchitecture {
                                     let md = &mut self.dma_channels[i];
                                     bytes_transferred += 1;
                                     match md.adjust_mode {
-                                        DmaAddressAjustMode::Increment => {
+                                        DmaAddressAdjustMode::Increment => {
                                             md.src_addr = d.src_addr.wrapping_add(1)
                                         }
-                                        DmaAddressAjustMode::Decrement => {
+                                        DmaAddressAdjustMode::Decrement => {
                                             md.src_addr = d.src_addr.wrapping_sub(1)
                                         }
                                         _ => {}
@@ -161,9 +127,9 @@ impl ExternalArchitecture {
                                     _ => panic!("Should be impossible {:X}", (value & 0x07)),
                                 };
                                 d.adjust_mode = match value & 0x18 {
-                                    0x00 => DmaAddressAjustMode::Increment,
-                                    0x10 => DmaAddressAjustMode::Decrement,
-                                    _ => DmaAddressAjustMode::Fixed,
+                                    0x00 => DmaAddressAdjustMode::Increment,
+                                    0x10 => DmaAddressAdjustMode::Decrement,
+                                    _ => DmaAddressAdjustMode::Fixed,
                                 };
                                 d.indirect = (value & 0x40) != 0;
                                 d.direction = (value & 0x80) != 0;
