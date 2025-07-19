@@ -4,3 +4,6 @@ members = ["app", "core", "wdc65816"]
 
 [workspace.dependencies]
 log = "0.4.27"
+
+[profile.dev]
+opt-level = 1
