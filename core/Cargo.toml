@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 wdc65816 = { path = "../wdc65816" }
+spc700 = { path = "../spc700" }
 log = { workspace = true }
 paste = "1.0.15"
 

@@ -1,4 +1,5 @@
 use log::*;
+use spc700::{HasAddressBus as Spc700AddressBuss, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
 };
 use paste::paste;
 
+// Contains everything except the processor(s)
 #[derive(Clone)]
 pub struct ExternalArchitecture {
     pub ram: [u8; 0x20000],
@@ -111,8 +113,8 @@ impl ExternalArchitecture {
                                         + d.transfer_pattern
                                             [bytes_transferred % d.transfer_pattern.len()]
                                             as usize;
-                                    let v = self.read(src);
-                                    self.write(dest, v);
+                                    let v = HasAddressBus::read(self, src);
+                                    HasAddressBus::write(self, dest, v);
                                     let md = &mut self.dma_channels[i];
                                     bytes_transferred += 1;
                                     match md.adjust_mode {
@@ -220,6 +222,13 @@ impl HasAddressBus for ExternalArchitecture {
         self.advance(clks);
     }
 }
+impl Spc700AddressBuss for ExternalArchitecture {
+    fn io(&mut self) {}
+    fn read(&mut self, address: usize) -> u8 {
+        0
+    }
+    fn write(&mut self, address: usize, value: u8) {}
+}
 
 /// The entire S.N.E.S. Console
 #[derive(Clone)]
@@ -230,6 +239,7 @@ pub struct Console {
     // Since this is a bit of a weird structure we provide methods to get the different parts of the console as mutable/immuatable
     // references
     cpu: Processor,
+    apu: Spc700,
     rest: ExternalArchitecture,
 }
 
@@ -262,6 +272,7 @@ impl Console {
     pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
         let mut c = Console {
             cpu: Processor::default(),
+            apu: Spc700::default(),
             rest: ExternalArchitecture {
                 ram: [0; 0x20000],
                 cartridge: Cartridge::from_data(cartridge_data),
@@ -279,7 +290,9 @@ impl Console {
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         (0..num_instructions).for_each(|_| {
+            // Todo: These should not be in sync
             self.cpu.step(&mut self.rest);
+            self.apu.step(&mut self.rest);
         });
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
