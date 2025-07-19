@@ -1,3 +1,5 @@
+use crate::opcodes::*;
+
 #[derive(Default, Copy, Clone)]
 pub struct StatusRegister {
     pub n: bool,
