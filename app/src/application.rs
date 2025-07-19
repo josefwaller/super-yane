@@ -3,11 +3,18 @@ use std::{collections::VecDeque, fmt::Display, string::FromUtf16Error};
 use crate::{cell, widgets::text_table};
 use iced::{
     Alignment::{self, Center},
-    Color, Element, Event, Font,
+    Color, Element,
+    Event::{self, Keyboard},
+    Font,
     Length::{self, FillPortion},
     Padding, Renderer, Subscription, Theme,
     alignment::Horizontal,
     color, event,
+    keyboard::{
+        Event::{KeyPressed, KeyReleased},
+        Key,
+        key::{Code, Key::Character, Physical::Code as KeyCode},
+    },
     widget::{
         Column, Container, Row, Scrollable, Slider, TextInput, button, checkbox, column, container,
         horizontal_space,
@@ -24,7 +31,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use super_yane::{Console, ppu::Background};
+use super_yane::{Console, InputPort, StandardControllerValue, ppu::Background};
 use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
@@ -142,7 +149,7 @@ pub enum Message {
     /// Go back 1 state
     PreviousInstruction,
     PreviousBreakpoint,
-    // OnEvent(Event),
+    OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
@@ -243,9 +250,39 @@ impl Application {
             })
             .collect();
     }
+    fn handle_input(&mut self, event: Event) {
+        if let Keyboard(keyboard_event) = event {
+            let key_value: Option<(String, bool)> = match keyboard_event {
+                KeyPressed {
+                    key: Character(c), ..
+                } => Some((c.to_string(), true)),
+                KeyReleased {
+                    key: Character(c), ..
+                } => Some((c.to_string(), false)),
+                _ => None,
+            };
+            let c = self.console.input_ports()[0];
+            match c {
+                InputPort::Empty => {}
+                InputPort::StandardController(mut v) => match key_value {
+                    Some((key, val)) => {
+                        match key.as_str() {
+                            "w" => v.up = val,
+                            "a" => v.left = val,
+                            "s" => v.down = val,
+                            "d" => v.right = val,
+                            _ => {}
+                        };
+                        self.console.input_ports_mut()[0] = InputPort::StandardController(v);
+                    }
+                    _ => {}
+                },
+            }
+        }
+    }
     pub fn update(&mut self, message: Message) {
         match message {
-            // Message::OnEvent(e) => {}
+            Message::OnEvent(e) => self.handle_input(e),
             Message::NewFrame() => {
                 if !self.is_paused {
                     while self.console.ppu().is_in_vblank() && !self.is_paused {
@@ -703,7 +740,7 @@ impl Application {
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             window::frames().map(|_| Message::NewFrame()),
-            // event::listen().map(Message::OnEvent),
+            event::listen().map(Message::OnEvent),
         ])
     }
     pub fn theme(&self) -> Theme {
