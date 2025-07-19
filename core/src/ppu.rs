@@ -281,7 +281,7 @@ impl Ppu {
 
         // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
-            2 => &self.cgram[(4 * palette_index)..(4 * palette_index + 4)],
+            2 => &self.cgram[(4 * 8 * index + 4 * palette_index)..(4 * 8 * index + 4 * palette_index + 4)],
             4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
             8 => {
                 if direct_color {

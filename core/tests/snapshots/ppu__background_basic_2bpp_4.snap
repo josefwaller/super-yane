@@ -1,0 +1,6 @@
+---
+source: core/tests/ppu.rs
+expression: "console.ppu().screen_buffer.map(| b |\nb.to_le_bytes()).into_iter().flatten().collect()"
+extension: bin
+snapshot_kind: binary
+---
