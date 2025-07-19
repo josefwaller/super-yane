@@ -249,9 +249,39 @@ impl Ppu {
     fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
         // Get an immutable reference to the background
         let b = &self.backgrounds[index];
-        // Todo remove %
-        let x = (x + b.h_off as usize) % 256;
-        let y = (y + b.v_off as usize) % 256;
+        // Get the tilemaps to render, relative to the current tilemap address
+        // So thi is basically an offset to add to the tilemap address
+        // [top left, top right, bot left, bot right]
+        let mirrored_tile_addrs = if b.num_horz_tilemaps == 2 {
+            if b.num_vert_tilemaps == 2 {
+                [0, 1, 2, 3]
+            } else {
+                [0, 1, 0, 1]
+            }
+        } else {
+            if b.num_vert_tilemaps == 2 {
+                [0, 0, 1, 1]
+            } else {
+                [0, 0, 0, 0]
+            }
+        };
+        // Get the tilemap address and X/Y coord of the pixel in the tilemap
+        let (tilemap_addr, x, y) = {
+            let x = x + b.h_off as usize;
+            let y = y + b.v_off as usize;
+            const WORDS_PER_TILEMAP: usize = 32 * 32;
+            if x >= 256 {
+                if y >= 256 {
+                    (b.tilemap_addr + mirrored_tile_addrs[3] * WORDS_PER_TILEMAP, x % 256, y % 256)
+                } else {
+                    (b.tilemap_addr + mirrored_tile_addrs[1] * WORDS_PER_TILEMAP, x % 256, y)
+                }
+            } else if y >= 256 {
+                (b.tilemap_addr + mirrored_tile_addrs[2] * WORDS_PER_TILEMAP, x, y % 256)
+            } else {
+                (b.tilemap_addr, x, y)
+            }
+        };
         // These are here since they will have to change once the background scrolling is implemented
         let tile_x = x / 8;
         let tile_y = y / 8;
@@ -260,7 +290,7 @@ impl Ppu {
         // Note that there's always 2 bytes per tile of the TILEMAP, regardless of how many bpp the tile will use
         let addr = 2 * (32 * tile_y + tile_x);
         // Load the tile
-        let tile_addr = 2 * b.tilemap_addr + addr;
+        let tile_addr = 2 * tilemap_addr + addr;
         let tile_low = self.vram[tile_addr % self.vram.len()];
         let tile_high = self.vram[(tile_addr + 1) % self.vram.len()];
         let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
