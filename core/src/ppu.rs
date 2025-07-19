@@ -249,6 +249,9 @@ impl Ppu {
     fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
         // Get an immutable reference to the background
         let b = &self.backgrounds[index];
+        // Todo remove %
+        let x = (x + b.h_off as usize) % 256;
+        let y = (y + b.v_off as usize) % 256;
         // These are here since they will have to change once the background scrolling is implemented
         let tile_x = x / 8;
         let tile_y = y / 8;
@@ -266,7 +269,7 @@ impl Ppu {
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
         // Get all the slices
-        let slices = (0..(bpp.ilog2() as usize))
+        let slices = (0..(bpp as usize / 2))
             .map(|i| self.get_2bpp_slice_at(slice_addr + 16 * i))
             .collect::<Vec<[u8; 8]>>();
         // Todo: Make this actually change
@@ -294,7 +297,13 @@ impl Ppu {
         };
         // Get a mutable reference to the background now
         let b = &mut self.backgrounds[index];
-        (0..8).for_each(|i| {
+        // We "skip" the first (x % 8) pixels
+        // Since each byte contains data for 8 consecutive pixels
+        // if the screen is scrolled over horizontally by less than 8 pixels
+        // (or any amount that isn't a multiple of 8), we need to load the
+        // byte and then only use some of the data it in
+        // So we skip the first (x % 8) pixels by starting with that offset
+        ((x % 8)..8).for_each(|i| {
             b.pixel_buffer.push_back({
                 let v = slices
                     .iter()
