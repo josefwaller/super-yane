@@ -47,6 +47,11 @@ impl Processor {
         self.sr.n = (v & 0x80) != 0;
         v
     }
+    fn asl(&mut self, v: u8) -> u8 {
+        let v = v.rotate_left(1);
+        self.sr.c = (v & 0x01) != 0;
+        v & 0xFE
+    }
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
@@ -117,8 +122,14 @@ impl Processor {
         /// Reads 2 values using 2 different addressing mode(s),
         /// and then writes a value using the first addressing mode.
         /// `target` is the function address that will be read and then written to.
-        /// `operand` is the function address that is just read.
+        /// `operand` (optional) is the function address that is just read.
         macro_rules! read_write_func {
+            ($target: ident, $func: ident) => {{
+                let addr = self.$target(bus) as usize;
+                let value = bus.read(addr);
+                let value = self.$func(value);
+                bus.write(addr, value);
+            }};
             ($target: ident, $operand: ident, $func: ident) => {{
                 let addr = self.$operand(bus) as usize;
                 let l = bus.read(addr);
@@ -178,6 +189,12 @@ impl Processor {
             AND_D_IMM => read_write_func!(d, imm, and),
             AND1_C_NMB => read_bit_func!(c, &, true),
             AND1_C_MB => read_bit_func!(c, &),
+            ASL_A => {
+                self.a = self.asl(self.a);
+            }
+            ASL_D => read_write_func!(d, asl),
+            ASL_DX => read_write_func!(dx, asl),
+            ASL_ABS => read_write_func!(abs, asl),
             _ => {}
         }
     }
