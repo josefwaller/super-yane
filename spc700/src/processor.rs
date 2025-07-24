@@ -28,7 +28,98 @@ pub trait HasAddressBus {
 }
 
 impl Processor {
-    pub fn step(&mut self, bus: &mut impl HasAddressBus) {}
+    fn adc(&mut self, l: u8, r: u8, bus: &mut impl HasAddressBus) -> u8 {
+        l.wrapping_add(r).wrapping_add(self.sr.c.into())
+    }
+
+    /// Immediate addressing
+    fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
+        self.pc as u16
+    }
+    /// Direct page addressing
+    fn d(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        let addr = bus.read(self.pc as usize) as u16;
+        self.pc = self.pc.wrapping_add(1);
+        0x100 * u16::from(self.sr.p) + addr
+    }
+    /// Direct page with X offset
+    fn dx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.d(bus).wrapping_add(self.x as u16)
+    }
+    /// Direct page with Y offset
+    fn dy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.d(bus).wrapping_add(self.y as u16)
+    }
+    fn id(&mut self, r: u8, bus: &mut impl HasAddressBus) -> u16 {
+        // Todo: Page wrap
+        let addr = self.d(bus).wrapping_add(r as u16);
+        // Read the pointer
+        bus.read(addr as usize) as u16 + 0x100 * bus.read(addr.wrapping_add(1) as usize) as u16
+    }
+    fn ix(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        bus.read(self.x as usize) as u16
+    }
+    fn iy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        bus.read(self.y as usize) as u16
+    }
+    fn idx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.id(self.x, bus)
+    }
+    fn idy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.id(self.y, bus)
+    }
+    fn abs(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        let addr = bus.read(self.pc as usize) as u16
+            + 0x100 * bus.read(self.pc.wrapping_add(1) as usize) as u16;
+        self.pc = self.pc.wrapping_add(2);
+        addr
+    }
+    fn abs_x(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.abs(bus).wrapping_add(self.x as u16)
+    }
+    fn abs_y(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        self.abs(bus).wrapping_add(self.y as u16)
+    }
+    pub fn step(&mut self, bus: &mut impl HasAddressBus) {
+        macro_rules! read_a_func {
+            ($read: ident, $func: ident) => {{
+                let addr = self.$read(bus);
+                let val = bus.read(addr as usize);
+                self.a = self.$func(val, self.a, bus);
+            }};
+        }
+        /// Reads 2 values using 2 different addressing mode(s),
+        /// and then writes a value using the first addressing mode.
+        /// `target` is the function address that will be read and then written to.
+        /// `operand` is the function address that is just read.
+        macro_rules! read_write_func {
+            ($target: ident, $operand: ident, $func: ident) => {{
+                let addr = self.$operand(bus) as usize;
+                let l = bus.read(addr);
+                let addr = self.$target(bus) as usize;
+                let r = bus.read(addr);
+                let val = self.$func(l, r, bus);
+                bus.write(addr, val);
+            }};
+        }
+        let opcode = bus.read(self.pc as usize);
+        self.pc = self.pc.wrapping_add(1);
+        match opcode {
+            ADC_A_ABS => read_a_func!(abs, adc),
+            ADC_A_ABSX => read_a_func!(abs_x, adc),
+            ADC_A_ABSY => read_a_func!(abs_y, adc),
+            ADC_A_D => read_a_func!(d, adc),
+            ADC_A_DX => read_a_func!(dx, adc),
+            ADC_A_IDX => read_a_func!(idx, adc),
+            ADC_A_IDY => read_a_func!(idy, adc),
+            ADC_A_IX => read_a_func!(ix, adc),
+            ADC_A_IMM => read_a_func!(imm, adc),
+            ADC_IX_IY => read_write_func!(ix, iy, adc),
+            ADC_D_D => read_write_func!(d, d, adc),
+            ADC_D_IMM => read_write_func!(d, imm, adc),
+            _ => {}
+        }
+    }
 }
 
 impl Default for Processor {
