@@ -28,8 +28,18 @@ pub trait HasAddressBus {
 }
 
 impl Processor {
-    fn adc(&mut self, l: u8, r: u8, bus: &mut impl HasAddressBus) -> u8 {
-        l.wrapping_add(r).wrapping_add(self.sr.c.into())
+    fn adc(&mut self, l: u8, r: u8) -> u8 {
+        let (r, c1) = l.overflowing_add(r);
+        let (r, c2) = r.overflowing_add(self.sr.c.into());
+        self.sr.c = c1 | c2;
+        // Todo: More flags
+        r
+    }
+    fn addw(&mut self, l: u16, r: u16) -> u16 {
+        let (r, c1) = l.overflowing_add(r);
+        let (r, c2) = r.overflowing_add(self.sr.c.into());
+        self.sr.c = c1 | c2;
+        r
     }
 
     /// Immediate addressing
@@ -85,7 +95,7 @@ impl Processor {
             ($read: ident, $func: ident) => {{
                 let addr = self.$read(bus);
                 let val = bus.read(addr as usize);
-                self.a = self.$func(val, self.a, bus);
+                self.a = self.$func(val, self.a);
             }};
         }
         /// Reads 2 values using 2 different addressing mode(s),
@@ -98,8 +108,19 @@ impl Processor {
                 let l = bus.read(addr);
                 let addr = self.$target(bus) as usize;
                 let r = bus.read(addr);
-                let val = self.$func(l, r, bus);
+                let val = self.$func(l, r);
                 bus.write(addr, val);
+            }};
+        }
+        /// Reads a value, operates on it with the YA register, and
+        /// then stores the result in the YA register
+        macro_rules! read_ya_func {
+            ($operand: ident, $func: ident) => {{
+                let addr = self.$operand(bus) as usize;
+                let value = u16::from_le_bytes([bus.read(addr), bus.read(addr + 1)]);
+                let result = self.$func(self.y as u16 * 0x100 + self.a as u16, value);
+                self.y = (result >> 8) as u8;
+                self.a = (result & 0xFF) as u8;
             }};
         }
         let opcode = bus.read(self.pc as usize);
@@ -117,6 +138,7 @@ impl Processor {
             ADC_IX_IY => read_write_func!(ix, iy, adc),
             ADC_D_D => read_write_func!(d, d, adc),
             ADC_D_IMM => read_write_func!(d, imm, adc),
+            ADDW_YA_D => read_ya_func!(d, addw),
             _ => {}
         }
     }
