@@ -31,7 +31,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use super_yane::{Console, InputPort, StandardControllerValue, ppu::Background};
+use super_yane::{Console, InputPort, ppu::Background};
 use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
@@ -264,16 +264,42 @@ impl Application {
             let c = self.console.input_ports()[0];
             match c {
                 InputPort::Empty => {}
-                InputPort::StandardController(mut v) => match key_value {
+                InputPort::StandardController {
+                    mut a,
+                    mut b,
+                    mut x,
+                    mut y,
+                    mut up,
+                    mut left,
+                    mut right,
+                    mut down,
+                    mut start,
+                    mut select,
+                    mut r,
+                    mut l,
+                } => match key_value {
                     Some((key, val)) => {
                         match key.as_str() {
-                            "w" => v.up = val,
-                            "a" => v.left = val,
-                            "s" => v.down = val,
-                            "d" => v.right = val,
+                            "w" => up = val,
+                            "a" => left = val,
+                            "s" => down = val,
+                            "d" => right = val,
                             _ => {}
                         };
-                        self.console.input_ports_mut()[0] = InputPort::StandardController(v);
+                        self.console.input_ports_mut()[0] = InputPort::StandardController {
+                            a,
+                            b,
+                            x,
+                            y,
+                            up,
+                            left,
+                            right,
+                            down,
+                            start,
+                            select,
+                            r,
+                            l,
+                        };
                     }
                     _ => {}
                 },

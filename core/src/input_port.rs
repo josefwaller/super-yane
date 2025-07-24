@@ -1,21 +1,38 @@
 #[derive(Copy, Clone, Default, Debug)]
-pub struct StandardControllerValue {
-    pub a: bool,
-    pub b: bool,
-    pub x: bool,
-    pub y: bool,
-    pub up: bool,
-    pub left: bool,
-    pub right: bool,
-    pub down: bool,
-    pub start: bool,
-    pub select: bool,
-    pub r: bool,
-    pub l: bool,
+pub enum InputPort {
+    #[default]
+    Empty,
+    StandardController {
+        a: bool,
+        b: bool,
+        x: bool,
+        y: bool,
+        up: bool,
+        left: bool,
+        right: bool,
+        down: bool,
+        start: bool,
+        select: bool,
+        r: bool,
+        l: bool,
+    },
 }
 
-#[derive(Copy, Clone)]
-pub enum InputPort {
-    Empty,
-    StandardController(StandardControllerValue),
+impl InputPort {
+    pub fn default_standard_controller() -> InputPort {
+        InputPort::StandardController {
+            a: false,
+            b: false,
+            x: false,
+            y: false,
+            up: false,
+            left: false,
+            right: false,
+            down: false,
+            start: false,
+            select: false,
+            r: false,
+            l: false,
+        }
+    }
 }

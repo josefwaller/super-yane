@@ -5,7 +5,6 @@ use wdc65816::{HasAddressBus, Processor};
 use crate::{
     Cartridge, InputPort, Ppu,
     dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
-    input_port::StandardControllerValue,
 };
 use paste::paste;
 
@@ -46,20 +45,29 @@ impl ExternalArchitecture {
             } else if a >= 0x4218 && a < 0x4220 {
                 // Read controller data
                 let i = (a / 2) % 2;
+                let j = a % 2;
                 let input_port = self.input_ports[i];
                 match input_port {
                     InputPort::Empty => (self.open_bus_value, 12),
-                    InputPort::StandardController(v) => {
-                        match a % 2 {
+                    InputPort::StandardController {
+                        a,
+                        b,
+                        x,
+                        y,
+                        up,
+                        left,
+                        right,
+                        down,
+                        start,
+                        select,
+                        r,
+                        l,
+                    } => {
+                        match j {
                             // Low byte
-                            0 => (
-                                byte_from_bits([false, false, false, false, v.r, v.l, v.x, v.a]),
-                                12,
-                            ),
+                            0 => (byte_from_bits([false, false, false, false, r, l, x, a]), 12),
                             1 => (
-                                byte_from_bits([
-                                    v.right, v.left, v.down, v.up, v.start, v.select, v.y, v.b,
-                                ]),
+                                byte_from_bits([right, left, down, up, start, select, y, b]),
                                 12,
                             ),
                             _ => panic!("Should be impossible"),
@@ -276,7 +284,7 @@ impl Console {
             rest: ExternalArchitecture {
                 ram: [0; 0x20000],
                 cartridge: Cartridge::from_data(cartridge_data),
-                input_ports: [InputPort::StandardController(StandardControllerValue::default()); 2],
+                input_ports: [InputPort::default_standard_controller(); 2],
                 ppu: Ppu::default(),
                 dma_channels: core::array::from_fn(|_| DmaChannel::default()),
                 total_master_clocks: 0,
