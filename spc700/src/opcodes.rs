@@ -92,22 +92,8 @@ pub const CALL_ABS: u8 = 0x3F;
 pub const CBNE_DX_R: u8 = 0xDE;
 /// Compare and branch if not equal Direct Page Relative
 pub const CBNE_D_R: u8 = 0x2E;
-/// Clear bit 0nth Bit
-pub const CLR1_D0: u8 = 0x12;
-/// Clear bit 1nth Bit
-pub const CLR1_D1: u8 = 0x32;
-/// Clear bit 2nth Bit
-pub const CLR1_D2: u8 = 0x52;
-/// Clear bit 3nth Bit
-pub const CLR1_D3: u8 = 0x72;
-/// Clear bit 4nth Bit
-pub const CLR1_D4: u8 = 0x92;
-/// Clear bit 5nth Bit
-pub const CLR1_D5: u8 = 0xB2;
-/// Clear bit 6nth Bit
-pub const CLR1_D6: u8 = 0xD2;
-/// Clear bit 7nth Bit
-pub const CLR1_D7: u8 = 0xF2;
+/// Clear Nth bit Direct Mask
+pub const CLR1_D: u8 = 0x12;
 /// Clear carry
 pub const CLRC: u8 = 0x60;
 /// Clear page flag

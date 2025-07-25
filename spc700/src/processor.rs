@@ -259,6 +259,12 @@ impl Processor {
             }
             CBNE_DX_R => cbne!(dx),
             CBNE_D_R => cbne!(d),
+            opcode if opcode & 0x1F == CLR1_D => {
+                let bit = opcode >> 5;
+                let addr = self.d(bus);
+                let val = bus.read(addr as usize) & !(0x01 << bit);
+                bus.write(addr as usize, val);
+            }
             _ => {}
         }
     }
