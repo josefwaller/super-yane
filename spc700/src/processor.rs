@@ -201,6 +201,11 @@ impl Processor {
                 }
             }};
         }
+        macro_rules! set_flag {
+            ($flag: ident, $val: expr) => {{
+                self.sr.$flag = $val;
+            }};
+        }
         match opcode {
             ADC_A_ABS => read_a_func!(abs, adc),
             ADC_A_ABSX => read_a_func!(abs_x, adc),
@@ -265,6 +270,9 @@ impl Processor {
                 let val = bus.read(addr as usize) & !(0x01 << bit);
                 bus.write(addr as usize, val);
             }
+            CLRC => set_flag!(c, false),
+            CLRP => set_flag!(p, false),
+            CLRV => set_flag!(v, false),
             _ => {}
         }
     }
