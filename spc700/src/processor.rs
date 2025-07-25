@@ -28,11 +28,12 @@ impl Processor {
     }
     fn push_to_stack_u16(&mut self, val: u16, bus: &mut impl HasAddressBus) {
         let [l, h] = val.to_le_bytes();
-        self.push_to_stack_u8(l, bus);
         self.push_to_stack_u8(h, bus);
+        self.push_to_stack_u8(l, bus);
     }
     fn pull_from_stack_u16(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        u16::from_le_bytes([self.pull_from_stack_u8(bus), self.pull_from_stack_u8(bus)])
+        let [h, l] = [self.pull_from_stack_u8(bus), self.pull_from_stack_u8(bus)];
+        u16::from_le_bytes([l, h])
     }
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
@@ -242,6 +243,10 @@ impl Processor {
                 self.push_to_stack_u16(self.pc, bus);
                 self.push_to_stack_u8(self.sr.to_byte(), bus);
                 self.pc = bus.read(0xFFDE) as u16 + 0x100 * bus.read(0xFFDF) as u16;
+            }
+            CALL_ABS => {
+                self.push_to_stack_u16(self.pc, bus);
+                self.pc = self.abs(bus);
             }
             _ => {}
         }
