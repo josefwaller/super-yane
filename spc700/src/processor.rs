@@ -192,6 +192,15 @@ impl Processor {
                 }
             }};
         }
+        macro_rules! cbne {
+            ($addr: ident) => {{
+                let addr = self.$addr(bus);
+                let value = bus.read(addr as usize);
+                if self.a == value {
+                    self.branch_imm(bus);
+                }
+            }};
+        }
         match opcode {
             ADC_A_ABS => read_a_func!(abs, adc),
             ADC_A_ABSX => read_a_func!(abs_x, adc),
@@ -248,6 +257,8 @@ impl Processor {
                 self.push_to_stack_u16(self.pc, bus);
                 self.pc = self.abs(bus);
             }
+            CBNE_DX_R => cbne!(dx),
+            CBNE_D_R => cbne!(d),
             _ => {}
         }
     }
