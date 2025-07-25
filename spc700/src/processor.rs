@@ -52,6 +52,12 @@ impl Processor {
         self.sr.c = (v & 0x01) != 0;
         v & 0xFE
     }
+    fn branch_imm(&mut self, bus: &mut impl HasAddressBus) {
+        let offset_addr = self.imm(bus);
+        let offset = bus.read(offset_addr as usize);
+        self.pc =
+            ((self.pc as isize).wrapping_add((offset as i8) as isize) % u16::MAX as isize) as u16;
+    }
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
@@ -112,6 +118,9 @@ impl Processor {
         (value & (0x01 << bit)) != 0
     }
     pub fn step(&mut self, bus: &mut impl HasAddressBus) {
+        // Read opcode
+        let opcode = bus.read(self.pc as usize);
+        self.pc = self.pc.wrapping_add(1);
         macro_rules! read_a_func {
             ($read: ident, $func: ident) => {{
                 let addr = self.$read(bus);
@@ -159,8 +168,23 @@ impl Processor {
             }};
             ($flag: ident, $op: tt) => {{ read_bit_func!($flag, $op, false) }};
         }
-        let opcode = bus.read(self.pc as usize);
-        self.pc = self.pc.wrapping_add(1);
+        macro_rules! branch_d_if_bit_eq {
+            ($val: expr) => {{
+                let bit = opcode >> 5;
+                let addr = self.d(bus);
+                let val = bus.read(addr as usize);
+                if (val >> bit) & 0x01 == $val {
+                    self.branch_imm(bus);
+                }
+            }};
+        }
+        macro_rules! branch_on_flag {
+            ($flag: ident, $val: expr) => {{
+                if u8::from(self.sr.$flag) == $val {
+                    self.branch_imm(bus);
+                }
+            }};
+        }
         match opcode {
             ADC_A_ABS => read_a_func!(abs, adc),
             ADC_A_ABSX => read_a_func!(abs_x, adc),
@@ -195,6 +219,19 @@ impl Processor {
             ASL_D => read_write_func!(d, asl),
             ASL_DX => read_write_func!(dx, asl),
             ASL_ABS => read_write_func!(abs, asl),
+            // BBS
+            opcode if opcode & 0x1F == BBS_D_R_MASK => branch_d_if_bit_eq!(1),
+            // BBC
+            opcode if opcode & 0x1F == BBC_D_R_MASK => branch_d_if_bit_eq!(0),
+            BCC_R => branch_on_flag!(c, 0),
+            BCS_R => branch_on_flag!(c, 1),
+            BEQ_R => branch_on_flag!(z, 1),
+            BNE_R => branch_on_flag!(z, 0),
+            BMI_R => branch_on_flag!(n, 1),
+            BPL_R => branch_on_flag!(n, 0),
+            BVC_R => branch_on_flag!(v, 0),
+            BVS_R => branch_on_flag!(v, 1),
+            BRA_R => self.branch_imm(bus),
             _ => {}
         }
     }

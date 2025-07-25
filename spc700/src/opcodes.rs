@@ -60,38 +60,12 @@ pub const ASL_D: u8 = 0x0B;
 pub const ASL_DX: u8 = 0x1B;
 /// Shift left Absolute
 pub const ASL_ABS: u8 = 0x0C;
-/// Branch if bit clear 0nth Bit Relative
-pub const BBC_D0_R: u8 = 0x13;
-/// Branch if bit clear 1nth Bit Relative
-pub const BBC_D1_R: u8 = 0x33;
-/// Branch if bit clear 2nth Bit Relative
-pub const BBC_D2_R: u8 = 0x53;
-/// Branch if bit clear 3nth Bit Relative
-pub const BBC_D3_R: u8 = 0x73;
-/// Branch if bit clear 4nth Bit Relative
-pub const BBC_D4_R: u8 = 0x93;
-/// Branch if bit clear 5nth Bit Relative
-pub const BBC_D5_R: u8 = 0xB3;
-/// Branch if bit clear 6nth Bit Relative
-pub const BBC_D6_R: u8 = 0xD3;
-/// Branch if bit clear 7nth Bit Relative
-pub const BBC_D7_R: u8 = 0xF3;
-/// Branch if bit set 0nth Bit Relative
-pub const BBS_D0_R: u8 = 0x03;
-/// Branch if bit set 1nth Bit Relative
-pub const BBS_D1_R: u8 = 0x23;
-/// Branch if bit set 2nth Bit Relative
-pub const BBS_D2_R: u8 = 0x43;
-/// Branch if bit set 3nth Bit Relative
-pub const BBS_D3_R: u8 = 0x63;
-/// Branch if bit set 4nth Bit Relative
-pub const BBS_D4_R: u8 = 0x83;
-/// Branch if bit set 5nth Bit Relative
-pub const BBS_D5_R: u8 = 0xA3;
-/// Branch if bit set 6nth Bit Relative
-pub const BBS_D6_R: u8 = 0xC3;
-/// Branch if bit set 7nth Bit Relative
-pub const BBS_D7_R: u8 = 0xE3;
+/// Branch if bit clear (Mask - the top 3 bits are set to 0)
+/// Which bit is selected by the top 3 bits of the opcode
+pub const BBC_D_R_MASK: u8 = 0x13;
+/// Branch if bit set (Mask - the top 3 bits are set to 0)
+/// Which bit is selected by the top 3 bits of the opcode
+pub const BBS_D_R_MASK: u8 = 0x03;
 /// Branch if carry clear Relative
 pub const BCC_R: u8 = 0x90;
 /// Branch if carry set Relative
