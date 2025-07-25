@@ -11,6 +11,36 @@ pub struct StatusRegister {
     pub z: bool,
     pub c: bool,
 }
+impl StatusRegister {
+    pub fn to_byte(&self) -> u8 {
+        macro_rules! bit {
+            ($num: expr, $flag: ident) => {{ if self.$flag { (1 << $num) } else { 0 } }};
+        }
+        bit!(7, n)
+            | bit!(6, v)
+            | bit!(5, p)
+            | bit!(4, b)
+            | bit!(3, h)
+            | bit!(2, i)
+            | bit!(1, z)
+            | bit!(0, c)
+    }
+    pub fn from_byte(byte: u8) -> StatusRegister {
+        macro_rules! bit {
+            ($num: expr) => {{ ((byte >> $num) & 0x01) != 0 }};
+        }
+        StatusRegister {
+            n: bit!(7),
+            v: bit!(6),
+            p: bit!(5),
+            b: bit!(4),
+            h: bit!(3),
+            i: bit!(2),
+            z: bit!(1),
+            c: bit!(0),
+        }
+    }
+}
 #[derive(Copy, Clone)]
 pub struct Processor {
     pub a: u8,
@@ -28,6 +58,23 @@ pub trait HasAddressBus {
 }
 
 impl Processor {
+    fn push_to_stack_u8(&mut self, val: u8, bus: &mut impl HasAddressBus) {
+        bus.write(self.sp as usize + 0x100, val);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+    fn pull_from_stack_u8(&mut self, bus: &mut impl HasAddressBus) -> u8 {
+        let val = bus.read(self.sp as usize + 0x100);
+        self.sp = self.sp.wrapping_add(1);
+        val
+    }
+    fn push_to_stack_u16(&mut self, val: u16, bus: &mut impl HasAddressBus) {
+        let [l, h] = val.to_le_bytes();
+        self.push_to_stack_u8(l, bus);
+        self.push_to_stack_u8(h, bus);
+    }
+    fn pull_from_stack_u16(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+        u16::from_le_bytes([self.pull_from_stack_u8(bus), self.pull_from_stack_u8(bus)])
+    }
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
         let (r, c2) = r.overflowing_add(self.sr.c.into());
@@ -232,6 +279,11 @@ impl Processor {
             BVC_R => branch_on_flag!(v, 0),
             BVS_R => branch_on_flag!(v, 1),
             BRA_R => self.branch_imm(bus),
+            BRK => {
+                self.push_to_stack_u16(self.pc, bus);
+                self.push_to_stack_u8(self.sr.to_byte(), bus);
+                self.pc = bus.read(0xFFDE) as u16 + 0x100 * bus.read(0xFFDF) as u16;
+            }
             _ => {}
         }
     }
