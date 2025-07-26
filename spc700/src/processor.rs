@@ -86,6 +86,34 @@ impl Processor {
         self.sr.n = (r & 0x8000) != 0;
         self.sr.c = c;
     }
+    fn dec(&mut self, v: u8) -> u8 {
+        let v = v.wrapping_sub(1);
+        self.sr.z = v == 0;
+        self.sr.n = (v & 0x80) != 0;
+        v
+    }
+    fn decw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
+        let l = bus.read(addr as usize);
+        let h = bus.read(addr.wrapping_add(1) as usize);
+        self.sr.c = false;
+        let (l, c) = l.overflowing_sub(1);
+        if c {
+            let (h, c) = h.overflowing_sub(1);
+            if c {
+                self.sr.c = c;
+            }
+        }
+        bus.write(addr as usize, l);
+        bus.write(addr.wrapping_add(1) as usize, h);
+        self.sr.n = (h & 0x80) != 0;
+        self.sr.z = l == 0 && h == 0;
+    }
+    fn eor(&mut self, a: u8, b: u8) -> u8 {
+        let r = a ^ b;
+        self.sr.n = (r & 0x80) != 0;
+        self.sr.z = r == 0;
+        r
+    }
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
@@ -156,8 +184,8 @@ impl Processor {
             };
         }
         macro_rules! read_a_func {
-            ($read: ident, $func: ident) => {{
-                let addr = self.$read(bus);
+            ($func: ident, $addr: ident) => {{
+                let addr = self.$addr(bus);
                 let val = bus.read(addr as usize);
                 self.a = self.$func(val, self.a);
             }};
@@ -173,7 +201,7 @@ impl Processor {
                 let value = self.$func(value);
                 bus.write(addr, value);
             }};
-            ($target: ident, $operand: ident, $func: ident) => {{
+            ($func: ident, $target: ident, $operand: ident) => {{
                 let addr = self.$operand(bus) as usize;
                 let l = bus.read(addr);
                 let addr = self.$target(bus) as usize;
@@ -199,6 +227,13 @@ impl Processor {
                 let result = self.$func(self.y as u16 * 0x100 + self.a as u16, value);
                 self.y = (result >> 8) as u8;
                 self.a = (result & 0xFF) as u8;
+            }};
+        }
+        macro_rules! read_write_func {
+            ($func: ident, $addr: ident) => {{
+                let addr = self.$addr(bus) as usize;
+                let value = self.$func(bus.read(addr));
+                bus.write(addr, value);
             }};
         }
         macro_rules! read_read_func {
@@ -251,31 +286,31 @@ impl Processor {
             }};
         }
         match opcode {
-            ADC_A_ABS => read_a_func!(abs, adc),
-            ADC_A_ABSX => read_a_func!(absx, adc),
-            ADC_A_ABSY => read_a_func!(absy, adc),
-            ADC_A_D => read_a_func!(d, adc),
-            ADC_A_DX => read_a_func!(dx, adc),
-            ADC_A_IDX => read_a_func!(idx, adc),
-            ADC_A_IDY => read_a_func!(idy, adc),
-            ADC_A_IX => read_a_func!(ix, adc),
-            ADC_A_IMM => read_a_func!(imm, adc),
-            ADC_IX_IY => read_read_write_func!(ix, iy, adc),
-            ADC_D_D => read_read_write_func!(d, d, adc),
-            ADC_D_IMM => read_read_write_func!(d, imm, adc),
+            ADC_A_ABS => read_a_func!(adc, abs),
+            ADC_A_ABSX => read_a_func!(adc, absx),
+            ADC_A_ABSY => read_a_func!(adc, absy),
+            ADC_A_D => read_a_func!(adc, d),
+            ADC_A_DX => read_a_func!(adc, dx),
+            ADC_A_IDX => read_a_func!(adc, idx),
+            ADC_A_IDY => read_a_func!(adc, idy),
+            ADC_A_IX => read_a_func!(adc, ix),
+            ADC_A_IMM => read_a_func!(adc, imm),
+            ADC_IX_IY => read_read_write_func!(adc, ix, iy),
+            ADC_D_D => read_read_write_func!(adc, d, d),
+            ADC_D_IMM => read_read_write_func!(adc, d, imm),
             ADDW_YA_D => read_ya_func!(d, addw),
-            AND_IX_IY => read_read_write_func!(ix, iy, and),
-            AND_A_IMM => read_a_func!(imm, and),
-            AND_A_IX => read_a_func!(ix, and),
-            AND_A_IDY => read_a_func!(idy, and),
-            AND_A_IDX => read_a_func!(idx, and),
-            AND_A_D => read_a_func!(d, and),
-            AND_A_DX => read_a_func!(dx, and),
-            AND_A_ABS => read_a_func!(abs, and),
-            AND_A_ABSX => read_a_func!(absx, and),
-            AND_A_ABSY => read_a_func!(absy, and),
-            AND_D_D => read_read_write_func!(d, d, and),
-            AND_D_IMM => read_read_write_func!(d, imm, and),
+            AND_IX_IY => read_read_write_func!(and, ix, iy),
+            AND_A_IMM => read_a_func!(and, imm),
+            AND_A_IX => read_a_func!(and, ix),
+            AND_A_IDY => read_a_func!(and, idy),
+            AND_A_IDX => read_a_func!(and, idx),
+            AND_A_D => read_a_func!(and, d),
+            AND_A_DX => read_a_func!(and, dx),
+            AND_A_ABS => read_a_func!(and, abs),
+            AND_A_ABSX => read_a_func!(and, absx),
+            AND_A_ABSY => read_a_func!(and, absy),
+            AND_D_D => read_read_write_func!(and, d, d),
+            AND_D_IMM => read_read_write_func!(and, d, imm),
             AND1_C_NMB => read_bit_func!(c, &, true),
             AND1_C_MB => read_bit_func!(c, &),
             ASL_A => {
@@ -340,6 +375,76 @@ impl Processor {
                 let val = bus.read(addr as usize) as u16
                     + 0x100 * bus.read(addr.wrapping_add(1) as usize) as u16;
                 self.cmp_w(ya!(), val);
+            }
+            DAA_A => {
+                if self.sr.c || self.a > 0x99 {
+                    self.a = self.a.wrapping_add(0x60);
+                    self.sr.c = true;
+                }
+                if self.sr.h || (self.a & 0x0F) > 0x09 {
+                    self.a = self.a.wrapping_add(0x06);
+                }
+            }
+            DAS_A => {
+                if !self.sr.c || self.a > 0x99 {
+                    self.a = self.a.wrapping_sub(0x60);
+                    self.sr.c = false;
+                }
+                if !self.sr.h || (self.a & 0x0F) > 0x09 {
+                    self.a = self.a.wrapping_sub(0x06)
+                }
+            }
+            DBNZ_Y_R => {
+                self.y = self.y.wrapping_sub(1);
+                if self.y != 0 {
+                    self.branch_imm(bus);
+                }
+            }
+            DBNZ_D_R => {
+                let addr = self.d(bus);
+                let val = bus.read(addr as usize).wrapping_sub(1);
+                bus.write(addr as usize, val);
+                if val != 0 {
+                    self.branch_imm(bus);
+                }
+            }
+            DEC_A => self.a = self.dec(self.a),
+            DEC_X => self.x = self.dec(self.x),
+            DEC_Y => self.y = self.dec(self.y),
+            DEC_D => read_write_func!(dec, d),
+            DEC_DX => read_write_func!(dec, dx),
+            DEC_ABS => read_write_func!(dec, abs),
+            DECW_D => {
+                let addr = self.d(bus);
+                self.decw(bus, addr);
+            }
+            DI => self.sr.i = false,
+            DIV_YA_X => {
+                let q = ya!() / self.x as u16;
+                let r = ya!() % self.x as u16;
+                (0..11).for_each(|_| bus.io());
+                self.a = q as u8;
+                self.y = r as u8;
+            }
+            EI => self.sr.i = true,
+            EOR_IX_IY => read_read_write_func!(eor, ix, iy),
+            EOR_A_IMM => read_a_func!(eor, imm),
+            EOR_A_IX => read_a_func!(eor, ix),
+            EOR_A_IDY => read_a_func!(eor, idy),
+            EOR_A_IDX => read_a_func!(eor, idx),
+            EOR_A_D => read_a_func!(eor, d),
+            EOR_A_DX => read_a_func!(eor, dx),
+            EOR_A_ABS => read_a_func!(eor, abs),
+            EOR_A_ABSX => read_a_func!(eor, absx),
+            EOR_A_ABSY => read_a_func!(eor, absy),
+            EOR_D_D => read_read_write_func!(eor, d, d),
+            EOR_D_IMM => read_read_write_func!(eor, d, imm),
+            EOR1_C_MB => {
+                let addr = self.abs(bus);
+                let bit = (addr & 0x7000) >> 13;
+                let addr = addr & 0x1FFF;
+                let val = bus.read(addr as usize);
+                self.sr.c ^= ((val >> bit) & 0x01) != 0;
             }
             _ => {}
         }
