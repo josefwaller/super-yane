@@ -17,6 +17,11 @@ pub trait HasAddressBus {
 }
 
 impl Processor {
+    fn read_u16(&self, addr: u16, bus: &mut impl HasAddressBus) -> u16 {
+        let low = bus.read(addr as usize);
+        let high = bus.read(addr.wrapping_add(1) as usize);
+        low as u16 + 0x100 * high as u16
+    }
     fn push_to_stack_u8(&mut self, val: u8, bus: &mut impl HasAddressBus) {
         bus.write(self.sp as usize + 0x100, val);
         self.sp = self.sp.wrapping_sub(1);
@@ -113,6 +118,20 @@ impl Processor {
         self.sr.n = (r & 0x80) != 0;
         self.sr.z = r == 0;
         r
+    }
+    fn inc(&mut self, v: u8) -> u8 {
+        let v = v.wrapping_add(1);
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
+        v
+    }
+    fn lsr(&mut self, v: u8) -> u8 {
+        let v = v.rotate_right(1);
+        self.sr.c = (v & 0x80) != 0;
+        let v = v & 0x7F;
+        self.sr.z = v == 0;
+        self.sr.n = (v & 0x80) != 0;
+        v
     }
 
     /// Immediate addressing
@@ -441,11 +460,30 @@ impl Processor {
             EOR_D_IMM => read_read_write_func!(eor, d, imm),
             EOR1_C_MB => {
                 let addr = self.abs(bus);
-                let bit = (addr & 0x7000) >> 13;
+                let bit = (addr & 0xE000) >> 13;
                 let addr = addr & 0x1FFF;
                 let val = bus.read(addr as usize);
                 self.sr.c ^= ((val >> bit) & 0x01) != 0;
             }
+            INC_A => self.a = self.inc(self.a),
+            INC_X => self.x = self.inc(self.x),
+            INC_Y => self.y = self.inc(self.y),
+            INC_D => read_write_func!(inc, d),
+            INC_DX => read_write_func!(inc, dx),
+            INC_ABS => read_write_func!(inc, abs),
+            JMP_IAX => {
+                let addr = self.abs(bus);
+                let addr = self.read_u16(addr, bus).wrapping_add(self.x as u16);
+                self.pc = self.read_u16(addr, bus);
+            }
+            JMP_ABS => {
+                let addr = self.abs(bus);
+                self.pc = self.read_u16(addr, bus);
+            }
+            LSR_A => self.a = self.lsr(self.a),
+            LSR_D => read_write_func!(lsr, d),
+            LSR_DX => read_write_func!(lsr, dx),
+            LSR_ABS => read_write_func!(lsr, abs),
             _ => {}
         }
     }
