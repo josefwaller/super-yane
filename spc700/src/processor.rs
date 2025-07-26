@@ -133,6 +133,11 @@ impl Processor {
         self.sr.n = (v & 0x80) != 0;
         v
     }
+    // This is just here so we can use the existing addressing macros for mov
+    // Should be optimized away
+    fn mov(&self, v: u8) -> u8 {
+        v
+    }
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
@@ -209,6 +214,23 @@ impl Processor {
                 self.a = self.$func(val, self.a);
             }};
         }
+        /// Read a value into a register
+        macro_rules! read_reg {
+            ($register: ident, $addr: ident) => {{
+                let addr = self.$addr(bus);
+                self.$register = bus.read(addr as usize);
+            }};
+        }
+        /// Write a register's value
+        macro_rules! write_reg {
+            ($register: ident, $addr: ident) => {{
+                let addr = self.$addr(bus);
+                bus.write(addr as usize, self.$register);
+            }};
+        }
+        macro_rules! trans_reg {
+            ($src: ident, $dst: ident) => {{ self.$dst = self.$src }};
+        }
         /// Reads 2 values using 2 different addressing mode(s),
         /// and then writes a value using the first addressing mode.
         /// `target` is the function address that will be read and then written to.
@@ -252,6 +274,12 @@ impl Processor {
             ($func: ident, $addr: ident) => {{
                 let addr = self.$addr(bus) as usize;
                 let value = self.$func(bus.read(addr));
+                bus.write(addr, value);
+            }};
+            ($func: ident, $read_addr: ident, $write_addr: ident) => {{
+                let addr = self.$read_addr(bus) as usize;
+                let value = self.$func(bus.read(addr));
+                let addr = self.$write_addr(bus) as usize;
                 bus.write(addr, value);
             }};
         }
@@ -484,6 +512,45 @@ impl Processor {
             LSR_D => read_write_func!(lsr, d),
             LSR_DX => read_write_func!(lsr, dx),
             LSR_ABS => read_write_func!(lsr, abs),
+            MOV_IX_A => write_reg!(a, ix),
+            MOV_IDY_A => write_reg!(a, idy),
+            MOV_IDX_A => write_reg!(a, idx),
+            MOV_DX_A => write_reg!(a, dx),
+            MOV_DX_Y => write_reg!(y, dx),
+            MOV_DY_X => write_reg!(x, dy),
+            MOV_D_A => write_reg!(a, d),
+            MOV_D_X => write_reg!(x, d),
+            MOV_D_Y => write_reg!(y, d),
+            MOV_ABSX_A => write_reg!(a, absx),
+            MOV_ABSY_A => write_reg!(a, absy),
+            MOV_ABS_A => write_reg!(a, abs),
+            MOV_ABS_X => write_reg!(x, abs),
+            MOV_ABS_Y => write_reg!(y, abs),
+            MOV_A_IMM => read_reg!(a, imm),
+            MOV_A_IX => read_reg!(a, ix),
+            MOV_A_IDY => read_reg!(a, idy),
+            MOV_A_IDX => read_reg!(a, idx),
+            MOV_A_D => read_reg!(a, d),
+            MOV_A_DX => read_reg!(a, dx),
+            MOV_A_ABS => read_reg!(a, abs),
+            MOV_A_ABSX => read_reg!(a, absx),
+            MOV_A_ABSY => read_reg!(a, absy),
+            MOV_X_IMM => read_reg!(x, imm),
+            MOV_X_D => read_reg!(x, d),
+            MOV_X_DY => read_reg!(x, dy),
+            MOV_X_ABS => read_reg!(x, abs),
+            MOV_Y_IMM => read_reg!(y, imm),
+            MOV_Y_D => read_reg!(y, d),
+            MOV_Y_DX => read_reg!(y, dx),
+            MOV_Y_ABS => read_reg!(y, abs),
+            MOV_A_X => trans_reg!(a, x),
+            MOV_A_Y => trans_reg!(a, y),
+            MOV_SP_X => trans_reg!(sp, x),
+            MOV_X_A => trans_reg!(x, a),
+            MOV_X_SP => trans_reg!(x, sp),
+            MOV_Y_A => trans_reg!(y, a),
+            MOV_D_D => read_write_func!(mov, d, d),
+            MOV_D_IMM => read_write_func!(mov, imm, d),
             _ => {}
         }
     }
