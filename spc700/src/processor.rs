@@ -65,6 +65,27 @@ impl Processor {
         self.pc =
             ((self.pc as isize).wrapping_add((offset as i8) as isize) % u16::MAX as isize) as u16;
     }
+    fn cmp(&mut self, a: u8, b: u8) {
+        let (r, c) = a.overflowing_sub(b);
+        self.sr.z = r == 0;
+        self.sr.n = (r & 0x80) != 0;
+        self.sr.c = c;
+    }
+    fn cmp_a(&mut self, v: u8) {
+        self.cmp(v, self.a);
+    }
+    fn cmp_x(&mut self, v: u8) {
+        self.cmp(v, self.x);
+    }
+    fn cmp_y(&mut self, v: u8) {
+        self.cmp(v, self.y)
+    }
+    fn cmp_w(&mut self, a: u16, b: u16) {
+        let (r, c) = a.overflowing_sub(b);
+        self.sr.z = r == 0;
+        self.sr.n = (r & 0x8000) != 0;
+        self.sr.c = c;
+    }
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
@@ -108,10 +129,10 @@ impl Processor {
         self.pc = self.pc.wrapping_add(2);
         addr
     }
-    fn abs_x(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+    fn absx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
         self.abs(bus).wrapping_add(self.x as u16)
     }
-    fn abs_y(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+    fn absy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
         self.abs(bus).wrapping_add(self.y as u16)
     }
     fn mb(&mut self, bus: &mut impl HasAddressBus) -> bool {
@@ -128,6 +149,12 @@ impl Processor {
         // Read opcode
         let opcode = bus.read(self.pc as usize);
         self.pc = self.pc.wrapping_add(1);
+        // Utility macro to create the YA register from the Y and A registers
+        macro_rules! ya {
+            () => {
+                (self.y as u16 * 0x100 + self.a as u16)
+            };
+        }
         macro_rules! read_a_func {
             ($read: ident, $func: ident) => {{
                 let addr = self.$read(bus);
@@ -139,7 +166,7 @@ impl Processor {
         /// and then writes a value using the first addressing mode.
         /// `target` is the function address that will be read and then written to.
         /// `operand` (optional) is the function address that is just read.
-        macro_rules! read_write_func {
+        macro_rules! read_read_write_func {
             ($target: ident, $func: ident) => {{
                 let addr = self.$target(bus) as usize;
                 let value = bus.read(addr);
@@ -155,6 +182,14 @@ impl Processor {
                 bus.write(addr, val);
             }};
         }
+        /// Read a value, then call a function with that value
+        macro_rules! read_func {
+            ($func: ident, $addr: ident) => {{
+                let addr = self.$addr(bus);
+                let val = bus.read(addr as usize);
+                self.$func(val);
+            }};
+        }
         /// Reads a value, operates on it with the YA register, and
         /// then stores the result in the YA register
         macro_rules! read_ya_func {
@@ -164,6 +199,15 @@ impl Processor {
                 let result = self.$func(self.y as u16 * 0x100 + self.a as u16, value);
                 self.y = (result >> 8) as u8;
                 self.a = (result & 0xFF) as u8;
+            }};
+        }
+        macro_rules! read_read_func {
+            ($addr_one: ident, $addr_two: ident, $func: ident) => {{
+                let addr = self.$addr_one(bus);
+                let val_one = bus.read(addr as usize);
+                let addr = self.$addr_two(bus);
+                let val_two = bus.read(addr as usize);
+                self.$func(val_two, val_one);
             }};
         }
         macro_rules! read_bit_func {
@@ -208,19 +252,19 @@ impl Processor {
         }
         match opcode {
             ADC_A_ABS => read_a_func!(abs, adc),
-            ADC_A_ABSX => read_a_func!(abs_x, adc),
-            ADC_A_ABSY => read_a_func!(abs_y, adc),
+            ADC_A_ABSX => read_a_func!(absx, adc),
+            ADC_A_ABSY => read_a_func!(absy, adc),
             ADC_A_D => read_a_func!(d, adc),
             ADC_A_DX => read_a_func!(dx, adc),
             ADC_A_IDX => read_a_func!(idx, adc),
             ADC_A_IDY => read_a_func!(idy, adc),
             ADC_A_IX => read_a_func!(ix, adc),
             ADC_A_IMM => read_a_func!(imm, adc),
-            ADC_IX_IY => read_write_func!(ix, iy, adc),
-            ADC_D_D => read_write_func!(d, d, adc),
-            ADC_D_IMM => read_write_func!(d, imm, adc),
+            ADC_IX_IY => read_read_write_func!(ix, iy, adc),
+            ADC_D_D => read_read_write_func!(d, d, adc),
+            ADC_D_IMM => read_read_write_func!(d, imm, adc),
             ADDW_YA_D => read_ya_func!(d, addw),
-            AND_IX_IY => read_write_func!(ix, iy, and),
+            AND_IX_IY => read_read_write_func!(ix, iy, and),
             AND_A_IMM => read_a_func!(imm, and),
             AND_A_IX => read_a_func!(ix, and),
             AND_A_IDY => read_a_func!(idy, and),
@@ -228,18 +272,18 @@ impl Processor {
             AND_A_D => read_a_func!(d, and),
             AND_A_DX => read_a_func!(dx, and),
             AND_A_ABS => read_a_func!(abs, and),
-            AND_A_ABSX => read_a_func!(abs_x, and),
-            AND_A_ABSY => read_a_func!(abs_y, and),
-            AND_D_D => read_write_func!(d, d, and),
-            AND_D_IMM => read_write_func!(d, imm, and),
+            AND_A_ABSX => read_a_func!(absx, and),
+            AND_A_ABSY => read_a_func!(absy, and),
+            AND_D_D => read_read_write_func!(d, d, and),
+            AND_D_IMM => read_read_write_func!(d, imm, and),
             AND1_C_NMB => read_bit_func!(c, &, true),
             AND1_C_MB => read_bit_func!(c, &),
             ASL_A => {
                 self.a = self.asl(self.a);
             }
-            ASL_D => read_write_func!(d, asl),
-            ASL_DX => read_write_func!(dx, asl),
-            ASL_ABS => read_write_func!(abs, asl),
+            ASL_D => read_read_write_func!(d, asl),
+            ASL_DX => read_read_write_func!(dx, asl),
+            ASL_ABS => read_read_write_func!(abs, asl),
             // BBS
             opcode if opcode & 0x1F == BBS_D_R_MASK => branch_d_if_bit_eq!(1),
             // BBC
@@ -273,6 +317,30 @@ impl Processor {
             CLRC => set_flag!(c, false),
             CLRP => set_flag!(p, false),
             CLRV => set_flag!(v, false),
+            CMP_A_IMM => read_func!(cmp_a, imm),
+            CMP_A_IX => read_func!(cmp_a, ix),
+            CMP_A_IDY => read_func!(cmp_a, idy),
+            CMP_A_IDX => read_func!(cmp_a, idx),
+            CMP_A_D => read_func!(cmp_a, d),
+            CMP_A_DX => read_func!(cmp_a, dx),
+            CMP_A_ABS => read_func!(cmp_a, abs),
+            CMP_A_ABSX => read_func!(cmp_a, absx),
+            CMP_A_ABSY => read_func!(cmp_a, absy),
+            CMP_IX_IY => read_read_func!(ix, iy, cmp),
+            CMP_D_D => read_read_func!(d, d, cmp),
+            CMP_D_IMM => read_read_func!(d, imm, cmp),
+            CMP_X_IMM => read_func!(cmp_x, imm),
+            CMP_X_D => read_func!(cmp_x, d),
+            CMP_X_ABS => read_func!(cmp_x, abs),
+            CMP_Y_IMM => read_func!(cmp_y, imm),
+            CMP_Y_D => read_func!(cmp_y, d),
+            CMP_Y_ABS => read_func!(cmp_y, abs),
+            CMPW_YA_D => {
+                let addr = self.d(bus);
+                let val = bus.read(addr as usize) as u16
+                    + 0x100 * bus.read(addr.wrapping_add(1) as usize) as u16;
+                self.cmp_w(ya!(), val);
+            }
             _ => {}
         }
     }
