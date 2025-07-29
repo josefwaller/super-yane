@@ -391,6 +391,25 @@ impl Processor {
                 self.push_to_stack_u8(self.$r, bus);
             }};
         }
+        // When the bit location is in the top 3 bits of the opcode
+        macro_rules! opcode_bit_func {
+            ($addr: ident) => {{
+                let bit = opcode >> 5;
+                let addr = self.$addr(bus);
+                let val = bus.read(addr as usize);
+                (bit, addr, val)
+            }};
+        }
+        // When the bit location is in the top 3 bits of the address
+        macro_rules! addr_bit_func {
+            ($addr: ident) => {{
+                let addr = self.$addr(bus);
+                let bit = (addr & 0xE000) >> 13;
+                let addr = addr & 0x1FFF;
+                let val = bus.read(addr as usize);
+                (bit, addr, val)
+            }};
+        }
         match opcode {
             ADC_A_ABS => read_a_func!(adc, abs),
             ADC_A_ABSX => read_a_func!(adc, absx),
@@ -450,9 +469,8 @@ impl Processor {
             CBNE_DX_R => cbne!(dx),
             CBNE_D_R => cbne!(d),
             opcode if opcode & 0x1F == CLR1_D => {
-                let bit = opcode >> 5;
-                let addr = self.d(bus);
-                let val = bus.read(addr as usize) & !(0x01 << bit);
+                let (bit, addr, val) = opcode_bit_func!(d);
+                let val = val & !(0x01 << bit);
                 bus.write(addr as usize, val);
             }
             CLRC => set_flag!(c, false),
@@ -546,10 +564,7 @@ impl Processor {
             EOR_D_D => read_read_write_func!(eor, d, d),
             EOR_D_IMM => read_read_write_func!(eor, d, imm),
             EOR1_C_MB => {
-                let addr = self.abs(bus);
-                let bit = (addr & 0xE000) >> 13;
-                let addr = addr & 0x1FFF;
-                let val = bus.read(addr as usize);
+                let (bit, _addr, val) = addr_bit_func!(abs);
                 self.sr.c ^= ((val >> bit) & 0x01) != 0;
             }
             INC_A => self.a = self.inc(self.a),
@@ -611,22 +626,18 @@ impl Processor {
             MOV_D_D => read_write_func!(mov, d, d),
             MOV_D_IMM => read_write_func!(mov, imm, d),
             MOV1_C_MB => {
-                let bit = opcode >> 5;
-                let addr = self.abs(bus);
-                let val = bus.read(addr as usize);
+                let (bit, _addr, val) = opcode_bit_func!(abs);
                 self.sr.c = (val & (0x01 << bit)) != 0;
             }
             MOV1_MB_C => {
-                let bit = opcode >> 5;
-                let addr = self.abs(bus);
-                let val = bus.read(addr as usize) | (u8::from(self.sr.c) << bit);
+                let (bit, addr, val) = opcode_bit_func!(abs);
+                let val = val | (u8::from(self.sr.c) << bit);
                 bus.write(addr as usize, val);
             }
             NOP => {}
             NOT1_MB => {
-                let bit = opcode >> 5;
-                let addr = self.abs(bus);
-                let val = bus.read(addr as usize) ^ (0x01 << bit);
+                let (bit, addr, val) = opcode_bit_func!(abs);
+                let val = val ^ (0x01 << bit);
                 bus.write(addr as usize, val);
             }
             NOTC => self.sr.c = !self.sr.c,
@@ -643,14 +654,12 @@ impl Processor {
             OR_D_D => read_read_write_func!(or, d, d),
             OR_D_IMM => read_read_write_func!(or, d, imm),
             OR1_C_MB => {
-                let bit = opcode >> 5;
-                let addr = self.abs(bus);
-                self.sr.c |= (bus.read(addr as usize) & (0x01 << bit)) != 0;
+                let (bit, _addr, val) = opcode_bit_func!(abs);
+                self.sr.c |= (val & (0x01 << bit)) != 0;
             }
             OR1_C_NMB => {
-                let bit = opcode >> 5;
-                let addr = self.abs(bus);
-                self.sr.c |= !(bus.read(addr as usize) & (0x01 << bit)) != 0;
+                let (bit, _addr, val) = opcode_bit_func!(abs);
+                self.sr.c |= !(val & (0x01 << bit)) != 0;
             }
             PCALL => {
                 let addr = self.imm(bus);
@@ -690,9 +699,8 @@ impl Processor {
             SBC_D_D => read_read_write_func!(sbc, d, d),
             SBC_D_IMM => read_read_write_func!(sbc, d, imm),
             opcode if opcode & 0x1F == SET1_MASK => {
-                let bit = opcode >> 5;
-                let addr = self.d(bus);
-                let val = bus.read(addr as usize) | (0x01 << bit);
+                let (bit, addr, val) = opcode_bit_func!(d);
+                let val = val | (0x01 << bit);
                 bus.write(addr as usize, val);
             }
             SETC => self.sr.c = true,
