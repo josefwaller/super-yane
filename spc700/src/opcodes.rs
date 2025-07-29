@@ -345,7 +345,7 @@ pub const OR1_C_NMB: u8 = 0x2A;
 /// OR bit Carry Memory Bit
 pub const OR1_C_MB: u8 = 0x0A;
 /// Page call
-pub const PCALL_: u8 = 0x4F;
+pub const PCALL: u8 = 0x4F;
 /// Pop from stack A Register
 pub const POP_A: u8 = 0xAE;
 /// Pop from stack Processor Status Word
@@ -406,22 +406,8 @@ pub const SBC_A_ABSY: u8 = 0xB6;
 pub const SBC_D_D: u8 = 0xA9;
 /// Subtract with carry Direct Page Immediate
 pub const SBC_D_IMM: u8 = 0xB8;
-/// Set bit 0nth Bit
-pub const SET1_D0: u8 = 0x02;
-/// Set bit 1nth Bit
-pub const SET1_D1: u8 = 0x22;
-/// Set bit 2nth Bit
-pub const SET1_D2: u8 = 0x42;
-/// Set bit 3nth Bit
-pub const SET1_D3: u8 = 0x62;
-/// Set bit 4nth Bit
-pub const SET1_D4: u8 = 0x82;
-/// Set bit 5nth Bit
-pub const SET1_D5: u8 = 0xA2;
-/// Set bit 6nth Bit
-pub const SET1_D6: u8 = 0xC2;
-/// Set bit 7nth Bit
-pub const SET1_D7: u8 = 0xE2;
+/// Set bit
+pub const SET1_MASK: u8 = 0x02;
 /// Set carry
 pub const SETC: u8 = 0x80;
 /// Set page flag
@@ -432,38 +418,8 @@ pub const SLEEP: u8 = 0xEF;
 pub const STOP: u8 = 0xFF;
 /// Subtract word Y Register and A Register Combined Direct Page
 pub const SUBW_YA_D: u8 = 0x9A;
-/// Table call 0xFFDE + 0
-pub const TCALL_0: u8 = 0x01;
-/// Table call 0xFFDE + 1
-pub const TCALL_1: u8 = 0x11;
-/// Table call 0xFFDE + 2
-pub const TCALL_2: u8 = 0x21;
-/// Table call 0xFFDE + 3
-pub const TCALL_3: u8 = 0x31;
-/// Table call 0xFFDE + 4
-pub const TCALL_4: u8 = 0x41;
-/// Table call 0xFFDE + 5
-pub const TCALL_5: u8 = 0x51;
-/// Table call 0xFFDE + 6
-pub const TCALL_6: u8 = 0x61;
-/// Table call 0xFFDE + 7
-pub const TCALL_7: u8 = 0x71;
-/// Table call 0xFFDE + 8
-pub const TCALL_8: u8 = 0x81;
-/// Table call 0xFFDE + 9
-pub const TCALL_9: u8 = 0x91;
-/// Table call 0xFFDE + 10
-pub const TCALL_10: u8 = 0xA1;
-/// Table call 0xFFDE + 11
-pub const TCALL_11: u8 = 0xB1;
-/// Table call 0xFFDE + 12
-pub const TCALL_12: u8 = 0xC1;
-/// Table call 0xFFDE + 13
-pub const TCALL_13: u8 = 0xD1;
-/// Table call 0xFFDE + 14
-pub const TCALL_14: u8 = 0xE1;
-/// Table call 0xFFDE + 15
-pub const TCALL_15: u8 = 0xF1;
+// Table call mask
+pub const TCALL_MASK: u8 = 0x01;
 /// Test and clear bit Absolute
 pub const TCLR1_ABS: u8 = 0x4E;
 /// Test and set bit Absolute

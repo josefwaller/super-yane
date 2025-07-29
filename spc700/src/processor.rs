@@ -70,6 +70,10 @@ impl Processor {
         self.pc =
             ((self.pc as isize).wrapping_add((offset as i8) as isize) % u16::MAX as isize) as u16;
     }
+    fn call(&mut self, addr: u16, bus: &mut impl HasAddressBus) {
+        self.push_to_stack_u16(self.pc, bus);
+        self.pc = addr;
+    }
     fn cmp(&mut self, a: u8, b: u8) {
         let (r, c) = a.overflowing_sub(b);
         self.sr.z = r == 0;
@@ -136,6 +140,51 @@ impl Processor {
     // This is just here so we can use the existing addressing macros for mov
     // Should be optimized away
     fn mov(&self, v: u8) -> u8 {
+        v
+    }
+    fn or(&mut self, a: u8, b: u8) -> u8 {
+        let v = a | b;
+        self.sr.z = v == 0;
+        self.sr.n = (v & 0x80) != 0;
+        v
+    }
+    fn or_a(&mut self, v: u8) {
+        self.a = self.or(self.a, v);
+    }
+    fn rol(&mut self, v: u8) -> u8 {
+        let c = (v & 0x80) != 0;
+        let v = (v << 1) + u8::from(self.sr.c);
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
+        self.sr.c = c;
+        v
+    }
+    fn ror(&mut self, v: u8) -> u8 {
+        let c = (v & 0x01) != 0;
+        let v = (v >> 1) | (u8::from(self.sr.c) << 7);
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
+        self.sr.c = c;
+        v
+    }
+    fn sbc(&mut self, a: u8, b: u8) -> u8 {
+        let (v, c1) = a.overflowing_sub(b);
+        let (v, c2) = v.overflowing_sub(u8::from(self.sr.c));
+        self.sr.c = c1 | c2;
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
+        v
+    }
+    fn tclr(&mut self, v: u8) -> u8 {
+        let v = v & !self.a;
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
+        v
+    }
+    fn tset(&mut self, v: u8) -> u8 {
+        let v = v & !self.a;
+        self.sr.n = (v & 0x80) != 0;
+        self.sr.z = v == 0;
         v
     }
 
@@ -332,6 +381,16 @@ impl Processor {
                 self.sr.$flag = $val;
             }};
         }
+        macro_rules! pop_reg {
+            ($r: ident) => {{
+                self.$r = self.pull_from_stack_u8(bus);
+            }};
+        }
+        macro_rules! push_reg {
+            ($r: ident) => {{
+                self.push_to_stack_u8(self.$r, bus);
+            }};
+        }
         match opcode {
             ADC_A_ABS => read_a_func!(adc, abs),
             ADC_A_ABSX => read_a_func!(adc, absx),
@@ -385,8 +444,8 @@ impl Processor {
                 self.pc = bus.read(0xFFDE) as u16 + 0x100 * bus.read(0xFFDF) as u16;
             }
             CALL_ABS => {
-                self.push_to_stack_u16(self.pc, bus);
-                self.pc = self.abs(bus);
+                let addr = self.abs(bus);
+                self.call(self.read_u16(addr, bus), bus);
             }
             CBNE_DX_R => cbne!(dx),
             CBNE_D_R => cbne!(d),
@@ -551,6 +610,103 @@ impl Processor {
             MOV_Y_A => trans_reg!(y, a),
             MOV_D_D => read_write_func!(mov, d, d),
             MOV_D_IMM => read_write_func!(mov, imm, d),
+            MOV1_C_MB => {
+                let bit = opcode >> 5;
+                let addr = self.abs(bus);
+                let val = bus.read(addr as usize);
+                self.sr.c = (val & (0x01 << bit)) != 0;
+            }
+            MOV1_MB_C => {
+                let bit = opcode >> 5;
+                let addr = self.abs(bus);
+                let val = bus.read(addr as usize) | (u8::from(self.sr.c) << bit);
+                bus.write(addr as usize, val);
+            }
+            NOP => {}
+            NOT1_MB => {
+                let bit = opcode >> 5;
+                let addr = self.abs(bus);
+                let val = bus.read(addr as usize) ^ (0x01 << bit);
+                bus.write(addr as usize, val);
+            }
+            NOTC => self.sr.c = !self.sr.c,
+            OR_IX_IY => read_read_write_func!(or, ix, iy),
+            OR_A_IMM => read_func!(or_a, imm),
+            OR_A_IX => read_func!(or_a, ix),
+            OR_A_IDY => read_func!(or_a, idy),
+            OR_A_IDX => read_func!(or_a, idx),
+            OR_A_D => read_func!(or_a, d),
+            OR_A_DX => read_func!(or_a, dx),
+            OR_A_ABS => read_func!(or_a, abs),
+            OR_A_ABSX => read_func!(or_a, absx),
+            OR_A_ABSY => read_func!(or_a, absy),
+            OR_D_D => read_read_write_func!(or, d, d),
+            OR_D_IMM => read_read_write_func!(or, d, imm),
+            OR1_C_MB => {
+                let bit = opcode >> 5;
+                let addr = self.abs(bus);
+                self.sr.c |= (bus.read(addr as usize) & (0x01 << bit)) != 0;
+            }
+            OR1_C_NMB => {
+                let bit = opcode >> 5;
+                let addr = self.abs(bus);
+                self.sr.c |= !(bus.read(addr as usize) & (0x01 << bit)) != 0;
+            }
+            PCALL => {
+                let addr = self.imm(bus);
+                self.call(0xFF + self.read_u16(addr, bus), bus);
+            }
+            POP_A => pop_reg!(a),
+            POP_X => pop_reg!(x),
+            POP_Y => pop_reg!(y),
+            PUSH_A => push_reg!(a),
+            PUSH_X => push_reg!(x),
+            PUSH_Y => push_reg!(y),
+            PUSH_PSW => self.push_to_stack_u8(self.sr.to_byte(), bus),
+            POP_PSW => self.sr = StatusRegister::from_byte(self.pull_from_stack_u8(bus)),
+            RET => self.pc = self.pull_from_stack_u16(bus),
+            RETI => {
+                self.sr = StatusRegister::from_byte(self.pull_from_stack_u8(bus));
+                self.pc = self.pull_from_stack_u16(bus);
+            }
+            ROL_A => self.a = self.rol(self.a),
+            ROL_D => read_write_func!(rol, d),
+            ROL_DX => read_write_func!(rol, dx),
+            ROL_ABS => read_write_func!(rol, abs),
+            ROR_A => self.a = self.ror(self.a),
+            ROR_D => read_write_func!(ror, d),
+            ROR_DX => read_write_func!(ror, dx),
+            ROR_ABS => read_write_func!(ror, abs),
+            SBC_IX_IY => read_read_write_func!(sbc, ix, iy),
+            SBC_A_IMM => read_a_func!(sbc, imm),
+            SBC_A_IX => read_a_func!(sbc, ix),
+            SBC_A_IDY => read_a_func!(sbc, idy),
+            SBC_A_IDX => read_a_func!(sbc, idx),
+            SBC_A_D => read_a_func!(sbc, d),
+            SBC_A_DX => read_a_func!(sbc, dx),
+            SBC_A_ABS => read_a_func!(sbc, abs),
+            SBC_A_ABSX => read_a_func!(sbc, absx),
+            SBC_A_ABSY => read_a_func!(sbc, absy),
+            SBC_D_D => read_read_write_func!(sbc, d, d),
+            SBC_D_IMM => read_read_write_func!(sbc, d, imm),
+            opcode if opcode & 0x1F == SET1_MASK => {
+                let bit = opcode >> 5;
+                let addr = self.d(bus);
+                let val = bus.read(addr as usize) | (0x01 << bit);
+                bus.write(addr as usize, val);
+            }
+            SETC => self.sr.c = true,
+            SETP => self.sr.p = true,
+            opcode if opcode & 0x0F == TCALL_MASK => {
+                let offset = opcode >> 4;
+                let addr = self.read_u16(0xFFDE + offset as u16, bus);
+                self.call(addr, bus);
+            }
+            TCLR1_ABS => read_write_func!(tclr, abs),
+            TSET1_ABS => read_write_func!(tset, abs),
+            XCN_A => {
+                self.a = self.a.rotate_left(4);
+            }
             _ => {}
         }
     }
