@@ -1,5 +1,5 @@
 use log::*;
-use spc700::{HasAddressBus as Spc700AddressBuss, Processor as Spc700};
+use spc700::{HasAddressBus as Spc700AddressBuss, IPL, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
 
 use crate::{
@@ -12,6 +12,9 @@ use paste::paste;
 #[derive(Clone)]
 pub struct ExternalArchitecture {
     pub ram: [u8; 0x20000],
+    pub spc_ram: [u8; 0x10000],
+    pub cpu_to_apu_reg: [u8; 4],
+    pub apu_to_cpu_reg: [u8; 4],
     pub cartridge: Cartridge,
     pub ppu: Ppu,
     /// DMA Channels
@@ -42,6 +45,9 @@ impl ExternalArchitecture {
                 (0, 12)
             } else if a < 0x2140 {
                 (self.ppu.read_byte(a), 12)
+            } else if a < 0x2144 {
+                debug!("CPU reading from APU {:04X}", a);
+                (self.apu_to_cpu_reg[a - 0x2140], 12)
             } else if a >= 0x4218 && a < 0x4220 {
                 // Read controller data
                 let i = (a / 2) % 2;
@@ -107,6 +113,11 @@ impl ExternalArchitecture {
                     (0x2100..0x2140) => {
                         // PPU Registers
                         self.ppu.write_byte(a, value);
+                        12
+                    }
+                    (0x2140..0x2144) => {
+                        debug!("CPU writing {:02X} to APU {:04X}", value, a);
+                        self.cpu_to_apu_reg[a - 0x2140] = value;
                         12
                     }
                     0x420B => {
@@ -233,9 +244,25 @@ impl HasAddressBus for ExternalArchitecture {
 impl Spc700AddressBuss for ExternalArchitecture {
     fn io(&mut self) {}
     fn read(&mut self, address: usize) -> u8 {
-        0
+        match address {
+            0x00F4..0x00F8 => {
+                debug!("APU reading from CPU {:04X}", address);
+                self.cpu_to_apu_reg[address - 0x00F4]
+            }
+            0x0000..0xFFC0 => self.spc_ram[address],
+            0xFFC0..0x10000 => IPL[address - 0xFFC0],
+            _ => panic!("Should be impossible"),
+        }
     }
-    fn write(&mut self, address: usize, value: u8) {}
+    fn write(&mut self, address: usize, value: u8) {
+        match address {
+            0x00F4..0x00F8 => {
+                debug!("APU writing {:02X} to CPU {:04X}", value, address);
+                self.apu_to_cpu_reg[address - 0x00F4] = value
+            }
+            _ => self.spc_ram[address] = value,
+        }
+    }
 }
 
 /// The entire S.N.E.S. Console
@@ -277,12 +304,22 @@ impl Console {
     pub fn cpu_mut(&mut self) -> &mut Processor {
         &mut self.cpu
     }
+    pub fn apu(&self) -> &Spc700 {
+        &self.apu
+    }
+    pub fn apu_opcode(&self) -> u8 {
+        // Spc700AddressBuss::read(&mut self.rest, self.apu.pc as usize)
+        0
+    }
     pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
         let mut c = Console {
             cpu: Processor::default(),
             apu: Spc700::default(),
             rest: ExternalArchitecture {
                 ram: [0; 0x20000],
+                cpu_to_apu_reg: [0; 4],
+                apu_to_cpu_reg: [0; 4],
+                spc_ram: [0; 0x10000],
                 cartridge: Cartridge::from_data(cartridge_data),
                 input_ports: [InputPort::default_standard_controller(); 2],
                 ppu: Ppu::default(),
@@ -300,7 +337,7 @@ impl Console {
         (0..num_instructions).for_each(|_| {
             // Todo: These should not be in sync
             self.cpu.step(&mut self.rest);
-            self.apu.step(&mut self.rest);
+            (0..10).for_each(|_| self.apu.step(&mut self.rest));
         });
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
@@ -309,6 +346,7 @@ impl Console {
                 None
             } else {
                 self.cpu.step(&mut self.rest);
+                self.apu.step(&mut self.rest);
                 Some(1)
             }
         })

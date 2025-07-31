@@ -189,7 +189,7 @@ impl Default for Application {
             opcode_search: String::new(),
             vblank_breakpoint: false,
             ignore_breakpoints: false,
-            emulate_future_states: true,
+            emulate_future_states: false,
             ram_display: RamDisplay::VideoRam,
             total_instructions: 0,
             previous_console: Box::new(default_console.clone()),
@@ -231,7 +231,7 @@ impl Application {
         self.total_instructions += 1;
         self.previous_console_lag += 1;
         while self.previous_console_lag > 500 {
-            self.previous_console.advance_instructions(1);
+            // self.previous_console.advance_instructions(1);
             self.previous_console_lag -= 1;
         }
         if self.is_in_breakpoint() {
@@ -240,15 +240,14 @@ impl Application {
     }
     pub fn refresh_prev_states(&mut self) {
         // Emulate previous states
-        let mut c = *self.previous_console.clone();
-        debug!("{}", self.previous_console_lag);
-        self.previous_states = (0..self.previous_console_lag)
-            .map(|_| {
-                let r = c.clone();
-                c.advance_instructions(1);
-                r
-            })
-            .collect();
+        // let mut c = *self.previous_console.clone();
+        // self.previous_states = (0..self.previous_console_lag)
+        //     .map(|_| {
+        //         let r = c.clone();
+        //         c.advance_instructions(1);
+        //         r
+        //     })
+        //     .collect();
     }
     fn handle_input(&mut self, event: Event) {
         if let Keyboard(keyboard_event) = event {
@@ -463,14 +462,6 @@ impl Application {
         .into()
     }
     fn ram_view(&self) -> impl Into<Element<Message>> {
-        // let cgram = self
-        //     .console
-        //     .ppu()
-        //     .cgram
-        //     .map(|c| c.to_le_bytes())
-        //     .iter()
-        //     .flatten()
-        //     .collect();
         Column::with_children([
             pick_list(
                 [
@@ -722,6 +713,7 @@ impl Application {
                 ],
                 data.bytes,
             ),
+            // console.apu_opcode(),
         ]
         .into_iter()
         .map(|t| (t, color))
@@ -729,31 +721,32 @@ impl Application {
     }
     fn next_instructions(&self) -> impl Into<Element<Message>> {
         if self.is_paused {
-            let mut c = self.console.clone();
-            let future_iter = std::iter::from_fn(move || {
-                c.advance_instructions(1);
-                Some(c.clone())
-            });
-            let it = self
-                .previous_states
-                .iter()
-                .rev()
-                .take(20)
-                .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
-                .rev()
-                .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
-                .chain(
-                    future_iter
-                        .take(if self.emulate_future_states { 10 } else { 0 })
-                        .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
-                );
-            container(text_table(
-                ["PBR", "PC", "OP", "", "              "]
-                    .into_iter()
-                    .map(|r| (r.to_string(), Some(COLORS[0])))
-                    .chain(it.flatten()),
-                5,
-            ))
+            container(text("Temp"))
+            // let mut c = self.console.clone();
+            // let future_iter = std::iter::from_fn(move || {
+            //     c.advance_instructions(1);
+            //     Some(c.clone())
+            // });
+            // let it = self
+            //     .previous_states
+            //     .iter()
+            //     .rev()
+            //     .take(0)
+            //     .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
+            //     .rev()
+            //     .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
+            //     .chain(
+            //         future_iter
+            //             .take(if self.emulate_future_states { 10 } else { 0 })
+            //             .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
+            //     );
+            // container(text_table(
+            //     ["PBR", "PC", "OP", "", "              "]
+            //         .into_iter()
+            //         .map(|r| (r.to_string(), Some(COLORS[0])))
+            //         .chain(it.flatten()),
+            //     5,
+            // ))
         } else {
             container(text("Running..."))
                 .width(Length::Fill)

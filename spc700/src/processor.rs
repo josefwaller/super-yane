@@ -1,4 +1,5 @@
 use crate::{StatusRegister, opcodes::*};
+use log::*;
 
 #[derive(Copy, Clone)]
 pub struct Processor {
@@ -190,7 +191,9 @@ impl Processor {
 
     /// Immediate addressing
     fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
-        self.pc as u16
+        let pc = self.pc;
+        self.pc = self.pc.wrapping_add(1);
+        pc
     }
     /// Direct page addressing
     fn d(&mut self, bus: &mut impl HasAddressBus) -> u16 {
@@ -334,10 +337,10 @@ impl Processor {
         }
         macro_rules! read_read_func {
             ($addr_one: ident, $addr_two: ident, $func: ident) => {{
-                let addr = self.$addr_one(bus);
-                let val_one = bus.read(addr as usize);
                 let addr = self.$addr_two(bus);
                 let val_two = bus.read(addr as usize);
+                let addr = self.$addr_one(bus);
+                let val_one = bus.read(addr as usize);
                 self.$func(val_two, val_one);
             }};
         }
@@ -364,6 +367,8 @@ impl Processor {
             ($flag: ident, $val: expr) => {{
                 if u8::from(self.sr.$flag) == $val {
                     self.branch_imm(bus);
+                } else {
+                    self.pc = self.pc.wrapping_add(1);
                 }
             }};
         }
@@ -410,6 +415,7 @@ impl Processor {
                 (bit, addr, val)
             }};
         }
+        debug!("pc={:04X} opcode={:02X}", self.pc, opcode);
         match opcode {
             ADC_A_ABS => read_a_func!(adc, abs),
             ADC_A_ABSX => read_a_func!(adc, absx),
@@ -715,7 +721,7 @@ impl Processor {
             XCN_A => {
                 self.a = self.a.rotate_left(4);
             }
-            _ => {}
+            _ => panic!("Unimplemented SPC700 opcode: {:2X}", opcode),
         }
     }
 }
@@ -727,7 +733,7 @@ impl Default for Processor {
             x: 0,
             y: 0,
             sp: 0,
-            pc: 0,
+            pc: 0xFFC0,
             sr: StatusRegister::default(),
         }
     }
