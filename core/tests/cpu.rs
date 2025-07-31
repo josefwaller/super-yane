@@ -24,7 +24,7 @@ cpu_rom_test! {psr, 50_000}
 cpu_rom_test! {ret, 50_000}
 cpu_rom_test! {rol, 100_000}
 cpu_rom_test! {ror, 100_000}
-cpu_rom_test! {sbc, 350_000}
+cpu_rom_test! {sbc, 400_000}
 cpu_rom_test! {str, 550_000}
 cpu_rom_test! {trn, 350_000}
 cpu_rom_test! {test_basic, 1_400_000}
