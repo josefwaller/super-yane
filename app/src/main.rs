@@ -1,6 +1,8 @@
+use std::fs::File;
+
 use iced::{Font, Settings};
 use log::*;
-use simplelog::{ConfigBuilder, SimpleLogger};
+use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
 
 mod application;
 mod widgets;
@@ -11,6 +13,7 @@ fn main() {
         log::LevelFilter::Debug,
         ConfigBuilder::new()
             .add_filter_allow_str("super_yane")
+            .add_filter_allow_str("spc700")
             .add_filter_allow_str("wdc65816")
             .build(),
     )
