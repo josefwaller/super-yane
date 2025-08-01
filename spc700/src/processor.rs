@@ -21,7 +21,12 @@ impl Processor {
     fn read_u16(&self, addr: u16, bus: &mut impl HasAddressBus) -> u16 {
         let low = bus.read(addr as usize);
         let high = bus.read(addr.wrapping_add(1) as usize);
-        low as u16 + 0x100 * high as u16
+        u16::from_le_bytes([low, high])
+    }
+    fn write_u16(&self, addr: u16, value: u16, bus: &mut impl HasAddressBus) {
+        let [low, high] = value.to_le_bytes();
+        bus.write(addr as usize, low);
+        bus.write(addr.wrapping_add(1) as usize, high);
     }
     fn push_to_stack_u8(&mut self, val: u8, bus: &mut impl HasAddressBus) {
         bus.write(self.sp as usize + 0x100, val);
@@ -41,10 +46,18 @@ impl Processor {
         let [h, l] = [self.pull_from_stack_u8(bus), self.pull_from_stack_u8(bus)];
         u16::from_le_bytes([l, h])
     }
+
+    /// Set the N and Z flags based on the value provided
+    fn set_nz(&mut self, v: u8) {
+        self.sr.z = v == 0;
+        self.sr.n = (v & 0x80) != 0;
+    }
+
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
         let (r, c2) = r.overflowing_add(self.sr.c.into());
         self.sr.c = c1 | c2;
+        self.set_nz(r);
         // Todo: More flags
         r
     }
@@ -56,12 +69,12 @@ impl Processor {
     }
     fn and(&mut self, l: u8, r: u8) -> u8 {
         let v = l & r;
-        self.sr.z = v == 0;
-        self.sr.n = (v & 0x80) != 0;
+        self.set_nz(v);
         v
     }
     fn asl(&mut self, v: u8) -> u8 {
         let v = v.rotate_left(1);
+        self.set_nz(v);
         self.sr.c = (v & 0x01) != 0;
         v & 0xFE
     }
@@ -77,8 +90,7 @@ impl Processor {
     }
     fn cmp(&mut self, a: u8, b: u8) {
         let (r, c) = a.overflowing_sub(b);
-        self.sr.z = r == 0;
-        self.sr.n = (r & 0x80) != 0;
+        self.set_nz(r);
         self.sr.c = c;
     }
     fn cmp_a(&mut self, v: u8) {
@@ -98,8 +110,7 @@ impl Processor {
     }
     fn dec(&mut self, v: u8) -> u8 {
         let v = v.wrapping_sub(1);
-        self.sr.z = v == 0;
-        self.sr.n = (v & 0x80) != 0;
+        self.set_nz(v);
         v
     }
     fn decw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
@@ -119,34 +130,29 @@ impl Processor {
         self.sr.z = l == 0 && h == 0;
     }
     fn eor(&mut self, a: u8, b: u8) -> u8 {
-        let r = a ^ b;
-        self.sr.n = (r & 0x80) != 0;
-        self.sr.z = r == 0;
-        r
+        let v = a ^ b;
+        self.set_nz(v);
+        v
     }
     fn inc(&mut self, v: u8) -> u8 {
         let v = v.wrapping_add(1);
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         v
     }
     fn lsr(&mut self, v: u8) -> u8 {
         let v = v.rotate_right(1);
         self.sr.c = (v & 0x80) != 0;
         let v = v & 0x7F;
-        self.sr.z = v == 0;
-        self.sr.n = (v & 0x80) != 0;
+        self.set_nz(v);
         v
     }
-    // This is just here so we can use the existing addressing macros for mov
-    // Should be optimized away
-    fn mov(&self, v: u8) -> u8 {
+    fn mov(&mut self, v: u8) -> u8 {
+        self.set_nz(v);
         v
     }
     fn or(&mut self, a: u8, b: u8) -> u8 {
         let v = a | b;
-        self.sr.z = v == 0;
-        self.sr.n = (v & 0x80) != 0;
+        self.set_nz(v);
         v
     }
     fn or_a(&mut self, v: u8) {
@@ -155,16 +161,14 @@ impl Processor {
     fn rol(&mut self, v: u8) -> u8 {
         let c = (v & 0x80) != 0;
         let v = (v << 1) + u8::from(self.sr.c);
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         self.sr.c = c;
         v
     }
     fn ror(&mut self, v: u8) -> u8 {
         let c = (v & 0x01) != 0;
         let v = (v >> 1) | (u8::from(self.sr.c) << 7);
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         self.sr.c = c;
         v
     }
@@ -172,20 +176,17 @@ impl Processor {
         let (v, c1) = a.overflowing_sub(b);
         let (v, c2) = v.overflowing_sub(u8::from(self.sr.c));
         self.sr.c = c1 | c2;
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         v
     }
     fn tclr(&mut self, v: u8) -> u8 {
         let v = v & !self.a;
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         v
     }
     fn tset(&mut self, v: u8) -> u8 {
         let v = v & !self.a;
-        self.sr.n = (v & 0x80) != 0;
-        self.sr.z = v == 0;
+        self.set_nz(v);
         v
     }
 
@@ -211,25 +212,26 @@ impl Processor {
     }
     fn id(&mut self, r: u8, bus: &mut impl HasAddressBus) -> u16 {
         // Todo: Page wrap
-        let addr = self.d(bus).wrapping_add(r as u16);
+        let addr = self.d(bus);
         // Read the pointer
-        bus.read(addr as usize) as u16 + 0x100 * bus.read(addr.wrapping_add(1) as usize) as u16
+        self.read_u16(addr, bus).wrapping_add(r as u16)
     }
     fn ix(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        bus.read(self.x as usize) as u16
+        self.x as u16
     }
     fn iy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        bus.read(self.y as usize) as u16
+        self.y as u16
     }
     fn idx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
         self.id(self.x, bus)
     }
     fn idy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.id(self.y, bus)
+        let a = self.id(self.y, bus);
+        debug!("IDY addr: {:04X}", a);
+        a
     }
     fn abs(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        let addr = bus.read(self.pc as usize) as u16
-            + 0x100 * bus.read(self.pc.wrapping_add(1) as usize) as u16;
+        let addr = self.read_u16(self.pc, bus);
         self.pc = self.pc.wrapping_add(2);
         addr
     }
@@ -252,6 +254,10 @@ impl Processor {
     pub fn step(&mut self, bus: &mut impl HasAddressBus) {
         // Read opcode
         let opcode = bus.read(self.pc as usize);
+        debug!(
+            "pc={:04X} a={:02X} x={:02X} y={:02X} opcode={:02X}",
+            self.pc, self.a, self.x, self.y, opcode
+        );
         self.pc = self.pc.wrapping_add(1);
         // Utility macro to create the YA register from the Y and A registers
         macro_rules! ya {
@@ -271,6 +277,7 @@ impl Processor {
             ($register: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
                 self.$register = bus.read(addr as usize);
+                self.set_nz(self.$register);
             }};
         }
         /// Write a register's value
@@ -281,7 +288,11 @@ impl Processor {
             }};
         }
         macro_rules! trans_reg {
-            ($src: ident, $dst: ident) => {{ self.$dst = self.$src }};
+            ($dst: ident, $src: ident) => {{
+                self.$dst = self.$src;
+                self.sr.z = self.$dst == 0;
+                self.sr.n = (self.$dst & 0x80) != 0;
+            }};
         }
         /// Reads 2 values using 2 different addressing mode(s),
         /// and then writes a value using the first addressing mode.
@@ -415,7 +426,6 @@ impl Processor {
                 (bit, addr, val)
             }};
         }
-        debug!("pc={:04X} opcode={:02X}", self.pc, opcode);
         match opcode {
             ADC_A_ABS => read_a_func!(adc, abs),
             ADC_A_ABSX => read_a_func!(adc, absx),
@@ -580,9 +590,12 @@ impl Processor {
             INC_DX => read_write_func!(inc, dx),
             INC_ABS => read_write_func!(inc, abs),
             JMP_IAX => {
-                let addr = self.abs(bus);
-                let addr = self.read_u16(addr, bus).wrapping_add(self.x as u16);
-                self.pc = self.read_u16(addr, bus);
+                let addr = self.abs(bus).wrapping_add(self.x as u16);
+                debug!("Addr p {:04X}", addr);
+                let addr = self.read_u16(addr, bus);
+                debug!("Addr v {:04X}", addr);
+                // let addr = self.read_u16(addr, bus).wrapping_add(self.x as u16);
+                self.pc = addr;
             }
             JMP_ABS => {
                 let addr = self.abs(bus);
@@ -639,6 +652,18 @@ impl Processor {
                 let (bit, addr, val) = opcode_bit_func!(abs);
                 let val = val | (u8::from(self.sr.c) << bit);
                 bus.write(addr as usize, val);
+            }
+            MOVW_D_YA => {
+                let addr = self.d(bus);
+                debug!("Wrote YA {:04X} to {:04X}", ya!(), addr);
+                self.write_u16(addr, ya!(), bus);
+            }
+            MOVW_YA_D => {
+                let addr = self.d(bus);
+                let [low, high] = self.read_u16(addr, bus).to_le_bytes();
+                self.a = low;
+                self.y = high;
+                debug!("Moved into YA {:04X}", ya!());
             }
             NOP => {}
             NOT1_MB => {
