@@ -9,14 +9,19 @@ mod widgets;
 use application::Application;
 
 fn main() {
-    SimpleLogger::init(
-        log::LevelFilter::Debug,
-        ConfigBuilder::new()
-            .add_filter_allow_str("super_yane")
-            .add_filter_allow_str("spc700")
-            .add_filter_allow_str("wdc65816")
-            .build(),
-    )
+    let config = ConfigBuilder::new()
+        .add_filter_allow_str("super_yane")
+        .add_filter_allow_str("spc700")
+        .add_filter_allow_str("wdc65816")
+        .build();
+    CombinedLogger::init(vec![
+        WriteLogger::new(
+            log::LevelFilter::Debug,
+            config.clone(),
+            File::create("./super_yane.log").unwrap(),
+        ),
+        SimpleLogger::new(log::LevelFilter::Debug, config),
+    ])
     .unwrap();
     info!("Logger initialized");
 
