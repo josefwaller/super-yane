@@ -49,7 +49,6 @@ impl ExternalArchitecture {
             } else if a < 0x2140 {
                 (self.ppu.read_byte(a), 12)
             } else if a < 0x2144 {
-                debug!("CPU reading from APU {:04X}", a);
                 (self.apu_to_cpu_reg[a - 0x2140], 12)
             } else if a >= 0x4218 && a < 0x4220 {
                 // Read controller data
@@ -119,7 +118,6 @@ impl ExternalArchitecture {
                         12
                     }
                     (0x2140..0x2144) => {
-                        debug!("CPU writing {:02X} to APU {:04X}", value, a);
                         self.cpu_to_apu_reg[a - 0x2140] = value;
                         12
                     }
@@ -128,6 +126,7 @@ impl ExternalArchitecture {
                             if (value >> i) & 0x01 != 0 {
                                 let mut d = self.dma_channels[i].clone();
                                 let mut bytes_transferred = 0;
+                                debug!("Start DMA");
                                 // Todo: handling timing of DMA
                                 loop {
                                     let src = d.src_bank as usize * 0x10000 + d.src_addr as usize;
@@ -252,7 +251,7 @@ impl Spc700AddressBuss for ExternalArchitecture {
         self.apu_master_clocks += 1;
         match address {
             0x00F4..0x00F8 => {
-                debug!("APU reading from CPU {:04X}", address);
+                // debug!("APU reading from CPU {:04X}", address);
                 self.cpu_to_apu_reg[address - 0x00F4]
             }
             0x0000..0xFFC0 => self.spc_ram[address],
@@ -264,7 +263,7 @@ impl Spc700AddressBuss for ExternalArchitecture {
         self.apu_master_clocks += 1;
         match address {
             0x00F4..0x00F8 => {
-                debug!("APU writing {:02X} to CPU {:04X}", value, address);
+                // debug!("APU writing {:02X} to CPU {:04X}", value, address);
                 self.apu_to_cpu_reg[address - 0x00F4] = value
             }
             _ => self.spc_ram[address] = value,
@@ -344,11 +343,10 @@ impl Console {
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         (0..num_instructions).for_each(|_| {
             self.cpu.step(&mut self.rest);
-            while Duration::from_nanos(self.rest.apu_master_clocks * 1_000_000_000 / 1_024_000)
-                < Duration::from_nanos(
-                    self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000,
-                )
+            while self.rest.apu_master_clocks * 1_000_000 / 1_024_000
+                < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000
             {
+                // Catch up the APU
                 self.apu.step(&mut self.rest);
             }
         });

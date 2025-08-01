@@ -19,7 +19,9 @@ use iced::{
         Column, Container, Row, Scrollable, Slider, TextInput, button, checkbox, column, container,
         horizontal_space,
         image::{FilterMethod, Handle, Image},
-        keyed_column, pick_list, row, scrollable, slider,
+        keyed_column, pick_list, row, scrollable,
+        scrollable::RelativeOffset,
+        slider,
         text::IntoFragment,
         text_input, vertical_space,
     },
@@ -49,6 +51,37 @@ macro_rules! table_row {
     ($label: expr, $field: ident) => {
         ppu_val!($label, $field, "{}")
     };
+}
+
+struct InstructionSnapshot {
+    pbr: u8,
+    pc: u16,
+    opcode: u8,
+    operands: [u8; 3],
+    c: u16,
+    x: u16,
+    y: u16,
+    a_is_16bit: bool,
+    xy_is_16bit: bool,
+}
+
+impl InstructionSnapshot {
+    fn from(console: &Console) -> Self {
+        let cpu = console.cpu();
+        InstructionSnapshot {
+            pbr: cpu.pbr,
+            pc: cpu.pc,
+            opcode: console.opcode(),
+            operands: core::array::from_fn(|i| {
+                console.read_byte(cpu.pc.wrapping_add(i as u16) as usize)
+            }),
+            c: cpu.c(),
+            x: cpu.x(),
+            y: cpu.y(),
+            a_is_16bit: cpu.p.a_is_16bit(),
+            xy_is_16bit: cpu.p.xy_is_16bit(),
+        }
+    }
 }
 
 pub fn background_table(background: &Background) -> impl Into<Element<'_, Message>> {
@@ -172,10 +205,13 @@ pub struct Application {
     emulate_future_states: bool,
     ram_display: RamDisplay,
     total_instructions: u32,
+    previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
+    // instruction_scroll_id: scrollable::Id,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
 const INSTRUCTIONS_PER_PREV_CONSOLE: u32 = 1000;
+const NUM_PREVIOUS_STATES: usize = 200;
 
 impl Default for Application {
     fn default() -> Self {
@@ -195,6 +231,8 @@ impl Default for Application {
             previous_console: Box::new(default_console.clone()),
             previous_console_lag: 0,
             previous_states: VecDeque::with_capacity(500),
+            previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
+            // instruction_scroll_id: scrollable::Id::unique(),
         }
     }
 }
@@ -207,7 +245,7 @@ impl Application {
     }
     fn pause(&mut self) {
         self.is_paused = true;
-        self.refresh_prev_states();
+        // scrollable::snap_to(self.instruction_scroll_id, RelativeOffset::END);
     }
     fn is_in_breakpoint(&mut self) -> bool {
         if self.console.in_vblank() && self.vblank_breakpoint {
@@ -226,6 +264,11 @@ impl Application {
             if self.previous_breakpoint_states.len() > NUM_BREAKPOINT_STATES {
                 self.previous_breakpoint_states.pop_front();
             }
+        }
+        self.previous_instruction_snapshots
+            .push_back(InstructionSnapshot::from(&self.console));
+        if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
+            self.previous_instruction_snapshots.pop_front();
         }
         self.console.advance_instructions(1);
         self.total_instructions += 1;
@@ -442,7 +485,7 @@ impl Application {
                     iced::Background::Color(Color::BLACK)
                 )),
                 column![
-                    container(self.next_instructions()).height(Length::Fill),
+                    container(self.instructions()).height(Length::Fill),
                     container(
                         checkbox("Emulate future states?", self.emulate_future_states)
                             .on_toggle(Message::ToggleFutureStates)
@@ -719,34 +762,38 @@ impl Application {
         .map(|t| (t, color))
         .collect()
     }
-    fn next_instructions(&self) -> impl Into<Element<Message>> {
-        if self.is_paused {
-            container(text("Temp"))
-            // let mut c = self.console.clone();
-            // let future_iter = std::iter::from_fn(move || {
-            //     c.advance_instructions(1);
-            //     Some(c.clone())
-            // });
-            // let it = self
-            //     .previous_states
-            //     .iter()
-            //     .rev()
-            //     .take(0)
-            //     .map(|c| self.console_table_row(&c, Some(color!(0xAAAAAA))))
-            //     .rev()
-            //     .chain([self.console_table_row(&self.console, Some(color!(0xFFFFFF)))].into_iter())
-            //     .chain(
-            //         future_iter
-            //             .take(if self.emulate_future_states { 10 } else { 0 })
-            //             .map(move |c| self.console_table_row(&c, Some(COLORS[2]))),
-            //     );
-            // container(text_table(
-            //     ["PBR", "PC", "OP", "", "              "]
-            //         .into_iter()
-            //         .map(|r| (r.to_string(), Some(COLORS[0])))
-            //         .chain(it.flatten()),
-            //     5,
-            // ))
+    fn instructions(&self) -> impl Into<Element<Message>> {
+        if self.is_paused || true {
+            container(
+                scrollable(Column::with_children(
+                    self.previous_instruction_snapshots
+                        .iter()
+                        .chain([InstructionSnapshot::from(&self.console)].iter())
+                        .enumerate()
+                        .map(|(i, s)| {
+                            let data = opcode_data(s.opcode, s.a_is_16bit, s.xy_is_16bit);
+                            row![
+                                text(format!("{:02X}", s.pbr)),
+                                text(format!("{:04X}", s.pc)),
+                                text(format!("{:02X}", s.opcode)),
+                                text(data.name.to_string()).color(if i == NUM_PREVIOUS_STATES {
+                                    Color::WHITE
+                                } else {
+                                    COLORS[0]
+                                }),
+                                text(format!(
+                                    "{:6}",
+                                    format_address_mode(data.addr_mode, &s.operands, data.bytes,)
+                                )),
+                                text(format!("{:04X} {:04X} {:04X}", s.c, s.x, s.y))
+                            ]
+                            .spacing(10)
+                            .into()
+                        }),
+                ))
+                .spacing(10)
+                .anchor_bottom(),
+            )
         } else {
             container(text("Running..."))
                 .width(Length::Fill)
