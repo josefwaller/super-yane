@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use log::*;
 use spc700::{HasAddressBus as Spc700AddressBuss, IPL, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
@@ -20,7 +22,8 @@ pub struct ExternalArchitecture {
     /// DMA Channels
     pub dma_channels: [DmaChannel; 8],
     pub input_ports: [InputPort; 2],
-    total_master_clocks: u32,
+    total_master_clocks: u64,
+    apu_master_clocks: u64,
     open_bus_value: u8,
 }
 
@@ -217,13 +220,13 @@ impl ExternalArchitecture {
         }
     }
     fn advance(&mut self, master_clocks: u32) {
-        self.total_master_clocks += master_clocks;
+        self.total_master_clocks += master_clocks as u64;
         self.ppu.advance_master_clock(master_clocks);
     }
 }
 impl HasAddressBus for ExternalArchitecture {
     fn io(&mut self) {
-        // self.advance(6);
+        self.advance(6);
     }
     fn read(&mut self, address: usize) -> u8 {
         // Todo find a better solution
@@ -242,8 +245,11 @@ impl HasAddressBus for ExternalArchitecture {
     }
 }
 impl Spc700AddressBuss for ExternalArchitecture {
-    fn io(&mut self) {}
+    fn io(&mut self) {
+        self.apu_master_clocks += 1;
+    }
     fn read(&mut self, address: usize) -> u8 {
+        self.apu_master_clocks += 1;
         match address {
             0x00F4..0x00F8 => {
                 debug!("APU reading from CPU {:04X}", address);
@@ -255,6 +261,7 @@ impl Spc700AddressBuss for ExternalArchitecture {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
+        self.apu_master_clocks += 1;
         match address {
             0x00F4..0x00F8 => {
                 debug!("APU writing {:02X} to CPU {:04X}", value, address);
@@ -296,7 +303,7 @@ impl Console {
     rest_field! {ram, [u8; 0x20000]}
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
-    rest_field! {total_master_clocks, u32}
+    rest_field! {total_master_clocks, u64}
     rest_field! {input_ports, [InputPort; 2]}
     pub fn cpu(&self) -> &Processor {
         &self.cpu
@@ -325,6 +332,7 @@ impl Console {
                 ppu: Ppu::default(),
                 dma_channels: core::array::from_fn(|_| DmaChannel::default()),
                 total_master_clocks: 0,
+                apu_master_clocks: 0,
                 open_bus_value: 0,
             },
         };
@@ -335,9 +343,14 @@ impl Console {
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         (0..num_instructions).for_each(|_| {
-            // Todo: These should not be in sync
             self.cpu.step(&mut self.rest);
-            (0..10).for_each(|_| self.apu.step(&mut self.rest));
+            while Duration::from_nanos(self.rest.apu_master_clocks * 1_000_000_000 / 1_024_000)
+                < Duration::from_nanos(
+                    self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000,
+                )
+            {
+                self.apu.step(&mut self.rest);
+            }
         });
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
