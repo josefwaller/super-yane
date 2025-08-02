@@ -27,6 +27,45 @@ pub struct OpcodeData {
     pub addr_modes: Vec<AddressMode>,
 }
 
+pub fn format_address_modes(modes: &[AddressMode], values: &[u8]) -> String {
+    let mut i = 0;
+    let mut v = move || {
+        let v = values[i];
+        i += 1;
+        v
+    };
+    // Need to reverse since the operands for the second address mode comes first
+    let mut m = modes
+        .iter()
+        .rev()
+        .map(move |mode| match mode {
+            AddressMode::A => "A".to_string(),
+            AddressMode::X => "X".to_string(),
+            AddressMode::Y => "Y".to_string(),
+            AddressMode::Imm => format!("#${:02X}", v()),
+            AddressMode::D => format!("${:02X}", v()),
+            AddressMode::Dx => format!("${:02X}, X", v()),
+            AddressMode::Dy => format!("${:02X}, Y", v()),
+            AddressMode::Ix => "(X)".to_string(),
+            AddressMode::Iy => "(Y)".to_string(),
+            AddressMode::Idx => format!("([${:02X} + X])", v()),
+            AddressMode::Idy => format!("([${:02X}] + Y)", v()),
+            AddressMode::Abs => format!("${:04X}", u16::from_le_bytes([v(), v()])),
+            AddressMode::AbsX => format!("${:04X}, X", u16::from_le_bytes([v(), v()])),
+            AddressMode::AbsY => format!("${:04X}, Y", u16::from_le_bytes([v(), v()])),
+            AddressMode::Rel => format!("{:+}", v() as i8),
+            AddressMode::Mb => "Mb".to_string(),
+            AddressMode::Nmb => "Nmb".to_string(),
+            AddressMode::C => "C".to_string(),
+            AddressMode::Sp => "SP".to_string(),
+            AddressMode::Psw => "PSW".to_string(),
+        })
+        .collect::<Vec<_>>();
+    // Undo the reversing before formatting
+    m.reverse();
+    m.join(", ")
+}
+
 impl OpcodeData {
     pub fn from_opcode(opcode: u8) -> OpcodeData {
         match opcode {

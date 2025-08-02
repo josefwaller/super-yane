@@ -33,7 +33,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use spc700::{AddressMode, OpcodeData as Spc700OpcodeData};
+use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
 use super_yane::{Console, InputPort, ppu::Background};
 use wdc65816::{format_address_mode, opcode_data};
 
@@ -789,10 +789,10 @@ impl Application {
                                 text(format!("{:04X}", s.pc)),
                                 text(format!("{:02X}", s.opcode)),
                                 text(format!("{:4}", data.name)),
-                                text(s.operands[0].to_string()),
-                                text(s.operands[1].to_string()),
-                                text(s.operands[2].to_string()),
-                                text(format!("{:02X} {:02X} {:02X}", s.a, s.x, s.y))
+                                text(format!(
+                                    "{:6}",
+                                    format_address_modes(&data.addr_modes, &s.operands,)
+                                )),
                             ]
                             .spacing(10)
                             .into()
