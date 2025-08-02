@@ -33,6 +33,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
+use spc700::{AddressMode, OpcodeData as Spc700OpcodeData};
 use super_yane::{Console, InputPort, ppu::Background};
 use wdc65816::{format_address_mode, opcode_data};
 
@@ -783,9 +784,11 @@ impl Application {
                         .chain([ApuSnapshot::from(&self.console)].iter())
                         .enumerate()
                         .map(|(i, s)| {
+                            let data = Spc700OpcodeData::from_opcode(s.opcode);
                             row![
                                 text(format!("{:04X}", s.pc)),
                                 text(format!("{:02X}", s.opcode)),
+                                text(format!("{:4}", data.name)),
                                 text(s.operands[0].to_string()),
                                 text(s.operands[1].to_string()),
                                 text(s.operands[2].to_string()),

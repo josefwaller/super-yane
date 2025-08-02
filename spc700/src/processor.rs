@@ -254,10 +254,6 @@ impl Processor {
     pub fn step(&mut self, bus: &mut impl HasAddressBus) {
         // Read opcode
         let opcode = bus.read(self.pc as usize);
-        // debug!(
-        //     "pc={:04X} a={:02X} x={:02X} y={:02X} opcode={:02X}",
-        //     self.pc, self.a, self.x, self.y, opcode
-        // );
         self.pc = self.pc.wrapping_add(1);
         // Utility macro to create the YA register from the Y and A registers
         macro_rules! ya {
