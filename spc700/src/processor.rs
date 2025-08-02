@@ -124,16 +124,15 @@ impl Processor {
         let h = bus.read(addr.wrapping_add(1) as usize);
         self.sr.c = false;
         let (l, c) = l.overflowing_sub(1);
+        bus.write(addr as usize, l);
         if c {
             let (h, c) = h.overflowing_sub(1);
             if c {
                 self.sr.c = c;
             }
+            bus.write(addr.wrapping_add(1) as usize, h);
         }
-        bus.write(addr as usize, l);
-        bus.write(addr.wrapping_add(1) as usize, h);
-        self.sr.n = (h & 0x80) != 0;
-        self.sr.z = l == 0 && h == 0;
+        self.set_nz16(l, h);
     }
     fn eor(&mut self, a: u8, b: u8) -> u8 {
         let v = a ^ b;
@@ -144,6 +143,21 @@ impl Processor {
         let v = v.wrapping_add(1);
         self.set_nz(v);
         v
+    }
+    fn incw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
+        let l = bus.read(addr as usize);
+        let h = bus.read(addr.wrapping_add(1) as usize);
+        self.sr.c = false;
+        let (l, c) = l.overflowing_add(1);
+        bus.write(addr as usize, l);
+        if c {
+            let (h, c) = h.overflowing_add(1);
+            if c {
+                self.sr.c = c;
+            }
+            bus.write(addr.wrapping_add(1) as usize, h);
+        }
+        self.set_nz16(l, h);
     }
     fn lsr(&mut self, v: u8) -> u8 {
         let v = v.rotate_right(1);
@@ -522,8 +536,7 @@ impl Processor {
             CMP_Y_ABS => read_func!(cmp_y, abs),
             CMPW_YA_D => {
                 let addr = self.d(bus);
-                let val = bus.read(addr as usize) as u16
-                    + 0x100 * bus.read(addr.wrapping_add(1) as usize) as u16;
+                let val = self.read_u16(addr, bus);
                 self.cmp_w(ya!(), val);
             }
             DAA_A => {
@@ -601,17 +614,7 @@ impl Processor {
             INC_ABS => read_write_func!(inc, abs),
             INCW_D => {
                 let addr = self.d(bus);
-                let (low, c) = bus.read(addr as usize).overflowing_add(1);
-                bus.write(addr as usize, low);
-                let high = bus.read(addr.wrapping_add(1) as usize);
-                if c {
-                    let (high, c) = high.overflowing_add(1);
-                    bus.write(addr as usize, high);
-                    self.set_nz16(low, high);
-                    self.sr.c = c;
-                } else {
-                    self.set_nz16(low, high);
-                }
+                self.incw(bus, addr as u16);
             }
             JMP_IAX => {
                 let addr = self.absx(bus);

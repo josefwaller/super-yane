@@ -8,7 +8,6 @@ pub enum AddressMode {
     Y,
     Ya,
     Imm,
-    Iax,
     D,
     Dx,
     Dy,
@@ -19,6 +18,7 @@ pub enum AddressMode {
     Abs,
     AbsX,
     AbsY,
+    Iax,
     Rel,
     Mb,
     Nmb,
@@ -50,7 +50,7 @@ pub fn format_address_modes(modes: &[AddressMode], values: &[u8]) -> String {
             AddressMode::Y => "Y".to_string(),
             AddressMode::Ya => "YA".to_string(),
             AddressMode::Imm => format!("#${:02X}", v()),
-            AddressMode::Iax => format!("[${:04X}", u16::from_le_bytes([v(), v()])),
+            AddressMode::Iax => format!("[${:04X}]", u16::from_le_bytes([v(), v()])),
             AddressMode::D => format!("${:02X}", v()),
             AddressMode::Dx => format!("${:02X}, X", v()),
             AddressMode::Dy => format!("${:02X}, Y", v()),
@@ -485,7 +485,7 @@ impl OpcodeData {
             },
             JMP_IAX => OpcodeData {
                 name: "JMP",
-                addr_modes: vec![AddressMode::Abs, AddressMode::Ix],
+                addr_modes: vec![AddressMode::Iax],
             },
             JMP_ABS => OpcodeData {
                 name: "JMP",
