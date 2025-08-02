@@ -459,6 +459,8 @@ impl Application {
                     self.previous_console_lag = 0;
                     self.previous_states.clear();
                     self.total_instructions = 0;
+                    self.previous_apu_snapshots.clear();
+                    self.previous_instruction_snapshots.clear();
                 }
                 None => {}
             },
@@ -494,6 +496,7 @@ impl Application {
             row![
                 scrollable(column![
                     self.cpu_data().into(),
+                    self.apu_data().into(),
                     self.ppu_data().into(),
                     self.dma_data()
                 ])
@@ -737,6 +740,52 @@ impl Application {
                     .into()
                 }
             )),
+        ]
+    }
+    fn apu_data(&self) -> impl Into<Element<'_, Message>> {
+        let apu = self.console.apu();
+        let values = text_table(
+            [
+                ("PC", apu.pc, 4),
+                ("A", apu.a as u16, 2),
+                ("X", apu.x as u16, 2),
+                ("Y", apu.y as u16, 2),
+            ]
+            .into_iter()
+            .map(|(label, value, width)| {
+                [
+                    (label.to_string(), Some(COLORS[0])),
+                    (format!("{:0width$X}", value, width = width), None),
+                ]
+            })
+            .flatten(),
+            2,
+        );
+        let column_labels = ["", "R", "W"];
+        let columns = core::array::from_fn(|i| (column_labels[i].to_string(), Some(COLORS[1])));
+        let port_reads = text_table(
+            [columns]
+                .into_iter()
+                .chain((0..4).into_iter().map(|i| {
+                    [
+                        (format!("{:02X}", 0xF4 + i).to_string(), Some(COLORS[1])),
+                        (
+                            format!("{:02X}", self.console.read_byte_apu(0xF4 + i)),
+                            None,
+                        ),
+                        (
+                            format!("{:02X}", self.console.read_byte_cpu(0x2140 + i)),
+                            None,
+                        ),
+                    ]
+                }))
+                .flatten(),
+            3,
+        );
+        column![
+            text("APU").color(COLORS[4]),
+            values.into(),
+            port_reads.into()
         ]
     }
     fn dma_data(&self) -> Column<'_, Message> {
