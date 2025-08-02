@@ -4,6 +4,7 @@ pub enum AddressMode {
     A,
     X,
     Y,
+    Ya,
     Imm,
     D,
     Dx,
@@ -42,6 +43,7 @@ pub fn format_address_modes(modes: &[AddressMode], values: &[u8]) -> String {
             AddressMode::A => "A".to_string(),
             AddressMode::X => "X".to_string(),
             AddressMode::Y => "Y".to_string(),
+            AddressMode::Ya => "YA".to_string(),
             AddressMode::Imm => format!("#${:02X}", v()),
             AddressMode::D => format!("${:02X}", v()),
             AddressMode::Dx => format!("${:02X}, X", v()),
@@ -123,7 +125,7 @@ impl OpcodeData {
             },
             ADDW_YA_D => OpcodeData {
                 name: "ADDW",
-                addr_modes: vec![AddressMode::A, AddressMode::D],
+                addr_modes: vec![AddressMode::Ya, AddressMode::D],
             },
             AND_IX_IY => OpcodeData {
                 name: "AND",
@@ -336,7 +338,7 @@ impl OpcodeData {
             },
             CMPW_YA_D => OpcodeData {
                 name: "CMPW",
-                addr_modes: vec![AddressMode::A, AddressMode::D],
+                addr_modes: vec![AddressMode::Ya, AddressMode::D],
             },
             DAA_A => OpcodeData {
                 name: "DAA",
@@ -388,7 +390,7 @@ impl OpcodeData {
             },
             DIV_YA_X => OpcodeData {
                 name: "DIV",
-                addr_modes: vec![AddressMode::A, AddressMode::X],
+                addr_modes: vec![AddressMode::Ya, AddressMode::X],
             },
             EI => OpcodeData {
                 name: "EI",
@@ -666,15 +668,15 @@ impl OpcodeData {
             },
             MOVW_YA_D => OpcodeData {
                 name: "MOVW",
-                addr_modes: vec![AddressMode::A, AddressMode::D],
+                addr_modes: vec![AddressMode::Ya, AddressMode::D],
             },
             MOVW_D_YA => OpcodeData {
                 name: "MOVW",
-                addr_modes: vec![AddressMode::D, AddressMode::A],
+                addr_modes: vec![AddressMode::D, AddressMode::Ya],
             },
             MUL_YA => OpcodeData {
                 name: "MUL",
-                addr_modes: vec![AddressMode::A],
+                addr_modes: vec![AddressMode::Ya],
             },
             NOP => OpcodeData {
                 name: "NOP",
@@ -887,7 +889,7 @@ impl OpcodeData {
             },
             SUBW_YA_D => OpcodeData {
                 name: "SUBW",
-                addr_modes: vec![AddressMode::A, AddressMode::D],
+                addr_modes: vec![AddressMode::Ya, AddressMode::D],
             },
             o if opcode & 0x0F == TCALL_MASK => todo!(),
             TCLR1_ABS => OpcodeData {

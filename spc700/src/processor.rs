@@ -94,13 +94,13 @@ impl Processor {
         self.sr.c = c;
     }
     fn cmp_a(&mut self, v: u8) {
-        self.cmp(v, self.a);
+        self.cmp(self.a, v);
     }
     fn cmp_x(&mut self, v: u8) {
-        self.cmp(v, self.x);
+        self.cmp(self.x, v);
     }
     fn cmp_y(&mut self, v: u8) {
-        self.cmp(v, self.y)
+        self.cmp(self.y, v)
     }
     fn cmp_w(&mut self, a: u16, b: u16) {
         let (r, c) = a.overflowing_sub(b);
@@ -226,9 +226,7 @@ impl Processor {
         self.id(self.x, bus)
     }
     fn idy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        let a = self.id(self.y, bus);
-        debug!("IDY addr: {:04X}", a);
-        a
+        self.id(self.y, bus)
     }
     fn abs(&mut self, bus: &mut impl HasAddressBus) -> u16 {
         let addr = self.read_u16(self.pc, bus);

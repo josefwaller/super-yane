@@ -317,7 +317,6 @@ impl Console {
         &self.apu
     }
     pub fn apu_opcode(&self) -> u8 {
-        // Spc700AddressBuss::read(&mut self.rest, self.apu.pc as usize)
         0
     }
     pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
