@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use crate::opcodes::*;
 
 pub enum AddressMode {
@@ -6,6 +8,7 @@ pub enum AddressMode {
     Y,
     Ya,
     Imm,
+    Iax,
     D,
     Dx,
     Dy,
@@ -45,6 +48,7 @@ pub fn format_address_modes(modes: &[AddressMode], values: &[u8]) -> String {
             AddressMode::Y => "Y".to_string(),
             AddressMode::Ya => "YA".to_string(),
             AddressMode::Imm => format!("#${:02X}", v()),
+            AddressMode::Iax => format!("[${:04X}", u16::from_le_bytes([v(), v()])),
             AddressMode::D => format!("${:02X}", v()),
             AddressMode::Dx => format!("${:02X}, X", v()),
             AddressMode::Dy => format!("${:02X}, Y", v()),
@@ -89,11 +93,11 @@ impl OpcodeData {
             },
             ADC_A_IDY => OpcodeData {
                 name: "ADC",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             ADC_A_IDX => OpcodeData {
                 name: "ADC",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             ADC_A_D => OpcodeData {
                 name: "ADC",
@@ -141,11 +145,11 @@ impl OpcodeData {
             },
             AND_A_IDY => OpcodeData {
                 name: "AND",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             AND_A_IDX => OpcodeData {
                 name: "AND",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             AND_A_D => OpcodeData {
                 name: "AND",
@@ -278,11 +282,11 @@ impl OpcodeData {
             },
             CMP_A_IDY => OpcodeData {
                 name: "CMP",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             CMP_A_IDX => OpcodeData {
                 name: "CMP",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             CMP_A_D => OpcodeData {
                 name: "CMP",
@@ -410,11 +414,11 @@ impl OpcodeData {
             },
             EOR_A_IDY => OpcodeData {
                 name: "EOR",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             EOR_A_IDX => OpcodeData {
                 name: "EOR",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             EOR_A_D => OpcodeData {
                 name: "EOR",
@@ -507,7 +511,7 @@ impl OpcodeData {
             },
             MOV_IDY_A => OpcodeData {
                 name: "MOV",
-                addr_modes: vec![AddressMode::Iy, AddressMode::A],
+                addr_modes: vec![AddressMode::Idy, AddressMode::A],
             },
             MOV_IDX_A => OpcodeData {
                 name: "MOV",
@@ -524,7 +528,7 @@ impl OpcodeData {
             MOV_A_XINC => todo!(),
             MOV_A_IDY => OpcodeData {
                 name: "MOV",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             MOV_A_IDX => OpcodeData {
                 name: "MOV",
@@ -704,11 +708,11 @@ impl OpcodeData {
             },
             OR_A_IDY => OpcodeData {
                 name: "OR",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             OR_A_IDX => OpcodeData {
                 name: "OR",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             OR_A_D => OpcodeData {
                 name: "OR",
@@ -836,11 +840,11 @@ impl OpcodeData {
             },
             SBC_A_IDY => OpcodeData {
                 name: "SBC",
-                addr_modes: vec![AddressMode::A, AddressMode::Iy],
+                addr_modes: vec![AddressMode::A, AddressMode::Idy],
             },
             SBC_A_IDX => OpcodeData {
                 name: "SBC",
-                addr_modes: vec![AddressMode::A, AddressMode::Ix],
+                addr_modes: vec![AddressMode::A, AddressMode::Idx],
             },
             SBC_A_D => OpcodeData {
                 name: "SBC",

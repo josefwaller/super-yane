@@ -126,7 +126,6 @@ impl ExternalArchitecture {
                             if (value >> i) & 0x01 != 0 {
                                 let mut d = self.dma_channels[i].clone();
                                 let mut bytes_transferred = 0;
-                                debug!("Start DMA");
                                 // Todo: handling timing of DMA
                                 loop {
                                     let src = d.src_bank as usize * 0x10000 + d.src_addr as usize;

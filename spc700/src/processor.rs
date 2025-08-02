@@ -592,8 +592,7 @@ impl Processor {
                 self.pc = addr;
             }
             JMP_ABS => {
-                let addr = self.abs(bus);
-                self.pc = self.read_u16(addr, bus);
+                self.pc = self.abs(bus);
             }
             LSR_A => self.a = self.lsr(self.a),
             LSR_D => read_write_func!(lsr, d),
@@ -649,7 +648,6 @@ impl Processor {
             }
             MOVW_D_YA => {
                 let addr = self.d(bus);
-                debug!("Wrote YA {:04X} to {:04X}", ya!(), addr);
                 self.write_u16(addr, ya!(), bus);
             }
             MOVW_YA_D => {
@@ -657,7 +655,6 @@ impl Processor {
                 let [low, high] = self.read_u16(addr, bus).to_le_bytes();
                 self.a = low;
                 self.y = high;
-                debug!("Moved into YA {:04X}", ya!());
             }
             NOP => {}
             NOT1_MB => {
