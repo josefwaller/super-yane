@@ -222,6 +222,17 @@ impl ExternalArchitecture {
         self.total_master_clocks += master_clocks as u64;
         self.ppu.advance_master_clock(master_clocks);
     }
+    pub fn read_apu(&self, address: usize) -> u8 {
+        match address {
+            0x00F4..0x00F8 => {
+                // debug!("APU reading from CPU {:04X}", address);
+                self.cpu_to_apu_reg[address - 0x00F4]
+            }
+            0x0000..0xFFC0 => self.spc_ram[address],
+            0xFFC0..0x10000 => IPL[address - 0xFFC0],
+            _ => panic!("Should be impossible"),
+        }
+    }
 }
 impl HasAddressBus for ExternalArchitecture {
     fn io(&mut self) {
@@ -249,15 +260,7 @@ impl Spc700AddressBuss for ExternalArchitecture {
     }
     fn read(&mut self, address: usize) -> u8 {
         self.apu_master_clocks += 1;
-        match address {
-            0x00F4..0x00F8 => {
-                // debug!("APU reading from CPU {:04X}", address);
-                self.cpu_to_apu_reg[address - 0x00F4]
-            }
-            0x0000..0xFFC0 => self.spc_ram[address],
-            0xFFC0..0x10000 => IPL[address - 0xFFC0],
-            _ => panic!("Should be impossible"),
-        }
+        self.read_apu(address)
     }
     fn write(&mut self, address: usize, value: u8) {
         self.apu_master_clocks += 1;
@@ -341,12 +344,22 @@ impl Console {
         c
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
+        self.advance_instructions_with_hooks(num_instructions, &mut |_| {}, &mut |_| {});
+    }
+    pub fn advance_instructions_with_hooks(
+        &mut self,
+        num_instructions: u32,
+        before_cpu_step: &mut dyn FnMut(&Console),
+        before_apu_step: &mut dyn FnMut(&Console),
+    ) {
         (0..num_instructions).for_each(|_| {
+            before_cpu_step(&self);
             self.cpu.step(&mut self.rest);
             while self.rest.apu_master_clocks * 1_000_000 / 1_024_000
                 < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000
             {
                 // Catch up the APU
+                before_apu_step(&self);
                 self.apu.step(&mut self.rest);
             }
         });
@@ -381,7 +394,11 @@ impl Console {
         self.ppu().vblank
     }
     /// Read a byte in CPU space
-    pub fn read_byte(&self, address: usize) -> u8 {
+    pub fn read_byte_cpu(&self, address: usize) -> u8 {
         self.rest.read_byte(address).0
+    }
+    /// Read a byte in APU space
+    pub fn read_byte_apu(&self, address: usize) -> u8 {
+        self.rest.read_apu(address)
     }
 }

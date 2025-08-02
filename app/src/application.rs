@@ -73,13 +73,37 @@ impl InstructionSnapshot {
             pc: cpu.pc,
             opcode: console.opcode(),
             operands: core::array::from_fn(|i| {
-                console.read_byte(cpu.pc.wrapping_add(i as u16) as usize)
+                console.read_byte_cpu(cpu.pc.wrapping_add(1 + i as u16) as usize)
             }),
             c: cpu.c(),
             x: cpu.x(),
             y: cpu.y(),
             a_is_16bit: cpu.p.a_is_16bit(),
             xy_is_16bit: cpu.p.xy_is_16bit(),
+        }
+    }
+}
+struct ApuSnapshot {
+    pc: u16,
+    a: u8,
+    x: u8,
+    y: u8,
+    opcode: u8,
+    operands: [u8; 3],
+}
+
+impl ApuSnapshot {
+    fn from(console: &Console) -> Self {
+        let apu = console.apu();
+        ApuSnapshot {
+            pc: apu.pc,
+            a: apu.a,
+            x: apu.x,
+            y: apu.y,
+            opcode: console.read_byte_apu(apu.pc as usize),
+            operands: core::array::from_fn(|i| {
+                console.read_byte_apu(apu.pc.wrapping_add(1 + i as u16) as usize)
+            }),
         }
     }
 }
@@ -170,6 +194,25 @@ impl Display for RamDisplay {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+enum InstDisplay {
+    Cpu,
+    Apu,
+}
+impl Display for InstDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use InstDisplay::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Cpu => "CPU",
+                Apu => "APU",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
@@ -186,6 +229,7 @@ pub enum Message {
     ChangeVramPage(usize),
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
+    SetInstDisplay(InstDisplay),
     LoadRom,
     Reset,
 }
@@ -206,7 +250,8 @@ pub struct Application {
     ram_display: RamDisplay,
     total_instructions: u32,
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
-    // instruction_scroll_id: scrollable::Id,
+    previous_apu_snapshots: VecDeque<ApuSnapshot>,
+    inst_display: InstDisplay,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -232,7 +277,8 @@ impl Default for Application {
             previous_console_lag: 0,
             previous_states: VecDeque::with_capacity(500),
             previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
-            // instruction_scroll_id: scrollable::Id::unique(),
+            previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
+            inst_display: InstDisplay::Cpu,
         }
     }
 }
@@ -245,7 +291,6 @@ impl Application {
     }
     fn pause(&mut self) {
         self.is_paused = true;
-        // scrollable::snap_to(self.instruction_scroll_id, RelativeOffset::END);
     }
     fn is_in_breakpoint(&mut self) -> bool {
         if self.console.in_vblank() && self.vblank_breakpoint {
@@ -265,32 +310,30 @@ impl Application {
                 self.previous_breakpoint_states.pop_front();
             }
         }
-        self.previous_instruction_snapshots
-            .push_back(InstructionSnapshot::from(&self.console));
-        if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
-            self.previous_instruction_snapshots.pop_front();
-        }
-        self.console.advance_instructions(1);
+        self.console.advance_instructions_with_hooks(
+            1,
+            &mut |c| {
+                self.previous_instruction_snapshots
+                    .push_back(InstructionSnapshot::from(c));
+                if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
+                    self.previous_instruction_snapshots.pop_front();
+                }
+            },
+            &mut |c| {
+                self.previous_apu_snapshots.push_back(ApuSnapshot::from(c));
+                if self.previous_apu_snapshots.len() > NUM_PREVIOUS_STATES {
+                    self.previous_apu_snapshots.pop_front();
+                }
+            },
+        );
         self.total_instructions += 1;
         self.previous_console_lag += 1;
         while self.previous_console_lag > 500 {
-            // self.previous_console.advance_instructions(1);
             self.previous_console_lag -= 1;
         }
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
-    }
-    pub fn refresh_prev_states(&mut self) {
-        // Emulate previous states
-        // let mut c = *self.previous_console.clone();
-        // self.previous_states = (0..self.previous_console_lag)
-        //     .map(|_| {
-        //         let r = c.clone();
-        //         c.advance_instructions(1);
-        //         r
-        //     })
-        //     .collect();
     }
     fn handle_input(&mut self, event: Event) {
         if let Keyboard(keyboard_event) = event {
@@ -422,9 +465,7 @@ impl Application {
                 self.ram_display = d;
                 self.ram_offset = 0;
             }
-        }
-        if self.is_paused {
-            self.refresh_prev_states();
+            Message::SetInstDisplay(d) => self.inst_display = d,
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
@@ -728,44 +769,35 @@ impl Application {
                 }),
         )
     }
-    /// Represent a console's state (PC, PBR, opcode) as a table row
-    fn console_table_row(
-        &self,
-        console: &Console,
-        color: Option<Color>,
-    ) -> Vec<(String, Option<Color>)> {
-        let addr = console.pc();
-        let opcode = console.opcode();
-        let data = opcode_data(
-            opcode,
-            console.cpu().p.a_is_16bit(),
-            console.cpu().p.xy_is_16bit(),
-        );
-        let c = console;
-        [
-            format!("{:02X}", console.cpu().pbr),
-            format!("{:04X}", console.cpu().pc),
-            format!("{:02X}", opcode),
-            data.name.to_string(),
-            format_address_mode(
-                data.addr_mode,
-                &[
-                    c.read_byte(addr.wrapping_add(1)),
-                    c.read_byte(addr.wrapping_add(2)),
-                    c.read_byte(addr.wrapping_add(3)),
-                ],
-                data.bytes,
-            ),
-            // console.apu_opcode(),
-        ]
-        .into_iter()
-        .map(|t| (t, color))
-        .collect()
-    }
     fn instructions(&self) -> impl Into<Element<Message>> {
-        if self.is_paused || true {
-            container(
-                scrollable(Column::with_children(
+        column![
+            pick_list(
+                [InstDisplay::Cpu, InstDisplay::Apu],
+                Some(self.inst_display.clone()),
+                Message::SetInstDisplay,
+            ),
+            container(match self.inst_display {
+                InstDisplay::Apu => scrollable(Column::with_children(
+                    self.previous_apu_snapshots
+                        .iter()
+                        .chain([ApuSnapshot::from(&self.console)].iter())
+                        .enumerate()
+                        .map(|(i, s)| {
+                            row![
+                                text(format!("{:04X}", s.pc)),
+                                text(format!("{:02X}", s.opcode)),
+                                text(s.operands[0].to_string()),
+                                text(s.operands[1].to_string()),
+                                text(s.operands[2].to_string()),
+                                text(format!("{:02X} {:02X} {:02X}", s.a, s.x, s.y))
+                            ]
+                            .spacing(10)
+                            .into()
+                        }),
+                ))
+                .anchor_bottom()
+                .spacing(10),
+                InstDisplay::Cpu => scrollable(Column::with_children(
                     self.previous_instruction_snapshots
                         .iter()
                         .chain([InstructionSnapshot::from(&self.console)].iter())
@@ -793,14 +825,8 @@ impl Application {
                 ))
                 .spacing(10)
                 .anchor_bottom(),
-            )
-        } else {
-            container(text("Running..."))
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_x(Center)
-                .align_y(Center)
-        }
+            })
+        ]
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
