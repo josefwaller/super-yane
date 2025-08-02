@@ -52,6 +52,10 @@ impl Processor {
         self.sr.z = v == 0;
         self.sr.n = (v & 0x80) != 0;
     }
+    fn set_nz16(&mut self, l: u8, h: u8) {
+        self.sr.z = l == 0 && h == 0;
+        self.sr.n = (h & 0x80) != 0;
+    }
 
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
@@ -474,7 +478,7 @@ impl Processor {
             }
             CALL_ABS => {
                 let addr = self.abs(bus);
-                self.call(self.read_u16(addr, bus), bus);
+                self.call(addr, bus);
             }
             CBNE_DX_R => cbne!(dx),
             CBNE_D_R => cbne!(d),
@@ -583,6 +587,20 @@ impl Processor {
             INC_D => read_write_func!(inc, d),
             INC_DX => read_write_func!(inc, dx),
             INC_ABS => read_write_func!(inc, abs),
+            INCW_D => {
+                let addr = self.d(bus);
+                let (low, c) = bus.read(addr as usize).overflowing_add(1);
+                bus.write(addr as usize, low);
+                let high = bus.read(addr.wrapping_add(1) as usize);
+                if c {
+                    let (high, c) = high.overflowing_add(1);
+                    bus.write(addr as usize, high);
+                    self.set_nz16(low, high);
+                    self.sr.c = c;
+                } else {
+                    self.set_nz16(low, high);
+                }
+            }
             JMP_IAX => {
                 let addr = self.abs(bus).wrapping_add(self.x as u16);
                 debug!("Addr p {:04X}", addr);
@@ -685,7 +703,7 @@ impl Processor {
             }
             PCALL => {
                 let addr = self.imm(bus);
-                self.call(0xFF + self.read_u16(addr, bus), bus);
+                self.call(0xFF00 + bus.read(addr as usize) as u16, bus);
             }
             POP_A => pop_reg!(a),
             POP_X => pop_reg!(x),

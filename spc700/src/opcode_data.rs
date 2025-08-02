@@ -25,6 +25,8 @@ pub enum AddressMode {
     C,
     Sp,
     Psw,
+    // Number encoded in the opcode
+    Encoded(u8),
 }
 pub struct OpcodeData {
     pub name: &'static str,
@@ -65,6 +67,7 @@ pub fn format_address_modes(modes: &[AddressMode], values: &[u8]) -> String {
             AddressMode::C => "C".to_string(),
             AddressMode::Sp => "SP".to_string(),
             AddressMode::Psw => "PSW".to_string(),
+            AddressMode::Encoded(n) => format!("{:X}", n),
         })
         .collect::<Vec<_>>();
     // Undo the reversing before formatting
@@ -85,7 +88,7 @@ impl OpcodeData {
             },
             CALL_ABS => OpcodeData {
                 name: "CALL",
-                addr_modes: vec![AddressMode::Imm],
+                addr_modes: vec![AddressMode::Abs],
             },
             ADC_A_IX => OpcodeData {
                 name: "ADC",
@@ -204,9 +207,9 @@ impl OpcodeData {
                 addr_modes: vec![AddressMode::Abs],
             },
             // BBS
-            o if opcode & 0x1F == BBS_D_R_MASK => todo!(),
+            o if opcode & 0x1F == BBS_D_R_MASK => todo!("BBS"),
             // BBC
-            o if opcode & 0x1F == BBC_D_R_MASK => todo!(),
+            o if opcode & 0x1F == BBC_D_R_MASK => todo!("BBC"),
             BCC_R => OpcodeData {
                 name: "BCC",
                 addr_modes: vec![AddressMode::Rel],
@@ -255,7 +258,7 @@ impl OpcodeData {
                 name: "CBNE",
                 addr_modes: vec![AddressMode::D, AddressMode::Rel],
             },
-            o if opcode & 0x1F == CLR1_D => todo!(),
+            o if opcode & 0x1F == CLR1_D => todo!("CLR1"),
             CLRC => OpcodeData {
                 name: "CLRC",
                 addr_modes: vec![],
@@ -504,7 +507,7 @@ impl OpcodeData {
                 name: "LSR",
                 addr_modes: vec![AddressMode::Abs],
             },
-            MOV_XINC_A => todo!(),
+            MOV_XINC_A => todo!("MOV XINC"),
             MOV_IX_A => OpcodeData {
                 name: "MOV",
                 addr_modes: vec![AddressMode::Ix, AddressMode::A],
@@ -525,7 +528,7 @@ impl OpcodeData {
                 name: "MOV",
                 addr_modes: vec![AddressMode::A, AddressMode::Ix],
             },
-            MOV_A_XINC => todo!(),
+            MOV_A_XINC => todo!("MOV A XINC"),
             MOV_A_IDY => OpcodeData {
                 name: "MOV",
                 addr_modes: vec![AddressMode::A, AddressMode::Idy],
@@ -874,7 +877,7 @@ impl OpcodeData {
                 name: "SBC",
                 addr_modes: vec![AddressMode::D, AddressMode::Imm],
             },
-            opcode if opcode & 0x1F == SET1_MASK => todo!(),
+            opcode if opcode & 0x1F == SET1_MASK => todo!("SET1"),
             SETC => OpcodeData {
                 name: "SETC",
                 addr_modes: vec![],
@@ -895,7 +898,13 @@ impl OpcodeData {
                 name: "SUBW",
                 addr_modes: vec![AddressMode::Ya, AddressMode::D],
             },
-            o if opcode & 0x0F == TCALL_MASK => todo!(),
+            o if opcode & 0x0F == TCALL_MASK => {
+                let offset = opcode >> 4;
+                OpcodeData {
+                    name: "TCALL",
+                    addr_modes: vec![AddressMode::Encoded(offset)],
+                }
+            }
             TCLR1_ABS => OpcodeData {
                 name: "TCLR1",
                 addr_modes: vec![AddressMode::Abs],
