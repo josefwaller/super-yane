@@ -91,12 +91,15 @@ impl Display for InstructionSnapshot {
         let data = opcode_data(self.opcode, self.a_is_16bit, self.xy_is_16bit);
         write!(
             f,
-            "PBR={:02X} PC={:04X} OP={:02X} {} {} C={:04X} X={:04X} Y={:04X} SR={:02X}",
+            "PBR={:02X} PC={:04X} OP={:02X} {:10} C={:04X} X={:04X} Y={:04X} SR={:02X}",
             self.pbr,
             self.pc,
             self.opcode,
-            data.name,
-            format_address_mode(data.addr_mode, &self.operands, data.bytes),
+            format!(
+                "{} {}",
+                data.name,
+                format_address_mode(data.addr_mode, &self.operands, data.bytes)
+            ),
             self.c,
             self.x,
             self.y,
@@ -136,11 +139,14 @@ impl Display for ApuSnapshot {
         let data = Spc700OpcodeData::from_opcode(self.opcode);
         write!(
             f,
-            "PC={:04X} OP={:02X} {} {} A={:02X} X={:02X} Y={:02X} PSW={:02X}",
+            "PC={:04X} OP={:02X} {:20} A={:02X} X={:02X} Y={:02X} PSW={:02X}",
             self.pc,
             self.opcode,
-            data.name,
-            format_address_modes(&data.addr_modes, &self.operands),
+            format!(
+                "{} {}",
+                data.name,
+                format_address_modes(&data.addr_modes, &self.operands)
+            ),
             self.a,
             self.x,
             self.y,
