@@ -18,12 +18,12 @@ pub trait HasAddressBus {
 }
 
 impl Processor {
-    fn read_u16(&self, addr: u16, bus: &mut impl HasAddressBus) -> u16 {
-        let low = bus.read(addr as usize);
-        let high = bus.read(addr.wrapping_add(1) as usize);
+    fn read_u16(&self, addr: usize, bus: &mut impl HasAddressBus) -> u16 {
+        let low = bus.read(addr);
+        let high = bus.read((addr as u16).wrapping_add(1) as usize);
         u16::from_le_bytes([low, high])
     }
-    fn write_u16(&self, addr: u16, value: u16, bus: &mut impl HasAddressBus) {
+    fn write_u16(&self, addr: usize, value: u16, bus: &mut impl HasAddressBus) {
         let [low, high] = value.to_le_bytes();
         bus.write(addr as usize, low);
         bus.write(addr.wrapping_add(1) as usize, high);
@@ -57,6 +57,8 @@ impl Processor {
         self.sr.n = (h & 0x80) != 0;
     }
 
+    // FUNCTIONS USED IN MACROS
+    // COMBINED WITH ONE OR MORE ADDRESSING MODE FUNCTIONS
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
         let (r, c2) = r.overflowing_add(self.sr.c.into());
@@ -194,54 +196,64 @@ impl Processor {
         v
     }
 
+    // ADDRESSING MODE FUNCTIONS
+    // RETURNS THE ADDRESS OF THE VALUE, RATHER THAN THE VALUE ITSELF
+
     /// Immediate addressing
-    fn imm(&mut self, _bus: &mut impl HasAddressBus) -> u16 {
+    fn imm(&mut self, _bus: &mut impl HasAddressBus) -> usize {
         let pc = self.pc;
         self.pc = self.pc.wrapping_add(1);
-        pc
+        pc as usize
+    }
+    /// Direct page addressing with offset
+    fn d_off(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
+        let addr = self.imm(bus);
+        let addr = bus.read(addr);
+        0x100 * usize::from(self.sr.p) + addr.wrapping_add(r) as usize
     }
     /// Direct page addressing
-    fn d(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        let addr = bus.read(self.pc as usize) as u16;
-        self.pc = self.pc.wrapping_add(1);
-        0x100 * u16::from(self.sr.p) + addr
+    fn d(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.d_off(0, bus)
     }
     /// Direct page with X offset
-    fn dx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.d(bus).wrapping_add(self.x as u16)
+    fn dx(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.d_off(self.x, bus)
     }
     /// Direct page with Y offset
-    fn dy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.d(bus).wrapping_add(self.y as u16)
+    fn dy(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.d_off(self.y, bus)
     }
-    fn id(&mut self, r: u8, bus: &mut impl HasAddressBus) -> u16 {
+    fn id(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
         // Todo: Page wrap
         let addr = self.d(bus);
         // Read the pointer
-        self.read_u16(addr, bus).wrapping_add(r as u16)
+        self.read_u16(addr, bus).wrapping_add(r as u16) as usize
     }
-    fn ix(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.x as u16
+    fn ix(&mut self, _bus: &mut impl HasAddressBus) -> usize {
+        self.x as usize
     }
-    fn iy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.y as u16
+    fn iy(&mut self, _bus: &mut impl HasAddressBus) -> usize {
+        self.y as usize
     }
-    fn idx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+    fn idx(&mut self, bus: &mut impl HasAddressBus) -> usize {
         self.id(self.x, bus)
     }
-    fn idy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
+    fn idy(&mut self, bus: &mut impl HasAddressBus) -> usize {
         self.id(self.y, bus)
     }
-    fn abs(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        let addr = self.read_u16(self.pc, bus);
-        self.pc = self.pc.wrapping_add(2);
-        addr
+    fn abs_off(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
+        let addr = self.imm(bus);
+        let addr = self.read_u16(addr, bus).wrapping_add(r as u16);
+        addr as usize
     }
-    fn absx(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.abs(bus).wrapping_add(self.x as u16)
+    fn abs(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.abs_off(0, bus)
     }
-    fn absy(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        self.abs(bus).wrapping_add(self.y as u16)
+    fn absx(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.abs_off(self.x, bus)
+    }
+    fn absy(&mut self, bus: &mut impl HasAddressBus) -> usize {
+        self.abs_off(self.y, bus)
     }
     fn mb(&mut self, bus: &mut impl HasAddressBus) -> bool {
         let value = u16::from_le_bytes([
@@ -266,7 +278,7 @@ impl Processor {
         macro_rules! read_a_func {
             ($func: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
-                let val = bus.read(addr as usize);
+                let val = bus.read(addr);
                 self.a = self.$func(val, self.a);
             }};
         }
@@ -274,7 +286,7 @@ impl Processor {
         macro_rules! read_reg {
             ($register: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
-                self.$register = bus.read(addr as usize);
+                self.$register = bus.read(addr);
                 self.set_nz(self.$register);
             }};
         }
@@ -282,7 +294,7 @@ impl Processor {
         macro_rules! write_reg {
             ($register: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
-                bus.write(addr as usize, self.$register);
+                bus.write(addr, self.$register);
             }};
         }
         macro_rules! trans_reg {
@@ -298,15 +310,15 @@ impl Processor {
         /// `operand` (optional) is the function address that is just read.
         macro_rules! read_read_write_func {
             ($target: ident, $func: ident) => {{
-                let addr = self.$target(bus) as usize;
+                let addr = self.$target(bus);
                 let value = bus.read(addr);
                 let value = self.$func(value);
                 bus.write(addr, value);
             }};
             ($func: ident, $target: ident, $operand: ident) => {{
-                let addr = self.$operand(bus) as usize;
+                let addr = self.$operand(bus);
                 let l = bus.read(addr);
-                let addr = self.$target(bus) as usize;
+                let addr = self.$target(bus);
                 let r = bus.read(addr);
                 let val = self.$func(l, r);
                 bus.write(addr, val);
@@ -316,7 +328,7 @@ impl Processor {
         macro_rules! read_func {
             ($func: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
-                let val = bus.read(addr as usize);
+                let val = bus.read(addr);
                 self.$func(val);
             }};
         }
@@ -324,7 +336,7 @@ impl Processor {
         /// then stores the result in the YA register
         macro_rules! read_ya_func {
             ($operand: ident, $func: ident) => {{
-                let addr = self.$operand(bus) as usize;
+                let addr = self.$operand(bus);
                 let value = u16::from_le_bytes([bus.read(addr), bus.read(addr + 1)]);
                 let result = self.$func(self.y as u16 * 0x100 + self.a as u16, value);
                 self.y = (result >> 8) as u8;
@@ -333,14 +345,14 @@ impl Processor {
         }
         macro_rules! read_write_func {
             ($func: ident, $addr: ident) => {{
-                let addr = self.$addr(bus) as usize;
+                let addr = self.$addr(bus);
                 let value = self.$func(bus.read(addr));
                 bus.write(addr, value);
             }};
             ($func: ident, $read_addr: ident, $write_addr: ident) => {{
-                let addr = self.$read_addr(bus) as usize;
+                let addr = self.$read_addr(bus);
                 let value = self.$func(bus.read(addr));
-                let addr = self.$write_addr(bus) as usize;
+                let addr = self.$write_addr(bus);
                 bus.write(addr, value);
             }};
         }
@@ -478,7 +490,7 @@ impl Processor {
             }
             CALL_ABS => {
                 let addr = self.abs(bus);
-                self.call(addr, bus);
+                self.call(addr as u16, bus);
             }
             CBNE_DX_R => cbne!(dx),
             CBNE_D_R => cbne!(d),
@@ -554,7 +566,7 @@ impl Processor {
             DEC_ABS => read_write_func!(dec, abs),
             DECW_D => {
                 let addr = self.d(bus);
-                self.decw(bus, addr);
+                self.decw(bus, addr as u16);
             }
             DI => self.sr.i = false,
             DIV_YA_X => {
@@ -602,15 +614,12 @@ impl Processor {
                 }
             }
             JMP_IAX => {
-                let addr = self.abs(bus).wrapping_add(self.x as u16);
-                debug!("Addr p {:04X}", addr);
+                let addr = self.absx(bus);
                 let addr = self.read_u16(addr, bus);
-                debug!("Addr v {:04X}", addr);
-                // let addr = self.read_u16(addr, bus).wrapping_add(self.x as u16);
                 self.pc = addr;
             }
             JMP_ABS => {
-                self.pc = self.abs(bus);
+                self.pc = self.abs(bus) as u16;
             }
             LSR_A => self.a = self.lsr(self.a),
             LSR_D => read_write_func!(lsr, d),
@@ -747,7 +756,7 @@ impl Processor {
             SETP => self.sr.p = true,
             opcode if opcode & 0x0F == TCALL_MASK => {
                 let offset = opcode >> 4;
-                let addr = self.read_u16(0xFFDE + offset as u16, bus);
+                let addr = self.read_u16(0xFFDE + offset as usize, bus);
                 self.call(addr, bus);
             }
             TCLR1_ABS => read_write_func!(tclr, abs),
