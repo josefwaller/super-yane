@@ -64,6 +64,7 @@ struct InstructionSnapshot {
     y: u16,
     a_is_16bit: bool,
     xy_is_16bit: bool,
+    sr: u8,
 }
 
 impl InstructionSnapshot {
@@ -81,7 +82,26 @@ impl InstructionSnapshot {
             y: cpu.y(),
             a_is_16bit: cpu.p.a_is_16bit(),
             xy_is_16bit: cpu.p.xy_is_16bit(),
+            sr: cpu.p.to_byte(true),
         }
+    }
+}
+impl Display for InstructionSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let data = opcode_data(self.opcode, self.a_is_16bit, self.xy_is_16bit);
+        write!(
+            f,
+            "PBR={:02X} PC={:04X} OP={:02X} {} {} C={:04X} X={:04X} Y={:04X} SR={:02X}",
+            self.pbr,
+            self.pc,
+            self.opcode,
+            data.name,
+            format_address_mode(data.addr_mode, &self.operands, data.bytes),
+            self.c,
+            self.x,
+            self.y,
+            self.sr
+        )
     }
 }
 struct ApuSnapshot {
@@ -89,6 +109,7 @@ struct ApuSnapshot {
     a: u8,
     x: u8,
     y: u8,
+    psw: u8,
     opcode: u8,
     operands: [u8; 3],
 }
@@ -101,11 +122,30 @@ impl ApuSnapshot {
             a: apu.a,
             x: apu.x,
             y: apu.y,
+            psw: apu.sr.to_byte(),
             opcode: console.read_byte_apu(apu.pc as usize),
             operands: core::array::from_fn(|i| {
                 console.read_byte_apu(apu.pc.wrapping_add(1 + i as u16) as usize)
             }),
         }
+    }
+}
+
+impl Display for ApuSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let data = Spc700OpcodeData::from_opcode(self.opcode);
+        write!(
+            f,
+            "PC={:04X} OP={:02X} {} {} A={:02X} X={:02X} Y={:02X} PSW={:02X}",
+            self.pc,
+            self.opcode,
+            data.name,
+            format_address_modes(&data.addr_modes, &self.operands),
+            self.a,
+            self.x,
+            self.y,
+            self.psw
+        )
     }
 }
 
@@ -233,6 +273,8 @@ pub enum Message {
     SetInstDisplay(InstDisplay),
     LoadRom,
     Reset,
+    ToggleLogCpu(bool),
+    ToggleLogApu(bool),
 }
 
 pub struct Application {
@@ -253,10 +295,11 @@ pub struct Application {
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
     previous_apu_snapshots: VecDeque<ApuSnapshot>,
     inst_display: InstDisplay,
+    log_cpu: bool,
+    log_apu: bool,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
-const INSTRUCTIONS_PER_PREV_CONSOLE: u32 = 1000;
 const NUM_PREVIOUS_STATES: usize = 200;
 
 impl Default for Application {
@@ -280,6 +323,8 @@ impl Default for Application {
             previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             inst_display: InstDisplay::Cpu,
+            log_cpu: false,
+            log_apu: false,
         }
     }
 }
@@ -314,14 +359,21 @@ impl Application {
         self.console.advance_instructions_with_hooks(
             1,
             &mut |c| {
-                self.previous_instruction_snapshots
-                    .push_back(InstructionSnapshot::from(c));
+                let snap = InstructionSnapshot::from(c);
+                if self.log_cpu {
+                    info!("CPU_STATE {}", snap);
+                }
+                self.previous_instruction_snapshots.push_back(snap);
                 if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
                     self.previous_instruction_snapshots.pop_front();
                 }
             },
             &mut |c| {
-                self.previous_apu_snapshots.push_back(ApuSnapshot::from(c));
+                let snap = ApuSnapshot::from(c);
+                if self.log_apu {
+                    info!("APU_STATE {}", snap);
+                }
+                self.previous_apu_snapshots.push_back(snap);
                 if self.previous_apu_snapshots.len() > NUM_PREVIOUS_STATES {
                     self.previous_apu_snapshots.pop_front();
                 }
@@ -461,6 +513,7 @@ impl Application {
                     self.total_instructions = 0;
                     self.previous_apu_snapshots.clear();
                     self.previous_instruction_snapshots.clear();
+                    self.is_paused = true
                 }
                 None => {}
             },
@@ -469,6 +522,8 @@ impl Application {
                 self.ram_offset = 0;
             }
             Message::SetInstDisplay(d) => self.inst_display = d,
+            Message::ToggleLogApu(v) => self.log_apu = v,
+            Message::ToggleLogCpu(v) => self.log_cpu = v,
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
@@ -531,10 +586,10 @@ impl Application {
                 )),
                 column![
                     container(self.instructions()).height(Length::Fill),
-                    container(
-                        checkbox("Emulate future states?", self.emulate_future_states)
-                            .on_toggle(Message::ToggleFutureStates)
-                    )
+                    row![
+                        checkbox("Log CPU", self.log_cpu).on_toggle(Message::ToggleLogCpu),
+                        checkbox("Log APU", self.log_apu).on_toggle(Message::ToggleLogApu),
+                    ]
                 ]
                 .width(Length::Shrink)
             ]
@@ -839,7 +894,7 @@ impl Application {
                                 text(format!("{:02X}", s.opcode)),
                                 text(format!("{:4}", data.name)),
                                 text(format!(
-                                    "{:6}",
+                                    "{:8}",
                                     format_address_modes(&data.addr_modes, &s.operands,)
                                 )),
                             ]
@@ -869,7 +924,6 @@ impl Application {
                                     "{:6}",
                                     format_address_mode(data.addr_mode, &s.operands, data.bytes,)
                                 )),
-                                text(format!("{:04X} {:04X} {:04X}", s.c, s.x, s.y))
                             ]
                             .spacing(10)
                             .into()

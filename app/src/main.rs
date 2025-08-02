@@ -10,6 +10,7 @@ use application::Application;
 
 fn main() {
     let config = ConfigBuilder::new()
+        .add_filter_allow_str("app")
         .add_filter_allow_str("super_yane")
         .add_filter_allow_str("spc700")
         .add_filter_allow_str("wdc65816")
