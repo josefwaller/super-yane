@@ -1,4 +1,4 @@
-use crate::{StatusRegister, opcodes::*};
+use crate::{ProgramStatusWord, opcodes::*};
 use log::*;
 
 #[derive(Copy, Clone)]
@@ -8,7 +8,7 @@ pub struct Processor {
     pub y: u8,
     pub sp: u8,
     pub pc: u16,
-    pub sr: StatusRegister,
+    pub psw: ProgramStatusWord,
 }
 
 pub trait HasAddressBus {
@@ -50,28 +50,28 @@ impl Processor {
 
     /// Set the N and Z flags based on the value provided
     fn set_nz(&mut self, v: u8) {
-        self.sr.z = v == 0;
-        self.sr.n = (v & 0x80) != 0;
+        self.psw.z = v == 0;
+        self.psw.n = (v & 0x80) != 0;
     }
     fn set_nz16(&mut self, l: u8, h: u8) {
-        self.sr.z = l == 0 && h == 0;
-        self.sr.n = (h & 0x80) != 0;
+        self.psw.z = l == 0 && h == 0;
+        self.psw.n = (h & 0x80) != 0;
     }
 
     // FUNCTIONS USED IN MACROS
     // COMBINED WITH ONE OR MORE ADDRESSING MODE FUNCTIONS
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (r, c1) = l.overflowing_add(r);
-        let (r, c2) = r.overflowing_add(self.sr.c.into());
-        self.sr.c = c1 | c2;
+        let (r, c2) = r.overflowing_add(self.psw.c.into());
+        self.psw.c = c1 | c2;
         self.set_nz(r);
         // Todo: More flags
         r
     }
     fn addw(&mut self, l: u16, r: u16) -> u16 {
         let (r, c1) = l.overflowing_add(r);
-        let (r, c2) = r.overflowing_add(self.sr.c.into());
-        self.sr.c = c1 | c2;
+        let (r, c2) = r.overflowing_add(self.psw.c.into());
+        self.psw.c = c1 | c2;
         r
     }
     fn and(&mut self, l: u8, r: u8) -> u8 {
@@ -82,7 +82,7 @@ impl Processor {
     fn asl(&mut self, v: u8) -> u8 {
         let v = v.rotate_left(1);
         self.set_nz(v);
-        self.sr.c = (v & 0x01) != 0;
+        self.psw.c = (v & 0x01) != 0;
         v & 0xFE
     }
     fn branch_imm(&mut self, bus: &mut impl HasAddressBus) {
@@ -98,7 +98,7 @@ impl Processor {
     fn cmp(&mut self, a: u8, b: u8) {
         let (r, c) = a.overflowing_sub(b);
         self.set_nz(r);
-        self.sr.c = c;
+        self.psw.c = c;
     }
     fn cmp_a(&mut self, v: u8) {
         self.cmp(self.a, v);
@@ -111,9 +111,9 @@ impl Processor {
     }
     fn cmp_w(&mut self, a: u16, b: u16) {
         let (r, c) = a.overflowing_sub(b);
-        self.sr.z = r == 0;
-        self.sr.n = (r & 0x8000) != 0;
-        self.sr.c = c;
+        self.psw.z = r == 0;
+        self.psw.n = (r & 0x8000) != 0;
+        self.psw.c = c;
     }
     fn dec(&mut self, v: u8) -> u8 {
         let v = v.wrapping_sub(1);
@@ -123,13 +123,13 @@ impl Processor {
     fn decw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
         let l = bus.read(addr as usize);
         let h = bus.read(addr.wrapping_add(1) as usize);
-        self.sr.c = false;
+        self.psw.c = false;
         let (l, c) = l.overflowing_sub(1);
         bus.write(addr as usize, l);
         if c {
             let (h, c) = h.overflowing_sub(1);
             if c {
-                self.sr.c = c;
+                self.psw.c = c;
             }
             bus.write(addr.wrapping_add(1) as usize, h);
         }
@@ -148,13 +148,13 @@ impl Processor {
     fn incw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
         let l = bus.read(addr as usize);
         let h = bus.read(addr.wrapping_add(1) as usize);
-        self.sr.c = false;
+        self.psw.c = false;
         let (l, c) = l.overflowing_add(1);
         bus.write(addr as usize, l);
         if c {
             let (h, c) = h.overflowing_add(1);
             if c {
-                self.sr.c = c;
+                self.psw.c = c;
             }
             bus.write(addr.wrapping_add(1) as usize, h);
         }
@@ -162,7 +162,7 @@ impl Processor {
     }
     fn lsr(&mut self, v: u8) -> u8 {
         let v = v.rotate_right(1);
-        self.sr.c = (v & 0x80) != 0;
+        self.psw.c = (v & 0x80) != 0;
         let v = v & 0x7F;
         self.set_nz(v);
         v
@@ -181,22 +181,22 @@ impl Processor {
     }
     fn rol(&mut self, v: u8) -> u8 {
         let c = (v & 0x80) != 0;
-        let v = (v << 1) + u8::from(self.sr.c);
+        let v = (v << 1) + u8::from(self.psw.c);
         self.set_nz(v);
-        self.sr.c = c;
+        self.psw.c = c;
         v
     }
     fn ror(&mut self, v: u8) -> u8 {
         let c = (v & 0x01) != 0;
-        let v = (v >> 1) | (u8::from(self.sr.c) << 7);
+        let v = (v >> 1) | (u8::from(self.psw.c) << 7);
         self.set_nz(v);
-        self.sr.c = c;
+        self.psw.c = c;
         v
     }
     fn sbc(&mut self, a: u8, b: u8) -> u8 {
         let (v, c1) = a.overflowing_sub(b);
-        let (v, c2) = v.overflowing_sub(u8::from(self.sr.c));
-        self.sr.c = c1 | c2;
+        let (v, c2) = v.overflowing_sub(u8::from(self.psw.c));
+        self.psw.c = c1 | c2;
         self.set_nz(v);
         v
     }
@@ -225,7 +225,7 @@ impl Processor {
         let addr = self.pc as usize;
         self.pc = self.pc.wrapping_add(1);
         let addr = bus.read(addr);
-        0x100 * usize::from(self.sr.p) + addr.wrapping_add(r) as usize
+        0x100 * usize::from(self.psw.p) + addr.wrapping_add(r) as usize
     }
     /// Direct page addressing
     fn d(&mut self, bus: &mut impl HasAddressBus) -> usize {
@@ -313,8 +313,8 @@ impl Processor {
         macro_rules! trans_reg {
             ($dst: ident, $src: ident) => {{
                 self.$dst = self.$src;
-                self.sr.z = self.$dst == 0;
-                self.sr.n = (self.$dst & 0x80) != 0;
+                self.psw.z = self.$dst == 0;
+                self.psw.n = (self.$dst & 0x80) != 0;
             }};
         }
         /// Reads 2 values using 2 different addressing mode(s),
@@ -382,8 +382,8 @@ impl Processor {
             ($flag: ident, $op: tt, $negate: expr) => {{
                 // Todo maybe: Move MB to a macro param
                 let bit = self.mb(bus);
-                let val = (bit $op self.sr.$flag);
-                self.sr.$flag = if $negate { !val } else { val };
+                let val = (bit $op self.psw.$flag);
+                self.psw.$flag = if $negate { !val } else { val };
             }};
             ($flag: ident, $op: tt) => {{ read_bit_func!($flag, $op, false) }};
         }
@@ -399,7 +399,7 @@ impl Processor {
         }
         macro_rules! branch_on_flag {
             ($flag: ident, $val: expr) => {{
-                if u8::from(self.sr.$flag) == $val {
+                if u8::from(self.psw.$flag) == $val {
                     self.branch_imm(bus);
                 } else {
                     self.pc = self.pc.wrapping_add(1);
@@ -417,7 +417,7 @@ impl Processor {
         }
         macro_rules! set_flag {
             ($flag: ident, $val: expr) => {{
-                self.sr.$flag = $val;
+                self.psw.$flag = $val;
             }};
         }
         macro_rules! pop_reg {
@@ -498,7 +498,7 @@ impl Processor {
             BRA_R => self.branch_imm(bus),
             BRK => {
                 self.push_to_stack_u16(self.pc, bus);
-                self.push_to_stack_u8(self.sr.to_byte(), bus);
+                self.push_to_stack_u8(self.psw.to_byte(), bus);
                 self.pc = bus.read(0xFFDE) as u16 + 0x100 * bus.read(0xFFDF) as u16;
             }
             CALL_ABS => {
@@ -539,20 +539,20 @@ impl Processor {
                 self.cmp_w(ya!(), val);
             }
             DAA_A => {
-                if self.sr.c || self.a > 0x99 {
+                if self.psw.c || self.a > 0x99 {
                     self.a = self.a.wrapping_add(0x60);
-                    self.sr.c = true;
+                    self.psw.c = true;
                 }
-                if self.sr.h || (self.a & 0x0F) > 0x09 {
+                if self.psw.h || (self.a & 0x0F) > 0x09 {
                     self.a = self.a.wrapping_add(0x06);
                 }
             }
             DAS_A => {
-                if !self.sr.c || self.a > 0x99 {
+                if !self.psw.c || self.a > 0x99 {
                     self.a = self.a.wrapping_sub(0x60);
-                    self.sr.c = false;
+                    self.psw.c = false;
                 }
-                if !self.sr.h || (self.a & 0x0F) > 0x09 {
+                if !self.psw.h || (self.a & 0x0F) > 0x09 {
                     self.a = self.a.wrapping_sub(0x06)
                 }
             }
@@ -580,7 +580,7 @@ impl Processor {
                 let addr = self.d(bus);
                 self.decw(bus, addr as u16);
             }
-            DI => self.sr.i = false,
+            DI => self.psw.i = false,
             DIV_YA_X => {
                 let q = ya!() / self.x as u16;
                 let r = ya!() % self.x as u16;
@@ -588,7 +588,7 @@ impl Processor {
                 self.a = q as u8;
                 self.y = r as u8;
             }
-            EI => self.sr.i = true,
+            EI => self.psw.i = true,
             EOR_IX_IY => read_read_write_func!(eor, ix, iy),
             EOR_A_IMM => read_a_func!(eor, imm),
             EOR_A_IX => read_a_func!(eor, ix),
@@ -603,7 +603,7 @@ impl Processor {
             EOR_D_IMM => read_read_write_func!(eor, d, imm),
             EOR1_C_MB => {
                 let (bit, _addr, val) = addr_bit_func!(abs);
-                self.sr.c ^= ((val >> bit) & 0x01) != 0;
+                self.psw.c ^= ((val >> bit) & 0x01) != 0;
             }
             INC_A => self.a = self.inc(self.a),
             INC_X => self.x = self.inc(self.x),
@@ -668,11 +668,11 @@ impl Processor {
             MOV_D_IMM => read_write_func!(mov, imm, d),
             MOV1_C_MB => {
                 let (bit, _addr, val) = opcode_bit_func!(abs);
-                self.sr.c = (val & (0x01 << bit)) != 0;
+                self.psw.c = (val & (0x01 << bit)) != 0;
             }
             MOV1_MB_C => {
                 let (bit, addr, val) = opcode_bit_func!(abs);
-                let val = val | (u8::from(self.sr.c) << bit);
+                let val = val | (u8::from(self.psw.c) << bit);
                 bus.write(addr as usize, val);
             }
             MOVW_D_YA => {
@@ -691,7 +691,7 @@ impl Processor {
                 let val = val ^ (0x01 << bit);
                 bus.write(addr as usize, val);
             }
-            NOTC => self.sr.c = !self.sr.c,
+            NOTC => self.psw.c = !self.psw.c,
             OR_IX_IY => read_read_write_func!(or, ix, iy),
             OR_A_IMM => read_func!(or_a, imm),
             OR_A_IX => read_func!(or_a, ix),
@@ -706,11 +706,11 @@ impl Processor {
             OR_D_IMM => read_read_write_func!(or, d, imm),
             OR1_C_MB => {
                 let (bit, _addr, val) = opcode_bit_func!(abs);
-                self.sr.c |= (val & (0x01 << bit)) != 0;
+                self.psw.c |= (val & (0x01 << bit)) != 0;
             }
             OR1_C_NMB => {
                 let (bit, _addr, val) = opcode_bit_func!(abs);
-                self.sr.c |= !(val & (0x01 << bit)) != 0;
+                self.psw.c |= !(val & (0x01 << bit)) != 0;
             }
             PCALL => {
                 let addr = self.imm(bus);
@@ -722,11 +722,11 @@ impl Processor {
             PUSH_A => push_reg!(a),
             PUSH_X => push_reg!(x),
             PUSH_Y => push_reg!(y),
-            PUSH_PSW => self.push_to_stack_u8(self.sr.to_byte(), bus),
-            POP_PSW => self.sr = StatusRegister::from_byte(self.pull_from_stack_u8(bus)),
+            PUSH_PSW => self.push_to_stack_u8(self.psw.to_byte(), bus),
+            POP_PSW => self.psw = ProgramStatusWord::from_byte(self.pull_from_stack_u8(bus)),
             RET => self.pc = self.pull_from_stack_u16(bus),
             RETI => {
-                self.sr = StatusRegister::from_byte(self.pull_from_stack_u8(bus));
+                self.psw = ProgramStatusWord::from_byte(self.pull_from_stack_u8(bus));
                 self.pc = self.pull_from_stack_u16(bus);
             }
             ROL_A => self.a = self.rol(self.a),
@@ -754,8 +754,8 @@ impl Processor {
                 let val = val | (0x01 << bit);
                 bus.write(addr as usize, val);
             }
-            SETC => self.sr.c = true,
-            SETP => self.sr.p = true,
+            SETC => self.psw.c = true,
+            SETP => self.psw.p = true,
             opcode if opcode & 0x0F == TCALL_MASK => {
                 let offset = opcode >> 4;
                 let addr = self.read_u16(0xFFDE + offset as usize, bus);
@@ -779,7 +779,7 @@ impl Default for Processor {
             y: 0,
             sp: 0,
             pc: 0xFFC0,
-            sr: StatusRegister::default(),
+            psw: ProgramStatusWord::default(),
         }
     }
 }

@@ -1,5 +1,5 @@
 #[derive(Default, Copy, Clone)]
-pub struct StatusRegister {
+pub struct ProgramStatusWord {
     pub n: bool,
     pub v: bool,
     pub p: bool,
@@ -9,7 +9,7 @@ pub struct StatusRegister {
     pub z: bool,
     pub c: bool,
 }
-impl StatusRegister {
+impl ProgramStatusWord {
     pub fn to_byte(&self) -> u8 {
         macro_rules! bit {
             ($num: expr, $flag: ident) => {{ if self.$flag { (1 << $num) } else { 0 } }};
@@ -23,11 +23,11 @@ impl StatusRegister {
             | bit!(1, z)
             | bit!(0, c)
     }
-    pub fn from_byte(byte: u8) -> StatusRegister {
+    pub fn from_byte(byte: u8) -> ProgramStatusWord {
         macro_rules! bit {
             ($num: expr) => {{ ((byte >> $num) & 0x01) != 0 }};
         }
-        StatusRegister {
+        ProgramStatusWord {
             n: bit!(7),
             v: bit!(6),
             p: bit!(5),

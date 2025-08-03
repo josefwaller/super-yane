@@ -125,7 +125,7 @@ impl ApuSnapshot {
             a: apu.a,
             x: apu.x,
             y: apu.y,
-            psw: apu.sr.to_byte(),
+            psw: apu.psw.to_byte(),
             opcode: console.read_byte_apu(apu.pc as usize),
             operands: core::array::from_fn(|i| {
                 console.read_byte_apu(apu.pc.wrapping_add(1 + i as u16) as usize)
