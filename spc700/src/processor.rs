@@ -33,8 +33,8 @@ impl Processor {
         self.sp = self.sp.wrapping_sub(1);
     }
     fn pull_from_stack_u8(&mut self, bus: &mut impl HasAddressBus) -> u8 {
-        let val = bus.read(self.sp as usize + 0x100);
         self.sp = self.sp.wrapping_add(1);
+        let val = bus.read(self.sp as usize + 0x100);
         val
     }
     fn push_to_stack_u16(&mut self, val: u16, bus: &mut impl HasAddressBus) {
@@ -43,7 +43,8 @@ impl Processor {
         self.push_to_stack_u8(l, bus);
     }
     fn pull_from_stack_u16(&mut self, bus: &mut impl HasAddressBus) -> u16 {
-        let [h, l] = [self.pull_from_stack_u8(bus), self.pull_from_stack_u8(bus)];
+        let l = self.pull_from_stack_u8(bus);
+        let h = self.pull_from_stack_u8(bus);
         u16::from_le_bytes([l, h])
     }
 
@@ -221,7 +222,8 @@ impl Processor {
     }
     /// Direct page addressing with offset
     fn d_off(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
-        let addr = self.imm(bus);
+        let addr = self.pc as usize;
+        self.pc = self.pc.wrapping_add(1);
         let addr = bus.read(addr);
         0x100 * usize::from(self.sr.p) + addr.wrapping_add(r) as usize
     }
@@ -256,7 +258,8 @@ impl Processor {
         self.id(self.y, bus)
     }
     fn abs_off(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
-        let addr = self.imm(bus);
+        let addr = self.pc as usize;
+        self.pc = self.pc.wrapping_add(2);
         let addr = self.read_u16(addr, bus).wrapping_add(r as u16);
         addr as usize
     }
