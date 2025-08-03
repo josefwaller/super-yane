@@ -239,12 +239,6 @@ impl Processor {
     fn dy(&mut self, bus: &mut impl HasAddressBus) -> usize {
         self.d_off(self.y, bus)
     }
-    fn id(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
-        // Todo: Page wrap
-        let addr = self.d(bus);
-        // Read the pointer
-        self.read_u16(addr, bus).wrapping_add(r as u16) as usize
-    }
     fn ix(&mut self, _bus: &mut impl HasAddressBus) -> usize {
         self.x as usize
     }
@@ -252,10 +246,12 @@ impl Processor {
         self.y as usize
     }
     fn idx(&mut self, bus: &mut impl HasAddressBus) -> usize {
-        self.id(self.x, bus)
+        let addr = self.d_off(self.x, bus);
+        self.read_u16(addr, bus) as usize
     }
     fn idy(&mut self, bus: &mut impl HasAddressBus) -> usize {
-        self.id(self.y, bus)
+        let addr = self.d(bus);
+        self.read_u16(addr, bus).wrapping_add(self.y as u16) as usize
     }
     fn abs_off(&mut self, r: u8, bus: &mut impl HasAddressBus) -> usize {
         let addr = self.pc as usize;
