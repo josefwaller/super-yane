@@ -100,10 +100,10 @@ impl Processor {
         self.push_to_stack_u16(self.pc, bus);
         self.pc = addr;
     }
-    fn cmp(&mut self, a: u8, b: u8) {
-        let (r, c) = a.overflowing_sub(b);
+    fn cmp(&mut self, lhs: u8, rhs: u8) {
+        let (r, c) = lhs.overflowing_sub(rhs);
         self.set_nz(r);
-        self.psw.c = c;
+        self.psw.c = !c;
     }
     fn cmp_a(&mut self, v: u8) {
         self.cmp(self.a, v);
@@ -373,12 +373,13 @@ impl Processor {
             }};
         }
         macro_rules! read_read_func {
-            ($addr_one: ident, $addr_two: ident, $func: ident) => {{
-                let addr = self.$addr_two(bus);
-                let val_two = bus.read(addr as usize);
-                let addr = self.$addr_one(bus);
-                let val_one = bus.read(addr as usize);
-                self.$func(val_two, val_one);
+            ($lhs_addr: ident, $rhs_addr: ident, $func: ident) => {{
+                // In the assembly, the second value is provided first
+                let addr = self.$rhs_addr(bus);
+                let rhs = bus.read(addr as usize);
+                let addr = self.$lhs_addr(bus);
+                let lhs = bus.read(addr as usize);
+                self.$func(lhs, rhs);
             }};
         }
         macro_rules! read_bit_func {
@@ -407,7 +408,7 @@ impl Processor {
             ($addr: ident) => {{
                 let addr = self.$addr(bus);
                 let value = bus.read(addr as usize);
-                self.read_and_branch_if(self.a == value, bus);
+                self.read_and_branch_if(self.a != value, bus);
             }};
         }
         macro_rules! set_flag {
@@ -503,6 +504,8 @@ impl Processor {
             BRK => {
                 self.push_to_stack_u16(self.pc, bus);
                 self.push_to_stack_u8(self.psw.to_byte(), bus);
+                self.psw.b = true;
+                self.psw.i = false;
                 self.pc = u16::from_le_bytes([bus.read(0xFFDE), bus.read(0xFFDF)]);
             }
             CALL_ABS => {
@@ -518,7 +521,10 @@ impl Processor {
             }
             CLRC => set_flag!(c, false),
             CLRP => set_flag!(p, false),
-            CLRV => set_flag!(v, false),
+            CLRV => {
+                set_flag!(v, false);
+                set_flag!(h, false);
+            }
             CMP_A_IMM => read_func!(cmp_a, imm),
             CMP_A_IX => read_func!(cmp_a, ix),
             CMP_A_IDY => read_func!(cmp_a, idy),
@@ -762,7 +768,7 @@ impl Processor {
             SETP => self.psw.p = true,
             opcode if opcode & 0x0F == TCALL_MASK => {
                 let offset = opcode >> 4;
-                let addr = self.read_u16(0xFFDE + offset as usize, bus);
+                let addr = self.read_u16(0xFFDE - 2 * offset as usize, bus);
                 self.call(addr, bus);
             }
             TCLR1_ABS => read_write_func!(tclr, abs),

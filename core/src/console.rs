@@ -17,6 +17,7 @@ pub struct ExternalArchitecture {
     pub spc_ram: [u8; 0x10000],
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
+    pub expose_ipl_rom: bool,
     pub cartridge: Cartridge,
     pub ppu: Ppu,
     /// DMA Channels
@@ -228,7 +229,13 @@ impl ExternalArchitecture {
                 self.cpu_to_apu_reg[address - 0x00F4]
             }
             0x0000..0xFFC0 => self.spc_ram[address],
-            0xFFC0..0x10000 => IPL[address - 0xFFC0],
+            0xFFC0..0x10000 => {
+                if self.expose_ipl_rom {
+                    IPL[address - 0xFFC0]
+                } else {
+                    self.spc_ram[address]
+                }
+            }
             _ => panic!("Should be impossible"),
         }
     }
@@ -264,6 +271,9 @@ impl Spc700AddressBuss for ExternalArchitecture {
     fn write(&mut self, address: usize, value: u8) {
         self.apu_master_clocks += 1;
         match address {
+            0x00F1 => {
+                self.expose_ipl_rom = (value & 0x80) != 0;
+            }
             0x00F4..0x00F8 => {
                 // debug!("APU writing {:02X} to CPU {:04X}", value, address);
                 self.apu_to_cpu_reg[address - 0x00F4] = value
@@ -326,6 +336,7 @@ impl Console {
                 ram: [0; 0x20000],
                 cpu_to_apu_reg: [0; 4],
                 apu_to_cpu_reg: [0; 4],
+                expose_ipl_rom: true,
                 spc_ram: [0; 0x10000],
                 cartridge: Cartridge::from_data(cartridge_data),
                 input_ports: [InputPort::default_standard_controller(); 2],
