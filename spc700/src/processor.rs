@@ -114,31 +114,10 @@ impl Processor {
     fn cmp_y(&mut self, v: u8) {
         self.cmp(self.y, v)
     }
-    fn cmp_w(&mut self, a: u16, b: u16) {
-        let (r, c) = a.overflowing_sub(b);
-        self.psw.z = r == 0;
-        self.psw.n = (r & 0x8000) != 0;
-        self.psw.c = c;
-    }
     fn dec(&mut self, v: u8) -> u8 {
         let v = v.wrapping_sub(1);
         self.set_nz(v);
         v
-    }
-    fn decw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
-        let l = bus.read(addr as usize);
-        let h = bus.read(addr.wrapping_add(1) as usize);
-        self.psw.c = false;
-        let (l, c) = l.overflowing_sub(1);
-        bus.write(addr as usize, l);
-        if c {
-            let (h, c) = h.overflowing_sub(1);
-            if c {
-                self.psw.c = c;
-            }
-            bus.write(addr.wrapping_add(1) as usize, h);
-        }
-        self.set_nz_16le(l, h);
     }
     fn eor(&mut self, a: u8, b: u8) -> u8 {
         let v = a ^ b;
@@ -150,21 +129,6 @@ impl Processor {
         self.set_nz(v);
         v
     }
-    fn incw(&mut self, bus: &mut impl HasAddressBus, addr: u16) {
-        let l = bus.read(addr as usize);
-        let h = bus.read(addr.wrapping_add(1) as usize);
-        self.psw.c = false;
-        let (l, c) = l.overflowing_add(1);
-        bus.write(addr as usize, l);
-        if c {
-            let (h, c) = h.overflowing_add(1);
-            if c {
-                self.psw.c = c;
-            }
-            bus.write(addr.wrapping_add(1) as usize, h);
-        }
-        self.set_nz_16le(l, h);
-    }
     fn lsr(&mut self, v: u8) -> u8 {
         let v = v.rotate_right(1);
         self.psw.c = (v & 0x80) != 0;
@@ -174,6 +138,10 @@ impl Processor {
     }
     fn mov(&mut self, v: u8) -> u8 {
         self.set_nz(v);
+        v
+    }
+    // Move without setting flags
+    fn mov_no_flags(&mut self, v: u8) -> u8 {
         v
     }
     fn or(&mut self, a: u8, b: u8) -> u8 {
@@ -198,21 +166,19 @@ impl Processor {
         self.psw.c = c;
         v
     }
-    fn sbc(&mut self, a: u8, b: u8) -> u8 {
-        let (v, c1) = a.overflowing_sub(b);
-        let (v, c2) = v.overflowing_sub(u8::from(self.psw.c));
-        self.psw.c = c1 | c2;
-        self.set_nz(v);
-        v
+    fn sbc(&mut self, lhs: u8, rhs: u8) -> u8 {
+        self.adc(lhs, rhs ^ 0xFF)
     }
     fn tclr(&mut self, v: u8) -> u8 {
+        // TCLR and TSET compute the subtraction, which is only used
+        // to set the flags
+        self.set_nz(self.a.wrapping_sub(v));
         let v = v & !self.a;
-        self.set_nz(v);
         v
     }
     fn tset(&mut self, v: u8) -> u8 {
-        let v = v & !self.a;
-        self.set_nz(v);
+        self.set_nz(self.a.wrapping_sub(v));
+        let v = v | self.a;
         v
     }
 
@@ -306,7 +272,7 @@ impl Processor {
             ($func: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
                 let val = bus.read(addr);
-                self.a = self.$func(val, self.a);
+                self.a = self.$func(self.a, val);
             }};
         }
         /// Read a value into a register
@@ -344,9 +310,9 @@ impl Processor {
             }};
             ($func: ident, $target: ident, $operand: ident) => {{
                 let addr = self.$operand(bus);
-                let l = bus.read(addr);
-                let addr = self.$target(bus);
                 let r = bus.read(addr);
+                let addr = self.$target(bus);
+                let l = bus.read(addr);
                 let val = self.$func(l, r);
                 bus.write(addr, val);
             }};
@@ -439,7 +405,7 @@ impl Processor {
         macro_rules! addr_bit_func {
             ($addr: ident) => {{
                 let addr = self.$addr(bus);
-                let bit = (addr & 0xE000) >> 13;
+                let bit = addr >> 13;
                 let addr = addr & 0x1FFF;
                 let val = bus.read(addr as usize);
                 (bit, addr, val)
@@ -544,9 +510,12 @@ impl Processor {
             CMP_Y_D => read_func!(cmp_y, d),
             CMP_Y_ABS => read_func!(cmp_y, abs),
             CMPW_YA_D => {
-                let addr = self.d(bus);
-                let val = self.read_u16(addr, bus);
-                self.cmp_w(ya!(), val);
+                let [al, ah] = self.dw(bus);
+                let l = bus.read(al);
+                let h = bus.read(ah);
+                self.psw.c = true;
+                self.cmp(self.a, l);
+                self.cmp(self.y, h);
             }
             DAA_A => {
                 if self.psw.c || self.a > 0x99 {
@@ -556,6 +525,7 @@ impl Processor {
                 if self.psw.h || (self.a & 0x0F) > 0x09 {
                     self.a = self.a.wrapping_add(0x06);
                 }
+                self.set_nz(self.a);
             }
             DAS_A => {
                 if !self.psw.c || self.a > 0x99 {
@@ -565,20 +535,17 @@ impl Processor {
                 if !self.psw.h || (self.a & 0x0F) > 0x09 {
                     self.a = self.a.wrapping_sub(0x06)
                 }
+                self.set_nz(self.a);
             }
             DBNZ_Y_R => {
                 self.y = self.y.wrapping_sub(1);
-                if self.y != 0 {
-                    self.branch_imm(bus);
-                }
+                self.read_and_branch_if(self.y != 0, bus);
             }
             DBNZ_D_R => {
                 let addr = self.d(bus);
                 let val = bus.read(addr as usize).wrapping_sub(1);
                 bus.write(addr as usize, val);
-                if val != 0 {
-                    self.branch_imm(bus);
-                }
+                self.read_and_branch_if(val != 0, bus);
             }
             DEC_A => self.a = self.dec(self.a),
             DEC_X => self.x = self.dec(self.x),
@@ -587,16 +554,41 @@ impl Processor {
             DEC_DX => read_write_func!(dec, dx),
             DEC_ABS => read_write_func!(dec, abs),
             DECW_D => {
-                let addr = self.d(bus);
-                self.decw(bus, addr as u16);
+                let [al, ah] = self.dw(bus);
+                let l = bus.read(al);
+                let mut h = bus.read(ah);
+                let (l, c) = l.overflowing_sub(1);
+                bus.write(al, l);
+                if c {
+                    h = h.wrapping_sub(1);
+                    bus.write(ah, h);
+                    self.psw.z = false;
+                }
+                self.psw.z = l == 0 && h == 0;
+                self.psw.n = (h & 0x80) != 0;
             }
             DI => self.psw.i = false,
             DIV_YA_X => {
-                let q = ya!() / self.x as u16;
-                let r = ya!() % self.x as u16;
+                self.psw.h = (self.x & 0x0F) <= (self.y & 0x0F);
                 (0..11).for_each(|_| bus.io());
-                self.a = q as u8;
-                self.y = r as u8;
+                let ya = ya!() as u32;
+                let x = self.x as u32;
+                let (q, r) = if (self.y as u32) < (x << 1) {
+                    (ya / x, ya % x)
+                } else {
+                    (
+                        (255 - ((ya - (x << 9)) / (256 - x))),
+                        (x + (ya - (x << 9)) % (256 - x)),
+                    )
+                };
+                self.psw.v = if self.x == 0 {
+                    true
+                } else {
+                    ya!() / self.x as u16 > 0xFF
+                };
+                self.a = (q & 0xFF) as u8;
+                self.y = (r & 0xFF) as u8;
+                self.set_nz(self.a);
             }
             EI => self.psw.i = true,
             EOR_IX_IY => read_read_write_func!(eor, ix, iy),
@@ -622,8 +614,14 @@ impl Processor {
             INC_DX => read_write_func!(inc, dx),
             INC_ABS => read_write_func!(inc, abs),
             INCW_D => {
-                let addr = self.d(bus);
-                self.incw(bus, addr as u16);
+                let [al, ah] = self.dw(bus);
+                let l = bus.read(al);
+                let h = bus.read(ah);
+                let (l, c) = l.overflowing_add(1);
+                bus.write(al, l);
+                let h = h.wrapping_add(u8::from(c));
+                bus.write(ah, h);
+                self.set_nz_16le(l, h);
             }
             JMP_IAX => {
                 let addr = self.absx(bus);
@@ -670,34 +668,62 @@ impl Processor {
             MOV_Y_ABS => read_reg!(y, abs),
             MOV_A_X => trans_reg!(a, x),
             MOV_A_Y => trans_reg!(a, y),
-            MOV_SP_X => trans_reg!(sp, x),
+            MOV_SP_X => {
+                // No flags set
+                self.sp = self.x;
+            }
             MOV_X_A => trans_reg!(x, a),
             MOV_X_SP => trans_reg!(x, sp),
+            MOV_A_XINC => {
+                read_reg!(a, ix);
+                self.x = self.x.wrapping_add(1);
+            }
+            MOV_XINC_A => {
+                write_reg!(a, ix);
+                self.x = self.x.wrapping_add(1);
+            }
             MOV_Y_A => trans_reg!(y, a),
-            MOV_D_D => read_write_func!(mov, d, d),
-            MOV_D_IMM => read_write_func!(mov, imm, d),
+            MOV_D_D => read_write_func!(mov_no_flags, d, d),
+            MOV_D_IMM => read_write_func!(mov_no_flags, imm, d),
             MOV1_C_MB => {
-                let (bit, _addr, val) = opcode_bit_func!(abs);
+                let (bit, _addr, val) = addr_bit_func!(abs);
                 self.psw.c = (val & (0x01 << bit)) != 0;
             }
             MOV1_MB_C => {
-                let (bit, addr, val) = opcode_bit_func!(abs);
-                let val = val | (u8::from(self.psw.c) << bit);
+                let (bit, addr, val) = addr_bit_func!(abs);
+                let mask = 1 << bit;
+                let val = if self.psw.c { val | mask } else { val & !mask };
                 bus.write(addr as usize, val);
             }
             MOVW_D_YA => {
-                let addr = self.d(bus);
-                self.write_u16(addr, ya!(), bus);
+                // let addr = self.d(bus);
+                // self.write_u16(addr, ya!(), bus);
+                let [al, ah] = self.dw(bus);
+                bus.write(al, self.a);
+                bus.write(ah, self.y);
             }
             MOVW_YA_D => {
-                let addr = self.d(bus);
-                let [low, high] = self.read_u16(addr, bus).to_le_bytes();
+                let [al, ah] = self.dw(bus);
+                let low = bus.read(al);
+                let high = bus.read(ah);
                 self.a = low;
                 self.y = high;
+                self.set_nz_16le(self.a, self.y);
+                // let addr = self.d(bus);
+                // let [low, high] = self.read_u16(addr, bus).to_le_bytes();
+                // self.a = low;
+                // self.y = high;
+            }
+            MUL_YA => {
+                let res = self.y as u16 * self.a as u16;
+                self.a = (res & 0xFF) as u8;
+                self.y = (res >> 8) as u8;
+                // Only uses Y for flags (i guess)
+                self.set_nz(self.y);
             }
             NOP => {}
             NOT1_MB => {
-                let (bit, addr, val) = opcode_bit_func!(abs);
+                let (bit, addr, val) = addr_bit_func!(abs);
                 let val = val ^ (0x01 << bit);
                 bus.write(addr as usize, val);
             }
@@ -715,12 +741,12 @@ impl Processor {
             OR_D_D => read_read_write_func!(or, d, d),
             OR_D_IMM => read_read_write_func!(or, d, imm),
             OR1_C_MB => {
-                let (bit, _addr, val) = opcode_bit_func!(abs);
+                let (bit, _addr, val) = addr_bit_func!(abs);
                 self.psw.c |= (val & (0x01 << bit)) != 0;
             }
             OR1_C_NMB => {
-                let (bit, _addr, val) = opcode_bit_func!(abs);
-                self.psw.c |= !(val & (0x01 << bit)) != 0;
+                let (bit, _addr, val) = addr_bit_func!(abs);
+                self.psw.c |= !((val & (0x01 << bit)) != 0);
             }
             PCALL => {
                 let addr = self.imm(bus);
@@ -759,6 +785,16 @@ impl Processor {
             SBC_A_ABSY => read_a_func!(sbc, absy),
             SBC_D_D => read_read_write_func!(sbc, d, d),
             SBC_D_IMM => read_read_write_func!(sbc, d, imm),
+            SUBW_YA_D => {
+                // Address low high
+                let [al, ah] = self.dw(bus);
+                let l = bus.read(al);
+                let h = bus.read(ah);
+                self.psw.c = true;
+                self.a = self.sbc(self.a, l);
+                self.y = self.sbc(self.y, h);
+                self.set_nz_16le(self.a, self.y);
+            }
             opcode if opcode & 0x1F == SET1_MASK => {
                 let (bit, addr, val) = opcode_bit_func!(d);
                 let val = val | (0x01 << bit);
@@ -775,6 +811,7 @@ impl Processor {
             TSET1_ABS => read_write_func!(tset, abs),
             XCN_A => {
                 self.a = self.a.rotate_left(4);
+                self.set_nz(self.a);
             }
             _ => panic!("Unimplemented SPC700 opcode: {:2X}", opcode),
         }
