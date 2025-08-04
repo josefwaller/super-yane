@@ -273,6 +273,14 @@ impl Spc700AddressBuss for ExternalArchitecture {
         match address {
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
+                if value & 0x10 != 0 {
+                    self.cpu_to_apu_reg[0] = 0x00;
+                    self.cpu_to_apu_reg[1] = 0x00;
+                }
+                if value & 0x20 != 0 {
+                    self.cpu_to_apu_reg[2] = 0x00;
+                    self.cpu_to_apu_reg[3] = 0x00;
+                }
             }
             0x00F4..0x00F8 => {
                 // debug!("APU writing {:02X} to CPU {:04X}", value, address);
@@ -316,6 +324,8 @@ impl Console {
     rest_field! {dma_channels, [DmaChannel; 8]}
     rest_field! {total_master_clocks, u64}
     rest_field! {input_ports, [InputPort; 2]}
+    rest_field! {apu_to_cpu_reg, [u8; 4]}
+    rest_field! {cpu_to_apu_reg, [u8; 4]}
     pub fn cpu(&self) -> &Processor {
         &self.cpu
     }
