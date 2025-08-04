@@ -74,9 +74,7 @@ impl InstructionSnapshot {
             pbr: cpu.pbr,
             pc: cpu.pc,
             opcode: console.opcode(),
-            operands: core::array::from_fn(|i| {
-                console.read_byte_cpu(cpu.pc.wrapping_add(1 + i as u16) as usize)
-            }),
+            operands: core::array::from_fn(|i| console.read_byte_cpu(console.pc() + 1 + i)),
             c: cpu.c(),
             x: cpu.x(),
             y: cpu.y(),
@@ -91,7 +89,7 @@ impl Display for InstructionSnapshot {
         let data = opcode_data(self.opcode, self.a_is_16bit, self.xy_is_16bit);
         write!(
             f,
-            "PBR={:02X} PC={:04X} OP={:02X} {:10} C={:04X} X={:04X} Y={:04X} SR={:02X}",
+            "PBR={:02X} PC={:04X} OP={:02X} {:10} C={:04X} X={:04X} Y={:04X} SR={:02X} (bytes={:02X?})",
             self.pbr,
             self.pc,
             self.opcode,
@@ -103,7 +101,13 @@ impl Display for InstructionSnapshot {
             self.c,
             self.x,
             self.y,
-            self.sr
+            self.sr,
+            [
+                self.opcode,
+                self.operands[0],
+                self.operands[1],
+                self.operands[2]
+            ]
         )
     }
 }
@@ -377,7 +381,12 @@ impl Application {
             &mut |c| {
                 let snap = ApuSnapshot::from(c);
                 if self.log_apu {
-                    info!("APU_STATE {}", snap);
+                    info!(
+                        "APU_STATE {} PORTS APU2CPU={:02X?} CPU2APU={:02X?}",
+                        snap,
+                        c.apu_to_cpu_reg(),
+                        c.cpu_to_apu_reg()
+                    );
                 }
                 self.previous_apu_snapshots.push_back(snap);
                 if self.previous_apu_snapshots.len() > NUM_PREVIOUS_STATES {
