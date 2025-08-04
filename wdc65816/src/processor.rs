@@ -275,14 +275,29 @@ impl Processor {
         self.b = b;
     }
     fn sbc_d(&self, a: u8, b: u8, c: bool) -> (u8, bool) {
+        debug!("SBC_D {:02X} - {:02X} - {}", a, b, !c);
         // Note carry (c) is inverted here (0 = borrow, 1 = no borrow)
         let (low, c) = if (a & 0xF) >= (b & 0xF) + u8::from(!c) {
-            ((a & 0x0F) - (b & 0x0F) - u8::from(!c), true)
+            (
+                (a & 0x0F).wrapping_sub(b & 0x0F).wrapping_sub(u8::from(!c)),
+                true,
+            )
         } else {
-            (0xA + (a & 0xF) - (b & 0xF) - u8::from(!c), false)
+            (
+                0xAu8
+                    .wrapping_add(a & 0xF)
+                    .wrapping_sub(b & 0xF)
+                    .wrapping_sub(u8::from(!c)),
+                false,
+            )
         };
-        let (high, c) = if (a & 0xF0) >= (b & 0xF0) + 0x10 * u8::from(!c) {
-            ((a & 0xF0) - (b & 0xF0) - 0x10 * u8::from(!c), true)
+        let (high, c) = if (a & 0xF0) >= (b & 0xF0).wrapping_add(0x10 * u8::from(!c)) {
+            (
+                (a & 0xF0)
+                    .wrapping_sub(b & 0xF0)
+                    .wrapping_sub(0x10 * u8::from(!c)),
+                true,
+            )
         } else {
             (
                 0xA0u8
@@ -1465,5 +1480,8 @@ impl Processor {
         self.dbr = 0;
         self.dl = 0;
         self.dh = 0;
+    }
+    pub fn on_nmi(&mut self, memory: &mut impl HasAddressBus) {
+        self.break_to(memory, 0xFFEA, 0xFFFA, true)
     }
 }

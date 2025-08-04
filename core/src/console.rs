@@ -26,6 +26,7 @@ pub struct ExternalArchitecture {
     total_master_clocks: u64,
     apu_master_clocks: u64,
     open_bus_value: u8,
+    nmi_enabled: bool,
 }
 
 // Todo: move somewhere
@@ -120,6 +121,10 @@ impl ExternalArchitecture {
                     }
                     (0x2140..0x2144) => {
                         self.cpu_to_apu_reg[a - 0x2140] = value;
+                        12
+                    }
+                    0x4200 => {
+                        self.nmi_enabled = (value & 0x80) != 0;
                         12
                     }
                     0x420B => {
@@ -220,7 +225,7 @@ impl ExternalArchitecture {
     }
     fn advance(&mut self, master_clocks: u32) {
         self.total_master_clocks += master_clocks as u64;
-        self.ppu.advance_master_clock(master_clocks);
+        self.ppu.advance_master_clock(master_clocks)
     }
     pub fn read_apu(&self, address: usize) -> u8 {
         match address {
@@ -355,6 +360,7 @@ impl Console {
                 total_master_clocks: 0,
                 apu_master_clocks: 0,
                 open_bus_value: 0,
+                nmi_enabled: false,
             },
         };
         c.cpu.pc =
@@ -372,8 +378,12 @@ impl Console {
         before_apu_step: &mut dyn FnMut(&Console),
     ) {
         (0..num_instructions).for_each(|_| {
+            let vblank = self.ppu().vblank;
             before_cpu_step(&self);
             self.cpu.step(&mut self.rest);
+            if !vblank && self.ppu().vblank && self.rest.nmi_enabled {
+                self.cpu.on_nmi(&mut self.rest);
+            }
             while self.rest.apu_master_clocks * 1_000_000 / 1_024_000
                 < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000
             {

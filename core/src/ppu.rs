@@ -72,7 +72,6 @@ pub struct Ppu {
     /// Screen buffer
     pub screen_buffer: [u16; 256 * 240],
     pub dot: usize,
-    pixel_buffer: VecDeque<u16>,
 }
 
 impl Default for Ppu {
@@ -98,7 +97,6 @@ impl Default for Ppu {
             cgram_latch: None,
             screen_buffer: [0; 256 * 240],
             dot: 0,
-            pixel_buffer: VecDeque::new(),
         }
     }
 }
@@ -357,6 +355,10 @@ impl Ppu {
                 // Note the visual picture starts at dot 88
                 let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
                 let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
+                // Todo: check if this timing is correct
+                if y == 0 && x == 0 {
+                    self.vblank = false;
+                }
                 if y == 241 && x == 0 {
                     self.vblank = true;
                 }

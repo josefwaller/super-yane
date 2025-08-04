@@ -16,7 +16,7 @@ cpu_rom_test! {inc, 150_000}
 cpu_rom_test! {jmp, 50_000}
 cpu_rom_test! {ldr, 600_000}
 cpu_rom_test! {lsr, 100_000}
-cpu_rom_test! {mov, 50_000}
+cpu_rom_test! {mov, 100_000}
 cpu_rom_test! {msc, 50_000}
 cpu_rom_test! {ora, 350_000}
 cpu_rom_test! {phl, 400_000}
