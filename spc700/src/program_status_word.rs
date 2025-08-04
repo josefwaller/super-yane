@@ -1,4 +1,4 @@
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct ProgramStatusWord {
     pub n: bool,
     pub v: bool,

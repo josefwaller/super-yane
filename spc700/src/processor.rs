@@ -53,26 +53,31 @@ impl Processor {
         self.psw.z = v == 0;
         self.psw.n = (v & 0x80) != 0;
     }
-    fn set_nz16(&mut self, l: u8, h: u8) {
+    fn set_nz_16le(&mut self, l: u8, h: u8) {
         self.psw.z = l == 0 && h == 0;
         self.psw.n = (h & 0x80) != 0;
+    }
+    /// Read the next value at the PC (and increment the PC) and branch if `value` is true.
+    /// If `value` is false, just increment the PC.
+    fn read_and_branch_if(&mut self, value: bool, bus: &mut impl HasAddressBus) {
+        if value {
+            self.branch_imm(bus);
+        } else {
+            self.pc = self.pc.wrapping_add(1);
+        }
     }
 
     // FUNCTIONS USED IN MACROS
     // COMBINED WITH ONE OR MORE ADDRESSING MODE FUNCTIONS
     fn adc(&mut self, l: u8, r: u8) -> u8 {
-        let (r, c1) = l.overflowing_add(r);
-        let (r, c2) = r.overflowing_add(self.psw.c.into());
+        let (v, c1) = l.overflowing_add(r);
+        let (v, c2) = v.overflowing_add(self.psw.c.into());
         self.psw.c = c1 | c2;
-        self.set_nz(r);
-        // Todo: More flags
-        r
-    }
-    fn addw(&mut self, l: u16, r: u16) -> u16 {
-        let (r, c1) = l.overflowing_add(r);
-        let (r, c2) = r.overflowing_add(self.psw.c.into());
-        self.psw.c = c1 | c2;
-        r
+        self.psw.v = ((l ^ v) & (r ^ v)) & 0x80 != 0;
+        // If the low nibble decreases, set the half bit
+        self.psw.h = (v & 0x0F) < (l & 0x0F) || (v & 0x0F) < (r & 0x0F);
+        self.set_nz(v);
+        v
     }
     fn and(&mut self, l: u8, r: u8) -> u8 {
         let v = l & r;
@@ -81,7 +86,7 @@ impl Processor {
     }
     fn asl(&mut self, v: u8) -> u8 {
         let v = v.rotate_left(1);
-        self.set_nz(v);
+        self.set_nz(v & 0xFE);
         self.psw.c = (v & 0x01) != 0;
         v & 0xFE
     }
@@ -133,7 +138,7 @@ impl Processor {
             }
             bus.write(addr.wrapping_add(1) as usize, h);
         }
-        self.set_nz16(l, h);
+        self.set_nz_16le(l, h);
     }
     fn eor(&mut self, a: u8, b: u8) -> u8 {
         let v = a ^ b;
@@ -158,7 +163,7 @@ impl Processor {
             }
             bus.write(addr.wrapping_add(1) as usize, h);
         }
-        self.set_nz16(l, h);
+        self.set_nz_16le(l, h);
     }
     fn lsr(&mut self, v: u8) -> u8 {
         let v = v.rotate_right(1);
@@ -238,6 +243,15 @@ impl Processor {
     /// Direct page with Y offset
     fn dy(&mut self, bus: &mut impl HasAddressBus) -> usize {
         self.d_off(self.y, bus)
+    }
+    /// Direct page word.
+    /// Returns the address of the [low, high] bytes.
+    /// May page wrap.
+    fn dw(&mut self, bus: &mut impl HasAddressBus) -> [usize; 2] {
+        let addr = bus.read(self.pc as usize);
+        self.pc = self.pc.wrapping_add(1);
+        let off = 0x100 * usize::from(self.psw.p);
+        [off + addr as usize, off + addr.wrapping_add(1) as usize]
     }
     fn ix(&mut self, _bus: &mut impl HasAddressBus) -> usize {
         self.x as usize
@@ -345,17 +359,6 @@ impl Processor {
                 self.$func(val);
             }};
         }
-        /// Reads a value, operates on it with the YA register, and
-        /// then stores the result in the YA register
-        macro_rules! read_ya_func {
-            ($operand: ident, $func: ident) => {{
-                let addr = self.$operand(bus);
-                let value = u16::from_le_bytes([bus.read(addr), bus.read(addr + 1)]);
-                let result = self.$func(self.y as u16 * 0x100 + self.a as u16, value);
-                self.y = (result >> 8) as u8;
-                self.a = (result & 0xFF) as u8;
-            }};
-        }
         macro_rules! read_write_func {
             ($func: ident, $addr: ident) => {{
                 let addr = self.$addr(bus);
@@ -392,27 +395,19 @@ impl Processor {
                 let bit = opcode >> 5;
                 let addr = self.d(bus);
                 let val = bus.read(addr as usize);
-                if (val >> bit) & 0x01 == $val {
-                    self.branch_imm(bus);
-                }
+                self.read_and_branch_if((val >> bit) & 0x01 == $val, bus);
             }};
         }
         macro_rules! branch_on_flag {
             ($flag: ident, $val: expr) => {{
-                if u8::from(self.psw.$flag) == $val {
-                    self.branch_imm(bus);
-                } else {
-                    self.pc = self.pc.wrapping_add(1);
-                }
+                self.read_and_branch_if(u8::from(self.psw.$flag) == $val, bus);
             }};
         }
         macro_rules! cbne {
             ($addr: ident) => {{
                 let addr = self.$addr(bus);
                 let value = bus.read(addr as usize);
-                if self.a == value {
-                    self.branch_imm(bus);
-                }
+                self.read_and_branch_if(self.a == value, bus);
             }};
         }
         macro_rules! set_flag {
@@ -462,7 +457,16 @@ impl Processor {
             ADC_IX_IY => read_read_write_func!(adc, ix, iy),
             ADC_D_D => read_read_write_func!(adc, d, d),
             ADC_D_IMM => read_read_write_func!(adc, d, imm),
-            ADDW_YA_D => read_ya_func!(d, addw),
+            ADDW_YA_D => {
+                // Address low high
+                let [al, ah] = self.dw(bus);
+                let l = bus.read(al);
+                let h = bus.read(ah);
+                self.psw.c = false;
+                self.a = self.adc(l, self.a);
+                self.y = self.adc(h, self.y);
+                self.set_nz_16le(self.a, self.y);
+            }
             AND_IX_IY => read_read_write_func!(and, ix, iy),
             AND_A_IMM => read_a_func!(and, imm),
             AND_A_IX => read_a_func!(and, ix),
@@ -499,7 +503,7 @@ impl Processor {
             BRK => {
                 self.push_to_stack_u16(self.pc, bus);
                 self.push_to_stack_u8(self.psw.to_byte(), bus);
-                self.pc = bus.read(0xFFDE) as u16 + 0x100 * bus.read(0xFFDF) as u16;
+                self.pc = u16::from_le_bytes([bus.read(0xFFDE), bus.read(0xFFDF)]);
             }
             CALL_ABS => {
                 let addr = self.abs(bus);
