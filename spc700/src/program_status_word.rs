@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 #[derive(Default, Copy, Clone, Debug)]
 pub struct ProgramStatusWord {
     pub n: bool,
@@ -8,6 +10,29 @@ pub struct ProgramStatusWord {
     pub i: bool,
     pub z: bool,
     pub c: bool,
+}
+
+impl Display for ProgramStatusWord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        macro_rules! f {
+            ($flag: ident) => {
+                if self.$flag { "1" } else { "0" }
+            };
+        }
+        write!(
+            f,
+            "N={} V={} P={} B={} H={} I={} Z={} C={} ({:02X})",
+            f!(n),
+            f!(v),
+            f!(p),
+            f!(b),
+            f!(h),
+            f!(i),
+            f!(z),
+            f!(c),
+            self.to_byte()
+        )
+    }
 }
 impl ProgramStatusWord {
     pub fn to_byte(&self) -> u8 {

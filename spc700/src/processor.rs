@@ -1,7 +1,8 @@
-use crate::{ProgramStatusWord, opcodes::*};
-use log::*;
+use std::fmt::{Debug, Display};
 
-#[derive(Copy, Clone)]
+use crate::{ProgramStatusWord, opcodes::*};
+
+#[derive(Copy, Clone, Debug)]
 pub struct Processor {
     pub a: u8,
     pub x: u8,
@@ -15,6 +16,16 @@ pub trait HasAddressBus {
     fn io(&mut self);
     fn read(&mut self, address: usize) -> u8;
     fn write(&mut self, address: usize, value: u8);
+}
+
+impl Display for Processor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A={:02X} X={:02X} Y={:02X} SP={:02X} PC={:04X} PSW=[{}]",
+            self.a, self.x, self.y, self.sp, self.pc, self.psw,
+        )
+    }
 }
 
 impl Processor {
@@ -72,10 +83,9 @@ impl Processor {
     fn adc(&mut self, l: u8, r: u8) -> u8 {
         let (v, c1) = l.overflowing_add(r);
         let (v, c2) = v.overflowing_add(self.psw.c.into());
+        self.psw.h = (l & 0x0F) + (r & 0x0F) + u8::from(self.psw.c) > 0x0F;
         self.psw.c = c1 | c2;
         self.psw.v = ((l ^ v) & (r ^ v)) & 0x80 != 0;
-        // If the low nibble decreases, set the half bit
-        self.psw.h = (v & 0x0F) < (l & 0x0F) || (v & 0x0F) < (r & 0x0F);
         self.set_nz(v);
         v
     }

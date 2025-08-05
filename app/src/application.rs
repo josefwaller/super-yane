@@ -78,7 +78,7 @@ impl Display for InstructionSnapshot {
         );
         write!(
             f,
-            "{:15} (op={:02X} {:?} (bytes={:02X?}))",
+            "{:15} OP={:02X} {:?} (bytes={:02X?}))",
             format!(
                 "{} {}",
                 data.name,
@@ -96,11 +96,7 @@ impl Display for InstructionSnapshot {
     }
 }
 struct ApuSnapshot {
-    pc: u16,
-    a: u8,
-    x: u8,
-    y: u8,
-    psw: u8,
+    cpu: spc700::Processor,
     opcode: u8,
     operands: [u8; 3],
 }
@@ -109,11 +105,7 @@ impl ApuSnapshot {
     fn from(console: &Console) -> Self {
         let apu = console.apu();
         ApuSnapshot {
-            pc: apu.pc,
-            a: apu.a,
-            x: apu.x,
-            y: apu.y,
-            psw: apu.psw.to_byte(),
+            cpu: apu.clone(),
             opcode: console.read_byte_apu(apu.pc as usize),
             operands: core::array::from_fn(|i| {
                 console.read_byte_apu(apu.pc.wrapping_add(1 + i as u16) as usize)
@@ -127,18 +119,15 @@ impl Display for ApuSnapshot {
         let data = Spc700OpcodeData::from_opcode(self.opcode);
         write!(
             f,
-            "PC={:04X} OP={:02X} {:20} A={:02X} X={:02X} Y={:02X} PSW={:02X}",
-            self.pc,
-            self.opcode,
+            "{:20} OP={:02X} {} (bytes={:02X?})",
             format!(
                 "{} {}",
                 data.name,
                 format_address_modes(&data.addr_modes, &self.operands)
             ),
-            self.a,
-            self.x,
-            self.y,
-            self.psw
+            self.opcode,
+            self.cpu,
+            self.operands
         )
     }
 }
@@ -355,7 +344,7 @@ impl Application {
             &mut |c| {
                 let snap = InstructionSnapshot::from(c);
                 if self.log_cpu {
-                    info!("CPU_STATE {}", snap);
+                    debug!("CPU_STATE {}", snap);
                 }
                 self.previous_instruction_snapshots.push_back(snap);
                 if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
@@ -365,7 +354,7 @@ impl Application {
             &mut |c| {
                 let snap = ApuSnapshot::from(c);
                 if self.log_apu {
-                    info!(
+                    debug!(
                         "APU_STATE {} PORTS APU2CPU={:02X?} CPU2APU={:02X?}",
                         snap,
                         c.apu_to_cpu_reg(),
@@ -889,7 +878,7 @@ impl Application {
                         .map(|(i, s)| {
                             let data = Spc700OpcodeData::from_opcode(s.opcode);
                             row![
-                                text(format!("{:04X}", s.pc)),
+                                text(format!("{:04X}", s.cpu.pc)),
                                 text(format!("{:02X}", s.opcode)),
                                 text(format!("{:4}", data.name)),
                                 text(format!(

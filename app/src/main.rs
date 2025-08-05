@@ -21,7 +21,7 @@ fn main() {
             config.clone(),
             File::create("./super_yane.log").unwrap(),
         ),
-        SimpleLogger::new(log::LevelFilter::Debug, config),
+        SimpleLogger::new(log::LevelFilter::Info, config),
     ])
     .unwrap();
     info!("Logger initialized");
