@@ -263,6 +263,7 @@ impl Processor {
             bus.read(self.pc as usize),
             bus.read(self.pc.wrapping_add(1) as usize),
         ]);
+        self.pc = self.pc.wrapping_add(2);
         let addr = value & 0x1FFF;
         let bit = value >> 13;
         let value = bus.read(addr as usize);
