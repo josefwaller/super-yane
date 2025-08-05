@@ -372,6 +372,7 @@ impl Ppu {
                     // Structured (background_number, bpp)
                     let backgrounds = match self.bg_mode {
                         0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
+                        1 => [(0, 4), (1, 4), (2, 2)].to_vec(),
                         3 => [(0, 8), (1, 4)].to_vec(),
                         5 => [(0, 4), (1, 2)].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
@@ -405,6 +406,14 @@ impl Ppu {
                             (3, false),
                         ]
                         .to_vec(),
+                        1 => [
+                            (0, true),
+                            (1, true),
+                            (0, false),
+                            (1, false),
+                            (2, true),
+                            (2, false),
+                        ].to_vec(),
                         3 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
                         5 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),

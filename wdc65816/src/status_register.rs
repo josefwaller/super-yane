@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use log::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -92,5 +94,24 @@ impl StatusRegister {
         set_bit!(7, self.n);
 
         value
+    }
+}
+
+impl Display for StatusRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:02X} (C:{} Z:{} I:{} D:{} M:{} V:{} N:{} E:{} XB:{})",
+            self.to_byte(false),
+            if self.c { "1" } else { "0" },
+            if self.z { "1" } else { "0" },
+            if self.i { "1" } else { "0" },
+            if self.d { "1" } else { "0" },
+            if self.m { "1" } else { "0" },
+            if self.v { "1" } else { "0" },
+            if self.n { "1" } else { "0" },
+            if self.e { "1" } else { "0" },
+            if self.xb { "1" } else { "0" }
+        )
     }
 }

@@ -55,53 +55,37 @@ macro_rules! table_row {
 }
 
 struct InstructionSnapshot {
-    pbr: u8,
-    pc: u16,
+    cpu: wdc65816::Processor,
     opcode: u8,
     operands: [u8; 3],
-    c: u16,
-    x: u16,
-    y: u16,
-    a_is_16bit: bool,
-    xy_is_16bit: bool,
-    sr: u8,
 }
 
 impl InstructionSnapshot {
     fn from(console: &Console) -> Self {
-        let cpu = console.cpu();
         InstructionSnapshot {
-            pbr: cpu.pbr,
-            pc: cpu.pc,
+            cpu: console.cpu().clone(),
             opcode: console.opcode(),
             operands: core::array::from_fn(|i| console.read_byte_cpu(console.pc() + 1 + i)),
-            c: cpu.c(),
-            x: cpu.x(),
-            y: cpu.y(),
-            a_is_16bit: cpu.p.a_is_16bit(),
-            xy_is_16bit: cpu.p.xy_is_16bit(),
-            sr: cpu.p.to_byte(true),
         }
     }
 }
 impl Display for InstructionSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let data = opcode_data(self.opcode, self.a_is_16bit, self.xy_is_16bit);
+        let data = opcode_data(
+            self.opcode,
+            self.cpu.p.a_is_16bit(),
+            self.cpu.p.xy_is_16bit(),
+        );
         write!(
             f,
-            "PBR={:02X} PC={:04X} OP={:02X} {:10} C={:04X} X={:04X} Y={:04X} SR={:02X} (bytes={:02X?})",
-            self.pbr,
-            self.pc,
-            self.opcode,
+            "{:15} (op={:02X} {:?} (bytes={:02X?}))",
             format!(
                 "{} {}",
                 data.name,
                 format_address_mode(data.addr_mode, &self.operands, data.bytes)
             ),
-            self.c,
-            self.x,
-            self.y,
-            self.sr,
+            self.opcode,
+            self.cpu,
             [
                 self.opcode,
                 self.operands[0],
@@ -925,10 +909,11 @@ impl Application {
                         .chain([InstructionSnapshot::from(&self.console)].iter())
                         .enumerate()
                         .map(|(i, s)| {
-                            let data = opcode_data(s.opcode, s.a_is_16bit, s.xy_is_16bit);
+                            let data =
+                                opcode_data(s.opcode, s.cpu.p.a_is_16bit(), s.cpu.p.xy_is_16bit());
                             row![
-                                text(format!("{:02X}", s.pbr)),
-                                text(format!("{:04X}", s.pc)),
+                                text(format!("{:02X}", s.cpu.pbr)),
+                                text(format!("{:04X}", s.cpu.pc)),
                                 text(format!("{:02X}", s.opcode)),
                                 text(data.name.to_string()).color(if i == NUM_PREVIOUS_STATES {
                                     Color::WHITE

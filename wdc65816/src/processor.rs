@@ -70,7 +70,8 @@ impl Debug for Processor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "PC={:2X},C={:04X},X={:04X},Y={:04X},P={:X},P.e={},D={:02X}{:02X},DBR={:X},S={:2X}",
+            "PBR={:02X} PC={:4X} C={:04X} X={:04X} Y={:04X} P={:02X} P.e={} D={:02X}{:02X} DBR={:X} S={:2X}",
+            self.pbr,
             self.pc,
             self.c(),
             self.x(),
@@ -529,7 +530,7 @@ impl Processor {
     fn break_to(&mut self, memory: &mut impl HasAddressBus, addr_n: u16, addr_e: u16, set_b: bool) {
         if self.p.e {
             // Since we already incremented the PC by 1 we want to just add 1
-            self.push_u16(self.pc.wrapping_add(1), true, memory);
+            self.push_u16(self.pc, true, memory);
             // Clone processor register to set B flag
             let mut p = self.p.clone();
             if set_b {
@@ -540,7 +541,7 @@ impl Processor {
             self.pc = read_u16(memory, u24::from(0, addr_e));
         } else {
             self.push_u8(self.pbr, false, memory);
-            self.push_u16(self.pc.wrapping_add(1), false, memory);
+            self.push_u16(self.pc, false, memory);
             self.push_u8(self.p.to_byte(true), false, memory);
             self.pbr = 0x00;
             self.pc = read_u16(memory, u24::from(0, addr_n));
@@ -1164,7 +1165,11 @@ impl Processor {
                 self.pc = self.pc.wrapping_add(1);
                 self.branch(memory, addr as u16);
             }
-            BRK => self.break_to(memory, 0xFFE6, 0xFFFE, true),
+            BRK => {
+                // Signature byte
+                self.pc = self.pc.wrapping_add(1);
+                self.break_to(memory, 0xFFE6, 0xFFFE, true);
+            }
             BRL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
                 self.pc = self.pc.wrapping_add(2);
@@ -1191,7 +1196,11 @@ impl Processor {
             CMP_DILY => read_func!(cmp_8, cmp_16, dily, a_is_8bit),
             CMP_SR => read_func!(cmp_8, cmp_16, sr, a_is_8bit),
             CMP_SRIY => read_func!(cmp_8, cmp_16, sriy, a_is_8bit),
-            COP => self.break_to(memory, 0xFFE4, 0xFFF4, false),
+            COP => {
+                // Signature byte
+                self.pc = self.pc.wrapping_add(1);
+                self.break_to(memory, 0xFFE4, 0xFFF4, false);
+            }
             CPX_I => read_func_i!(cpx_8, cpx_16, xy_is_8bit),
             CPX_A => read_func!(cpx_8, cpx_16, a, xy_is_8bit),
             CPX_D => read_func!(cpx_8, cpx_16, d, xy_is_8bit),
