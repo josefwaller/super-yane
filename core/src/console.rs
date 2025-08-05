@@ -10,6 +10,13 @@ use crate::{
 };
 use paste::paste;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ApuTimer {
+    pub timer: u8,
+    /// Really u4
+    pub counter: u8,
+}
+
 // Contains everything except the processor(s)
 #[derive(Clone)]
 pub struct ExternalArchitecture {
@@ -27,6 +34,7 @@ pub struct ExternalArchitecture {
     apu_master_clocks: u64,
     open_bus_value: u8,
     nmi_enabled: bool,
+    pub timers: [ApuTimer; 3],
 }
 
 // Todo: move somewhere
@@ -225,7 +233,15 @@ impl ExternalArchitecture {
     }
     fn advance(&mut self, master_clocks: u32) {
         self.total_master_clocks += master_clocks as u64;
-        self.ppu.advance_master_clock(master_clocks)
+        self.ppu.advance_master_clock(master_clocks);
+        (0..3).for_each(|i| {
+            // Increment timer and increment counter if it overflows
+            let t = self.timers[i].timer.wrapping_add(master_clocks as u8 / 12);
+            if t < self.timers[i].timer {
+                self.timers[i].counter = self.timers[i].counter.wrapping_add(1);
+            }
+            self.timers[i].timer = t;
+        });
     }
     pub fn read_apu(&self, address: usize) -> u8 {
         match address {
@@ -271,7 +287,14 @@ impl Spc700AddressBuss for ExternalArchitecture {
     }
     fn read(&mut self, address: usize) -> u8 {
         self.apu_master_clocks += 1;
-        self.read_apu(address)
+        match address {
+            0x00FD..0x00FF => {
+                let v = self.timers[address - 0x00FD].counter;
+                self.timers[address - 0x00FD].counter = 0;
+                v
+            }
+            _ => self.read_apu(address),
+        }
     }
     fn write(&mut self, address: usize, value: u8) {
         self.apu_master_clocks += 1;
@@ -290,6 +313,9 @@ impl Spc700AddressBuss for ExternalArchitecture {
             0x00F4..0x00F8 => {
                 // debug!("APU writing {:02X} to CPU {:04X}", value, address);
                 self.apu_to_cpu_reg[address - 0x00F4] = value
+            }
+            0x00FA..0x00FD => {
+                self.timers[address - 0x00FA].timer = value;
             }
             _ => self.spc_ram[address] = value,
         }
@@ -361,6 +387,7 @@ impl Console {
                 apu_master_clocks: 0,
                 open_bus_value: 0,
                 nmi_enabled: false,
+                timers: [ApuTimer::default(); 3],
             },
         };
         c.cpu.pc =
