@@ -139,8 +139,8 @@ pub fn background_table(background: &Background) -> impl Into<Element<'_, Messag
         ("Sub screen enabled", b.sub_screen_enable.into()),
         ("Tile size", b.tile_size),
         ("Mosaic", b.mosaic.into()),
-        ("Tilemap Address (Byte)", b.tilemap_addr as u32),
-        ("Tilemap Address (Word)", 2 * b.tilemap_addr as u32),
+        ("Tilemap Address (Byte)", 2 * b.tilemap_addr as u32),
+        ("Tilemap Address (Word)", b.tilemap_addr as u32),
         ("CHR Address", b.chr_addr as u32),
         ("H offset", b.h_off),
         ("V offset", b.v_off),
@@ -759,6 +759,7 @@ impl Application {
             ppu_val!("Brightness", brightness, hex_fmt!()),
             ppu_val!("Background Mode", bg_mode),
             ppu_val!("Mosaic Size", mosaic_size, "{:X}px"),
+            ppu_val!("BG3 Priority", bg3_prio),
             table_row!(
                 "VRAM address (byte)",
                 self.console.ppu().vram_addr,

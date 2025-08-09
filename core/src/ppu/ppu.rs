@@ -261,7 +261,7 @@ impl Ppu {
         let tile_high = self.vram[(tile_addr + 1) % self.vram.len()];
         let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
         let palette_index = (tile_high as usize & 0x1C) >> 2;
-        let priority = tile_high & 20 != 0;
+        let priority = tile_high & 0x20 != 0;
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
         // Get all the slices
@@ -314,7 +314,7 @@ impl Ppu {
                 if v == 0 {
                     None
                 } else {
-                    Some((palette[v], priority))
+                    Some((if priority { 0xFFFF } else { palette[v] }, priority))
                 }
             })
         });
@@ -377,14 +377,25 @@ impl Ppu {
                             (3, false),
                         ]
                         .to_vec(),
-                        1 => [
-                            (0, true),
-                            (1, true),
-                            (0, false),
-                            (1, false),
-                            (2, true),
-                            (2, false),
-                        ].to_vec(),
+                        1 => if self.bg3_prio {
+                            [
+                                (2, true),
+                                (0, true),
+                                (1, true),
+                                (0, false),
+                                (1, false),
+                                (2, false),
+                            ].to_vec()
+                        } else {
+                            [
+                                (0, true),
+                                (1, true),
+                                (0, false),
+                                (1, false),
+                                (2, true),
+                                (2, false),
+                            ].to_vec()
+                        },
                         3 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
                         5 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
