@@ -45,6 +45,7 @@ pub struct Ppu {
     pub vram_increment_amount: u32,
     pub vram_increment_mode: VramIncMode,
     pub vram_addr: usize,
+    pub vram_remap: u32,
     pub vram: [u8; 0x10000],
     pub cgram: [u16; 0x100],
     pub cgram_addr: usize,
@@ -80,6 +81,7 @@ impl Default for Ppu {
             obj_subscreen_enable: false,
             vram_increment_amount: 1,
             vram_increment_mode: VramIncMode::HighReadLowWrite,
+            vram_remap: 0,
             vram_addr: 0,
             vram: [0; 0x10000],
             cgram: [0; 0x100],
@@ -223,7 +225,8 @@ impl Ppu {
                     0 => VramIncMode::HighReadLowWrite,
                     1 => VramIncMode::LowReadHighWrite,
                     _ => panic!("Should never happen"),
-                }
+                };
+                self.vram_remap = (value >> 2) as u32 & 0x03;
             }
             0x2116 => {
                 self.vram_addr = (self.vram_addr & 0x7F00) | (value as usize);
@@ -232,16 +235,17 @@ impl Ppu {
                 self.vram_addr = (self.vram_addr & 0x00FF) | (value as usize * 0x100) & 0x7FFF;
             }
             0x2118 => {
+                let remapped_addr = self.remapped_vram_addr();
                 // Write the low byte
-                self.vram[2 * self.vram_addr] = value;
-                // debug!("Write {:X} to {:X} H", value, self.vram_addr);
+                self.vram[2 * remapped_addr] = value;
                 if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
                     self.vram_addr = (self.vram_addr + 1) % 0x8000;
                 }
             }
             0x2119 => {
+                let remapped_addr = self.remapped_vram_addr();
                 // Write the high byte
-                self.vram[2 * self.vram_addr + 1] = value;
+                self.vram[2 * remapped_addr + 1] = value;
                 // debug!("{:X} {:X} L", self.vram_addr, value);
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
                     self.vram_addr = (self.vram_addr + 1) % 0x8000;
@@ -275,6 +279,27 @@ impl Ppu {
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
             0x213B => debug!("Writing to CGRAM read"),
             _ => {}
+        }
+    }
+    fn remapped_vram_addr(&self) -> usize {
+        match self.vram_remap {
+            0 => self.vram_addr,
+            1 => {
+                (self.vram_addr & 0xFF00) + (self.vram_addr >> 5)
+                    & 0x07 + (self.vram_addr << 3)
+                    & 0xF8
+            }
+            2 => {
+                (self.vram_addr & 0xFE00) + (self.vram_addr >> 6)
+                    & 0x07 + (self.vram_addr << 4)
+                    & 0x01C0
+            }
+            3 => {
+                (self.vram_addr & 0xFC00) + (self.vram_addr >> 7)
+                    & 0x07 + (self.vram_addr << 5)
+                    & 0x0380
+            }
+            _ => unreachable!("Invalid VRAM REMAP value: {:X}", self.vram_remap),
         }
     }
     /// Write a single byte to OAM
