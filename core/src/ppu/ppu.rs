@@ -12,6 +12,8 @@ pub struct Sprite {
     pub x: usize,
     pub y: usize,
     pub tile_index: usize,
+    // 0 or 1, to select the nametable
+    pub name_select: usize,
     pub flip_x: bool,
     pub flip_y: bool,
     pub priority: usize,
@@ -92,7 +94,7 @@ impl Default for Ppu {
             oam_addr: 0,
             oam_name_addr: 0,
             oam_sizes: [(8, 8); 2],
-            oam_name_select: 0,
+            oam_name_select: 0x1000,
             oam_latch: 0,
             oam_sprites: [Sprite::default(); 0x80],
             oam_buffers: [[None; 0x100]; 4],
@@ -131,7 +133,7 @@ impl Ppu {
             }
             0x2101 => {
                 self.oam_name_addr = (value as usize & 0x03) << 13;
-                self.oam_name_select = ((value as usize & 0x18) + 1) << 12;
+                self.oam_name_select = ((value as usize & 0x18) + 0x08) << (12 - 3);
                 let size_select = (value & 0xE0) >> 5;
                 self.oam_sizes = [
                     match size_select {
@@ -151,7 +153,7 @@ impl Ppu {
                 ];
             }
             0x2102 => {
-                self.oam_addr = (self.oam_addr & 0x300) | (2 * value as usize);
+                self.oam_addr = (self.oam_addr & 0x200) | (2 * value as usize);
             }
             0x2103 => self.oam_addr = (self.oam_addr & 0x0FF) | 0x200 * (value as usize & 0x01),
             0x2104 => {
@@ -282,7 +284,7 @@ impl Ppu {
         }
     }
     fn remapped_vram_addr(&self) -> usize {
-        match self.vram_remap {
+        let addr = match self.vram_remap {
             0 => self.vram_addr,
             1 => {
                 (self.vram_addr & 0xFF00) + (self.vram_addr >> 5)
@@ -300,7 +302,8 @@ impl Ppu {
                     & 0x0380
             }
             _ => unreachable!("Invalid VRAM REMAP value: {:X}", self.vram_remap),
-        }
+        };
+        addr & 0x7FFF
     }
     /// Write a single byte to OAM
     fn write_oam_byte(&mut self, addr: usize, value: u8) {
@@ -311,14 +314,14 @@ impl Ppu {
                 0 => sprite.x = value as usize,
                 1 => sprite.y = value as usize,
                 2 => {
-                    sprite.tile_index = (sprite.tile_index & 0x100) + value as usize;
+                    sprite.tile_index = value as usize;
                 }
                 3 => {
                     sprite.flip_y = (value & 0x80) != 0;
                     sprite.flip_x = (value & 0x40) != 0;
                     sprite.priority = ((value & 0x30) >> 4) as usize;
                     sprite.palette_index = (value >> 1) as usize & 0x07;
-                    sprite.tile_index = (sprite.tile_index & 0xFF) + ((value as usize & 0x01) << 8);
+                    sprite.name_select = value as usize & 0x01;
                 }
                 _ => unreachable!(),
             }
@@ -465,7 +468,8 @@ impl Ppu {
                 let fine_y = (y - s.y) % 8;
                 let tile_y = (y - s.y) / 8;
                 let tile_index = s.tile_index + 16 * tile_y;
-                let slice_addr = 2 * self.oam_name_addr + 32 * tile_index;
+                let slice_addr = 2 * (self.oam_name_addr + s.name_select * self.oam_name_select)
+                    + 32 * tile_index;
                 let width = size.0;
                 // Todo: Optimize this so that we don't fetch all the tiles all the time
                 let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
