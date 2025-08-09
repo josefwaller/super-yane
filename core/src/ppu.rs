@@ -159,10 +159,11 @@ impl Ppu {
                 self.backgrounds[3].chr_addr = (value as usize & 0xF0) << (12 - 4);
             }
             0x210D..=0x2114 => {
+                let n = (addr - 0x210D) / 2;
                 if addr % 2 == 1 {
                     // Horizontal offset
-                    let b = &mut self.backgrounds[(addr - 0x210D) / 2];
-                    b.h_off = ((value as u32 * 0x10000)
+                    let b = &mut self.backgrounds[n];
+                    b.h_off = ((value as u32 * 0x100)
                         | (self.bg_v_off & !0x07)
                         | (self.bg_h_off & 0x07))
                         & 0x03FF;
@@ -170,8 +171,8 @@ impl Ppu {
                     self.bg_v_off = value as u32;
                 } else {
                     // Vertical offset
-                    let b = &mut self.backgrounds[(addr - 0x210E) / 2];
-                    b.v_off = ((value as u32 * 0x10000) | self.bg_v_off) & 0x03FF;
+                    let b = &mut self.backgrounds[n];
+                    b.v_off = ((value as u32 * 0x100) | self.bg_v_off) & 0x03FF;
                     self.bg_v_off = value as u32;
                 }
             }
