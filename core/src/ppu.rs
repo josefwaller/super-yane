@@ -313,7 +313,10 @@ impl Ppu {
 
         // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
-            2 => &self.cgram[(4 * 8 * index + 4 * palette_index)..(4 * 8 * index + 4 * palette_index + 4)],
+            2 => {
+                let i = if self.bg_mode == 0 { index } else { 0};
+                &self.cgram[(4 * 8 * i+ 4 * palette_index)..(4 * 8 * i+ 4 * palette_index + 4)]
+            }
             4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
             8 => {
                 if direct_color {
@@ -388,7 +391,7 @@ impl Ppu {
                         .map(|(i, p)| {
                             // Should be impossible to there to be no pixels right now
                             let b = &mut self.backgrounds[*i];
-                            if b.main_screen_enable || b.sub_screen_enable {
+                            if b.main_screen_enable {
                                 b.pixel_buffer.pop_front().unwrap()
                             } else {
                                 None
