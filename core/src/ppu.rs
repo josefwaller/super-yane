@@ -266,8 +266,8 @@ impl Ppu {
         };
         // Get the tilemap address and X/Y coord of the pixel in the tilemap
         let (tilemap_addr, x, y) = {
-            let x = x + b.h_off as usize;
-            let y = y + b.v_off as usize;
+            let x = (x + b.h_off as usize) % 512;
+            let y = (y + b.v_off as usize) % 512;
             const WORDS_PER_TILEMAP: usize = 32 * 32;
             if x >= 256 {
                 if y >= 256 {
