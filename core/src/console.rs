@@ -267,7 +267,10 @@ impl HasAddressBus for ExternalArchitecture {
     }
     fn read(&mut self, address: usize) -> u8 {
         // Todo find a better solution
-        if address & 0x800000 < 0x400000 && address & 0xFFFF == 0x4210 {
+        // really need todo
+        if address & 0x800000 < 0x400000
+            && (address & 0xFFFF == 0x2139 || address & 0xFFFF == 0x4210)
+        {
             self.ppu.read_byte_mut(address, self.open_bus_value)
         } else {
             let (v, clks) = self.read_byte(address);
