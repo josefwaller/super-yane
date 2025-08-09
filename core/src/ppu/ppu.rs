@@ -16,9 +16,8 @@ pub struct Sprite {
     pub flip_y: bool,
     pub priority: usize,
     pub palette_index: usize,
-    pub size_select: usize
+    pub size_select: usize,
 }
-
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 pub enum VramIncMode {
@@ -62,7 +61,7 @@ pub struct Ppu {
     pub oam_sprites: [Sprite; 0x80],
     /// Buffers of sprite pixels for the current scanline.
     /// One for every sprite layer, ordered by priority
-    oam_buffers: [[Option<u16>; 0x100]; 4]
+    oam_buffers: [[Option<u16>; 0x100]; 4],
 }
 
 impl Default for Ppu {
@@ -94,7 +93,7 @@ impl Default for Ppu {
             oam_name_select: 0,
             oam_latch: 0,
             oam_sprites: [Sprite::default(); 0x80],
-            oam_buffers: [[None; 0x100]; 4]
+            oam_buffers: [[None; 0x100]; 4],
         }
     }
 }
@@ -146,15 +145,13 @@ impl Ppu {
                         2 | 4 | 5 => (64, 64),
                         6 => (32, 64),
                         _ => unreachable!("Should be impossible. Size select is {}", size_select),
-                    }
+                    },
                 ];
             }
             0x2102 => {
                 self.oam_addr = (self.oam_addr & 0x300) | (2 * value as usize);
             }
-            0x2103 => {
-                self.oam_addr = (self.oam_addr & 0x0FF) | 0x200 * (value as usize & 0x01)
-            }
+            0x2103 => self.oam_addr = (self.oam_addr & 0x0FF) | 0x200 * (value as usize & 0x01),
             0x2104 => {
                 if self.oam_addr % 2 == 0 {
                     self.oam_latch = value;
@@ -204,10 +201,9 @@ impl Ppu {
                 if addr % 2 == 1 {
                     // Horizontal offset
                     let b = &mut self.backgrounds[n];
-                    b.h_off = ((value as u32 * 0x100)
-                        | (self.bg_v_off & !0x07)
-                        | (self.bg_h_off & 0x07))
-                        & 0x03FF;
+                    b.h_off =
+                        ((value as u32 * 0x100) | (self.bg_v_off & !0x07) | (self.bg_h_off & 0x07))
+                            & 0x03FF;
                     self.bg_h_off = value as u32;
                     self.bg_v_off = value as u32;
                 } else {
@@ -342,12 +338,24 @@ impl Ppu {
             const WORDS_PER_TILEMAP: usize = 32 * 32;
             if x >= 256 {
                 if y >= 256 {
-                    (b.tilemap_addr + mirrored_tile_addrs[3] * WORDS_PER_TILEMAP, x % 256, y % 256)
+                    (
+                        b.tilemap_addr + mirrored_tile_addrs[3] * WORDS_PER_TILEMAP,
+                        x % 256,
+                        y % 256,
+                    )
                 } else {
-                    (b.tilemap_addr + mirrored_tile_addrs[1] * WORDS_PER_TILEMAP, x % 256, y)
+                    (
+                        b.tilemap_addr + mirrored_tile_addrs[1] * WORDS_PER_TILEMAP,
+                        x % 256,
+                        y,
+                    )
                 }
             } else if y >= 256 {
-                (b.tilemap_addr + mirrored_tile_addrs[2] * WORDS_PER_TILEMAP, x, y % 256)
+                (
+                    b.tilemap_addr + mirrored_tile_addrs[2] * WORDS_PER_TILEMAP,
+                    x,
+                    y % 256,
+                )
             } else {
                 (b.tilemap_addr, x, y)
             }
@@ -385,8 +393,8 @@ impl Ppu {
         // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
             2 => {
-                let i = if self.bg_mode == 0 { index } else { 0};
-                &self.cgram[(4 * 8 * i+ 4 * palette_index)..(4 * 8 * i+ 4 * palette_index + 4)]
+                let i = if self.bg_mode == 0 { index } else { 0 };
+                &self.cgram[(4 * 8 * i + 4 * palette_index)..(4 * 8 * i + 4 * palette_index + 4)]
             }
             4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
             8 => {
@@ -411,7 +419,7 @@ impl Ppu {
                 let v = slices
                     .iter()
                     .enumerate()
-                    .map(|(j, s)| 
+                    .map(|(j, s)|
                     // Shifted left by 2 since each slice will have 2 bits per pixel
                     (s[i] as usize) << (2 * j))
                     .sum::<usize>();
@@ -433,12 +441,16 @@ impl Ppu {
                 let tile_y = (y - s.y) / 8;
                 let tile_index = s.tile_index + 16 * tile_y;
                 let slice_addr = 2 * self.oam_name_addr + 32 * tile_index;
+                let width = size.0;
                 // Todo: Optimize this so that we don't fetch all the tiles all the time
-                let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y));
-                let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16));
+                let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
+                    self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y)
+                });
+                let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| {
+                    self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16)
+                });
                 let palette_index = 0x80 + 0x10 * s.palette_index;
                 let palette = &self.cgram[palette_index..(palette_index + 0x10)];
-                let width = size.0;
                 (0..width).for_each(|i| {
                     let tile_low = tile_lows[i / 8];
                     let tile_high = tile_highs[i / 8];
@@ -447,7 +459,8 @@ impl Ppu {
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
                         let buf = &mut buffers[s.priority];
-                        buf[s.x + i] = buf[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
+                        buf[s.x + i] =
+                            buf[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
                     }
                 })
             }
@@ -508,7 +521,9 @@ impl Ppu {
                     // Get the pixel from a background layer with a given priority, or None
                     macro_rules! bg {
                         ($index: expr, $priority: expr) => {
-                            bg_pixels[$index].filter(|(_, p)| *p == $priority).map(|(v, _)| v)
+                            bg_pixels[$index]
+                                .filter(|(_, p)| *p == $priority)
+                                .map(|(v, _)| v)
                         };
                     }
                     // Get the pixel from a sprite layer with a given priority, or None
@@ -536,18 +551,19 @@ impl Ppu {
                         ]
                         .to_vec(),
                         1 => [
-                                if self.bg3_prio { bg!(2, true) } else { None },
-                                spr!(3),
-                                bg!(0, true),
-                                bg!(1, true),
-                                spr!(2),
-                                bg!(0, false),
-                                bg!(1, false),
-                                spr!(1),
-                                if self.bg3_prio { None } else { bg!(2, true) },
-                                spr!(0),
-                                bg!(2, false),
-                            ].to_vec(),
+                            if self.bg3_prio { bg!(2, true) } else { None },
+                            spr!(3),
+                            bg!(0, true),
+                            bg!(1, true),
+                            spr!(2),
+                            bg!(0, false),
+                            bg!(1, false),
+                            spr!(1),
+                            if self.bg3_prio { None } else { bg!(2, true) },
+                            spr!(0),
+                            bg!(2, false),
+                        ]
+                        .to_vec(),
                         3 => [
                             spr!(3),
                             bg!(0, true),
@@ -556,8 +572,9 @@ impl Ppu {
                             spr!(1),
                             bg!(0, false),
                             spr!(0),
-                            bg!(1, false)
-                        ].to_vec(),
+                            bg!(1, false),
+                        ]
+                        .to_vec(),
                         5 => [
                             spr!(3),
                             bg!(0, true),
@@ -566,8 +583,9 @@ impl Ppu {
                             spr!(1),
                             bg!(0, false),
                             spr!(0),
-                            bg!(1, false)
-                        ].to_vec(),
+                            bg!(1, false),
+                        ]
+                        .to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
                     let pixel = in_order_pixels
