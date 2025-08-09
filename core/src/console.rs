@@ -58,8 +58,8 @@ impl ExternalArchitecture {
                 (0, 12)
             } else if a < 0x2140 {
                 (self.ppu.read_byte(a), 12)
-            } else if a < 0x2144 {
-                (self.apu_to_cpu_reg[a - 0x2140], 12)
+            } else if a < 0x2180 {
+                (self.apu_to_cpu_reg[a % 4], 12)
             } else if a >= 0x4218 && a < 0x4220 {
                 // Read controller data
                 let i = (a / 2) % 2;
@@ -127,8 +127,8 @@ impl ExternalArchitecture {
                         self.ppu.write_byte(a, value);
                         12
                     }
-                    (0x2140..0x2144) => {
-                        self.cpu_to_apu_reg[a - 0x2140] = value;
+                    (0x2140..0x2180) => {
+                        self.cpu_to_apu_reg[a % 4] = value;
                         12
                     }
                     0x4200 => {
@@ -177,7 +177,7 @@ impl ExternalArchitecture {
                         debug!("Value written to HDMA enable: {:02X}", value);
                         12
                     }
-                    0x4300..0x4308 => {
+                    0x4300..0x43F8 => {
                         let lsb = a & 0x0F;
                         let r = (a & 0xF0) >> 4;
                         if r > 7 {
@@ -186,7 +186,7 @@ impl ExternalArchitecture {
                             let d = &mut self.dma_channels[r];
                             // DMA register
                             if lsb == 0 {
-                                d.transfer_pattern = match (value & 0x07) {
+                                d.transfer_pattern = match value & 0x07 {
                                     0 => vec![0],
                                     1 => vec![0, 1],
                                     2 | 6 => vec![0; 2],

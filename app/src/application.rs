@@ -410,6 +410,10 @@ impl Application {
                             "a" => left = val,
                             "s" => down = val,
                             "d" => right = val,
+                            "n" => a = val,
+                            "m" => b = val,
+                            "r" => start = val,
+                            "f" => select = val,
                             _ => {}
                         };
                         self.console.input_ports_mut()[0] = InputPort::StandardController {
@@ -888,8 +892,9 @@ impl Application {
                             ]
                             .spacing(10)
                             .into()
-                        }),
+                        })
                 ))
+                .width(Length::Fill)
                 .anchor_bottom()
                 .spacing(10),
                 InstDisplay::Cpu => scrollable(Column::with_children(
@@ -918,10 +923,12 @@ impl Application {
                             .into()
                         }),
                 ))
+                .width(Length::Fill)
                 .spacing(10)
                 .anchor_bottom(),
             })
         ]
+        .width(Length::Fixed(200.0))
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
