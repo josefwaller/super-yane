@@ -1,9 +1,22 @@
+use std::collections::VecDeque;
+
 use crate::Background;
 
 use log::*;
 
 const PIXELS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Sprite {
+    pub x: usize,
+    pub y: usize,
+    pub tile_index: usize,
+    pub flip_x: bool,
+    pub flip_y: bool,
+    pub priority: u32,
+    pub palette_index: usize,
+}
 
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
@@ -39,6 +52,15 @@ pub struct Ppu {
     /// Screen buffer
     pub screen_buffer: [u16; 256 * 240],
     pub dot: usize,
+    pub oam_sizes: [(usize, usize); 2],
+    // Internal OAM address
+    pub oam_addr: usize,
+    pub oam_name_addr: usize,
+    pub oam_name_select: usize,
+    pub oam_latch: u8,
+    pub oam_sprites: [Sprite; 0x80],
+    /// Buffer of sprite pixels for the current scanline
+    oam_buffer: VecDeque<Option<u16>>
 }
 
 impl Default for Ppu {
@@ -64,6 +86,13 @@ impl Default for Ppu {
             cgram_latch: None,
             screen_buffer: [0; 256 * 240],
             dot: 0,
+            oam_addr: 0,
+            oam_name_addr: 0,
+            oam_sizes: [(8, 8); 2],
+            oam_name_select: 0,
+            oam_latch: 0,
+            oam_sprites: [Sprite::default(); 0x80],
+            oam_buffer: VecDeque::with_capacity(0x100)
         }
     }
 }
@@ -96,6 +125,49 @@ impl Ppu {
             0x2100 => {
                 self.forced_blanking = bit!(3) == 1;
                 self.brightness = (value & 0x07) as u32;
+            }
+            0x2101 => {
+                self.oam_name_addr = (value as usize & 0x03) << 13;
+                self.oam_name_select = ((value as usize & 0x18) + 1) << 12;
+                let size_select = (value & 0xE0) >> 5;
+                self.oam_sizes = [
+                    match size_select {
+                        (0..=2) => (8, 8),
+                        (3..=4) => (16, 16),
+                        5 => (32, 32),
+                        (6..=7) => (16, 32),
+                        _ => unreachable!("Should be impossible. Size select is {}", size_select),
+                    },
+                    match size_select {
+                        0 => (16, 16),
+                        1 | 3 | 7 => (32, 32),
+                        2 | 4 | 5 => (64, 64),
+                        6 => (32, 64),
+                        _ => unreachable!("Should be impossible. Size select is {}", size_select),
+                    }
+                ];
+            }
+            0x2102 => {
+                self.oam_addr = (self.oam_addr & 0x300) | (2 * value as usize);
+            }
+            0x2103 => {
+                self.oam_addr = (self.oam_addr & 0x0FF) | 0x200 * (value as usize & 0x01)
+            }
+            0x2104 => {
+                if self.oam_addr % 2 == 0 {
+                    self.oam_latch = value;
+                } else {
+                    if self.oam_addr < 0x200 {
+                        // Writes only on the second write (oam_addr is odd)
+                        self.write_oam_byte(self.oam_addr.wrapping_sub(1) % 0x200, self.oam_latch);
+                        self.write_oam_byte(self.oam_addr, value);
+                    }
+                }
+                if self.oam_addr >= 0x200 {
+                    // Writes immediately
+                    self.write_oam_byte(self.oam_addr, value);
+                }
+                self.oam_addr = (self.oam_addr + 1) % 0x10000;
             }
             0x2105 => {
                 // Copy background sizes
@@ -205,6 +277,30 @@ impl Ppu {
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
             0x213B => debug!("Writing to CGRAM read"),
             _ => {}
+        }
+    }
+    /// Write a single byte to OAM
+    fn write_oam_byte(&mut self, addr: usize, value: u8) {
+        if addr < 0x200 {
+            let sprite_index = (addr / 4) % self.oam_sprites.len();
+            let sprite = &mut self.oam_sprites[sprite_index];
+            match addr % 4 {
+                0 => sprite.x = value as usize,
+                1 => sprite.y = value as usize,
+                2 => {
+                    sprite.tile_index = (sprite.tile_index & 0x100) + value as usize;
+                }
+                3 => {
+                    sprite.flip_y = (value & 0x80) != 0;
+                    sprite.flip_x = (value & 0x40) != 0;
+                    sprite.priority = ((value & 0x30) >> 4) as u32;
+                    sprite.palette_index = (value >> 1) as usize & 0x07;
+                    sprite.tile_index = (sprite.tile_index & 0xFF) + ((value as usize & 0x01) << 8);
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            // Todo
         }
     }
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
@@ -319,6 +415,36 @@ impl Ppu {
             })
         });
     }
+    fn reset_oam_buffer(&mut self, y: usize) {
+        let mut data = [None; 0x100];
+        self.oam_sprites.iter().for_each(|s| {
+            let size = self.oam_sizes[0];
+            if s.y <= y && s.y + size.1 > y {
+                let fine_y = (y - s.y) % 8;
+                let tile_y = (y - s.y) / 8;
+                let tile_index = s.tile_index + 16 * tile_y;
+                let slice_addr = 2 * self.oam_name_addr + 32 * tile_index;
+                // Todo: Optimize this so that we don't fetch all the tiles all the time
+                let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y));
+                let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16));
+                let palette_index = 0x80 + 0x10 * s.palette_index;
+                let palette = &self.cgram[palette_index..(palette_index + 0x10)];
+                let width = size.0;
+                (0..width).for_each(|i| {
+                    let tile_low = tile_lows[i / 8];
+                    // let tile_high= [0; 8];
+                    let tile_high = tile_highs[i / 8];
+                    let x = i % 8;
+                    if s.x + i < 0x100 {
+                        let p = tile_low[x] as usize + 2 * tile_high[x] as usize;
+                        // Add this sprite's data to the scanline
+                        data[s.x + i] = data[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
+                    }
+                })
+            }
+        });
+        self.oam_buffer = VecDeque::from(data);
+    }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
             self.dot = (self.dot + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
@@ -338,6 +464,11 @@ impl Ppu {
                     self.backgrounds
                         .iter_mut()
                         .for_each(|b| b.pixel_buffer.clear());
+                    // Compute all data for sprites on this line
+                    // Todo: figure out the exact timing of this
+                    if y > 0 {
+                        self.reset_oam_buffer(y - 1);
+                    }
                 }
                 if x < 256 && y < 240 {
                     // Structured (background_number, bpp)
@@ -353,7 +484,7 @@ impl Ppu {
                             self.extend_background_byte_buffer(*i, (x, y), *bpp);
                         }
                     }
-                    let pixels: Vec<Option<(u16, bool)>> = backgrounds
+                    let bg_pixels: Vec<Option<(u16, bool)>> = backgrounds
                         .iter()
                         .map(|(i, p)| {
                             // Should be impossible to there to be no pixels right now
@@ -365,6 +496,7 @@ impl Ppu {
                             }
                         })
                         .collect();
+                    let sprite_pixel = self.oam_buffer.pop_front().unwrap_or(None);
                     let order = match self.bg_mode {
                         0 => [
                             (0, true),
@@ -400,10 +532,10 @@ impl Ppu {
                         5 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
-                    let pixel = order
+                    let pixel = sprite_pixel.unwrap_or(order
                         .iter()
-                        .find(|(i, prio)| pixels[*i].is_some_and(|(v, p)| p == *prio))
-                        .map_or(self.cgram[0], |(i, _)| pixels[*i].unwrap().0 & 0x7FFF);
+                        .find(|(i, prio)| bg_pixels[*i].is_some_and(|(v, p)| p == *prio))
+                        .map_or(self.cgram[0], |(i, _)| bg_pixels[*i].unwrap().0 & 0x7FFF));
                     self.screen_buffer[256 * y + x] = pixel;
                 }
             }
