@@ -14,7 +14,7 @@ pub struct Sprite {
     pub tile_index: usize,
     pub flip_x: bool,
     pub flip_y: bool,
-    pub priority: u32,
+    pub priority: usize,
     pub palette_index: usize,
     pub size_select: usize
 }
@@ -60,8 +60,9 @@ pub struct Ppu {
     pub oam_name_select: usize,
     pub oam_latch: u8,
     pub oam_sprites: [Sprite; 0x80],
-    /// Buffer of sprite pixels for the current scanline
-    oam_buffer: VecDeque<Option<u16>>
+    /// Buffers of sprite pixels for the current scanline.
+    /// One for every sprite layer, ordered by priority
+    oam_buffers: [[Option<u16>; 0x100]; 4]
 }
 
 impl Default for Ppu {
@@ -93,7 +94,7 @@ impl Default for Ppu {
             oam_name_select: 0,
             oam_latch: 0,
             oam_sprites: [Sprite::default(); 0x80],
-            oam_buffer: VecDeque::with_capacity(0x100)
+            oam_buffers: [[None; 0x100]; 4]
         }
     }
 }
@@ -294,7 +295,7 @@ impl Ppu {
                 3 => {
                     sprite.flip_y = (value & 0x80) != 0;
                     sprite.flip_x = (value & 0x40) != 0;
-                    sprite.priority = ((value & 0x30) >> 4) as u32;
+                    sprite.priority = ((value & 0x30) >> 4) as usize;
                     sprite.palette_index = (value >> 1) as usize & 0x07;
                     sprite.tile_index = (sprite.tile_index & 0xFF) + ((value as usize & 0x01) << 8);
                 }
@@ -417,13 +418,14 @@ impl Ppu {
                 if v == 0 {
                     None
                 } else {
-                    Some((if priority { 0xFFFF } else { palette[v] }, priority))
+                    Some((palette[v], priority))
                 }
             })
         });
     }
     fn reset_oam_buffer(&mut self, y: usize) {
-        let mut data = [None; 0x100];
+        // Todo: Don't copy this every scanline
+        let mut buffers = [[None; 0x100]; 4];
         self.oam_sprites.iter().for_each(|s| {
             let size = self.oam_sizes[s.size_select];
             if s.y <= y && s.y + size.1 > y {
@@ -439,18 +441,18 @@ impl Ppu {
                 let width = size.0;
                 (0..width).for_each(|i| {
                     let tile_low = tile_lows[i / 8];
-                    // let tile_high= [0; 8];
                     let tile_high = tile_highs[i / 8];
                     let x = i % 8;
                     if s.x + i < 0x100 {
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
-                        data[s.x + i] = data[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
+                        let buf = &mut buffers[s.priority];
+                        buf[s.x + i] = buf[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
                     }
                 })
             }
         });
-        self.oam_buffer = VecDeque::from(data);
+        self.oam_buffers = buffers;
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
@@ -493,7 +495,7 @@ impl Ppu {
                     }
                     let bg_pixels: Vec<Option<(u16, bool)>> = backgrounds
                         .iter()
-                        .map(|(i, p)| {
+                        .map(|(i, _bpp)| {
                             // Should be impossible to there to be no pixels right now
                             let b = &mut self.backgrounds[*i];
                             if b.main_screen_enable {
@@ -503,53 +505,76 @@ impl Ppu {
                             }
                         })
                         .collect();
-                    let sprite_pixel = self.oam_buffer.pop_front().unwrap_or(None);
+                    // Get the pixel from a background layer with a given priority, or None
                     macro_rules! bg {
                         ($index: expr, $priority: expr) => {
-                            bg_pixels[$index].filter(|(_, p)| *p == $priority)
+                            bg_pixels[$index].filter(|(_, p)| *p == $priority).map(|(v, _)| v)
+                        };
+                    }
+                    // Get the pixel from a sprite layer with a given priority, or None
+                    macro_rules! spr {
+                        ($index: expr) => {
+                            self.oam_buffers[$index][x]
                         };
                     }
                     // The pixels at the given dot, in order from front to back
                     // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
                     let in_order_pixels = match self.bg_mode {
                         0 => [
+                            spr!(3),
                             bg!(0, true),
                             bg!(1, true),
+                            spr!(2),
                             bg!(0, false),
                             bg!(1, false),
+                            spr!(1),
                             bg!(2, true),
                             bg!(3, true),
+                            spr!(0),
                             bg!(2, false),
                             bg!(3, false),
                         ]
                         .to_vec(),
-                        1 => if self.bg3_prio {
-                            [
-                                bg!(2, true),
+                        1 => [
+                                if self.bg3_prio { bg!(2, true) } else { None },
+                                spr!(3),
                                 bg!(0, true),
                                 bg!(1, true),
+                                spr!(2),
                                 bg!(0, false),
                                 bg!(1, false),
+                                spr!(1),
+                                if self.bg3_prio { None } else { bg!(2, true) },
+                                spr!(0),
                                 bg!(2, false),
-                            ].to_vec()
-                        } else {
-                            [
-                                bg!(0, true),
-                                bg!(1, true),
-                                bg!(0, false),
-                                bg!(1, false),
-                                bg!(2, true),
-                                bg!(2, false),
-                            ].to_vec()
-                        },
-                        3 => [bg!(0, true), bg!(1, true), bg!(0, false), bg!(1, false)].to_vec(),
-                        5 => [bg!(0, true), bg!(1, true), bg!(0, false), bg!(1, false)].to_vec(),
+                            ].to_vec(),
+                        3 => [
+                            spr!(3),
+                            bg!(0, true),
+                            spr!(2),
+                            bg!(1, true),
+                            spr!(1),
+                            bg!(0, false),
+                            spr!(0),
+                            bg!(1, false)
+                        ].to_vec(),
+                        5 => [
+                            spr!(3),
+                            bg!(0, true),
+                            spr!(2),
+                            bg!(1, true),
+                            spr!(1),
+                            bg!(0, false),
+                            spr!(0),
+                            bg!(1, false)
+                        ].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
-                    let pixel = sprite_pixel.unwrap_or(in_order_pixels
+                    let pixel = in_order_pixels
                         .iter()
+                        // todo can probably combine these two lines
                         .find(|bg_pixel| bg_pixel.is_some())
-                        .map_or(self.cgram[0], |p| p.unwrap().0 & 0x7FFF));
+                        .map_or(self.cgram[0], |p| p.unwrap() & 0x7FFF);
                     self.screen_buffer[256 * y + x] = pixel;
                 }
             }
