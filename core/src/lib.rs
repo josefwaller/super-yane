@@ -7,4 +7,4 @@ pub mod ppu;
 pub use cartridge::Cartridge;
 pub use console::Console;
 pub use input_port::*;
-pub use ppu::Ppu;
+pub use ppu::{Background, Ppu};

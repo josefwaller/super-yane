@@ -409,7 +409,6 @@ impl Console {
             before_cpu_step(&self);
             self.cpu.step(&mut self.rest);
             if !vblank && self.ppu().vblank && self.rest.nmi_enabled {
-                info!("NMI triggered");
                 self.cpu.on_nmi(&mut self.rest);
             }
             while self.rest.apu_master_clocks * 1_000_000 / 1_024_000

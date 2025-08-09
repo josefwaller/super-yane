@@ -34,7 +34,7 @@ use iced::widget::text;
 
 use rfd::FileDialog;
 use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
-use super_yane::{Console, InputPort, ppu::Background};
+use super_yane::{Background, Console, InputPort};
 use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
