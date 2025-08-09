@@ -444,10 +444,18 @@ impl Ppu {
                 let width = size.0;
                 // Todo: Optimize this so that we don't fetch all the tiles all the time
                 let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
-                    self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y)
+                    if i < width / 8 {
+                        self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y)
+                    } else {
+                        [0; 8]
+                    }
                 });
                 let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| {
-                    self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16)
+                    if i < width / 8 {
+                        self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16)
+                    } else {
+                        [0; 8]
+                    }
                 });
                 let palette_index = 0x80 + 0x10 * s.palette_index;
                 let palette = &self.cgram[palette_index..(palette_index + 0x10)];
