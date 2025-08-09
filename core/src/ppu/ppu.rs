@@ -16,6 +16,7 @@ pub struct Sprite {
     pub flip_y: bool,
     pub priority: u32,
     pub palette_index: usize,
+    pub size_select: usize
 }
 
 
@@ -300,7 +301,13 @@ impl Ppu {
                 _ => unreachable!(),
             }
         } else {
-            // Todo
+            let index = (addr - 0x200) * 4;
+            (0..4).for_each(|i| {
+                let d = value >> (2 * i);
+                let s = &mut self.oam_sprites[index + i];
+                s.x = (s.x & 0xFFFF) + 0x10000 * (d as usize & 0x01);
+                s.size_select = if d & 0x02 == 0 { 0 } else { 1 };
+            })
         }
     }
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
@@ -418,7 +425,7 @@ impl Ppu {
     fn reset_oam_buffer(&mut self, y: usize) {
         let mut data = [None; 0x100];
         self.oam_sprites.iter().for_each(|s| {
-            let size = self.oam_sizes[0];
+            let size = self.oam_sizes[s.size_select];
             if s.y <= y && s.y + size.1 > y {
                 let fine_y = (y - s.y) % 8;
                 let tile_y = (y - s.y) / 8;
@@ -436,7 +443,7 @@ impl Ppu {
                     let tile_high = tile_highs[i / 8];
                     let x = i % 8;
                     if s.x + i < 0x100 {
-                        let p = tile_low[x] as usize + 2 * tile_high[x] as usize;
+                        let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
                         data[s.x + i] = data[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
                     }
