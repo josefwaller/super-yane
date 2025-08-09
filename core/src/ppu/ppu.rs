@@ -504,45 +504,52 @@ impl Ppu {
                         })
                         .collect();
                     let sprite_pixel = self.oam_buffer.pop_front().unwrap_or(None);
-                    let order = match self.bg_mode {
+                    macro_rules! bg {
+                        ($index: expr, $priority: expr) => {
+                            bg_pixels[$index].filter(|(_, p)| *p == $priority)
+                        };
+                    }
+                    // The pixels at the given dot, in order from front to back
+                    // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
+                    let in_order_pixels = match self.bg_mode {
                         0 => [
-                            (0, true),
-                            (1, true),
-                            (0, false),
-                            (1, false),
-                            (2, true),
-                            (3, true),
-                            (2, false),
-                            (3, false),
+                            bg!(0, true),
+                            bg!(1, true),
+                            bg!(0, false),
+                            bg!(1, false),
+                            bg!(2, true),
+                            bg!(3, true),
+                            bg!(2, false),
+                            bg!(3, false),
                         ]
                         .to_vec(),
                         1 => if self.bg3_prio {
                             [
-                                (2, true),
-                                (0, true),
-                                (1, true),
-                                (0, false),
-                                (1, false),
-                                (2, false),
+                                bg!(2, true),
+                                bg!(0, true),
+                                bg!(1, true),
+                                bg!(0, false),
+                                bg!(1, false),
+                                bg!(2, false),
                             ].to_vec()
                         } else {
                             [
-                                (0, true),
-                                (1, true),
-                                (0, false),
-                                (1, false),
-                                (2, true),
-                                (2, false),
+                                bg!(0, true),
+                                bg!(1, true),
+                                bg!(0, false),
+                                bg!(1, false),
+                                bg!(2, true),
+                                bg!(2, false),
                             ].to_vec()
                         },
-                        3 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
-                        5 => [(0, true), (1, true), (0, false), (1, false)].to_vec(),
+                        3 => [bg!(0, true), bg!(1, true), bg!(0, false), bg!(1, false)].to_vec(),
+                        5 => [bg!(0, true), bg!(1, true), bg!(0, false), bg!(1, false)].to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
-                    let pixel = sprite_pixel.unwrap_or(order
+                    let pixel = sprite_pixel.unwrap_or(in_order_pixels
                         .iter()
-                        .find(|(i, prio)| bg_pixels[*i].is_some_and(|(v, p)| p == *prio))
-                        .map_or(self.cgram[0], |(i, _)| bg_pixels[*i].unwrap().0 & 0x7FFF));
+                        .find(|bg_pixel| bg_pixel.is_some())
+                        .map_or(self.cgram[0], |p| p.unwrap().0 & 0x7FFF));
                     self.screen_buffer[256 * y + x] = pixel;
                 }
             }
