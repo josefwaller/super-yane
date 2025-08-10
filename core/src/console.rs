@@ -31,10 +31,12 @@ pub struct ExternalArchitecture {
     pub dma_channels: [DmaChannel; 8],
     pub input_ports: [InputPort; 2],
     total_master_clocks: u64,
-    apu_master_clocks: u64,
+    total_apu_clocks: u64,
     open_bus_value: u8,
     nmi_enabled: bool,
     pub timers: [ApuTimer; 3],
+    /// Whether fast ROM access is enabled through MEMSEL
+    fast_rom_enabled: bool,
 }
 
 // Todo: move somewhere
@@ -49,17 +51,17 @@ impl ExternalArchitecture {
     // Returns the value, and how many master clocks were needed to access the memory
     pub fn read_byte(&self, addr: usize) -> (u8, u32) {
         if (0x7E0000..0x800000).contains(&addr) {
-            (self.ram[addr - 0x7E0000], 12)
+            (self.ram[addr - 0x7E0000], 8)
         } else if addr < 0x400000 {
             let a = addr & 0xFFFF;
             if a < 0x2000 {
-                (self.ram[a], 12)
+                (self.ram[a], 6)
             } else if a < 0x2100 {
-                (0, 12)
+                (0, 6)
             } else if a < 0x2140 {
-                (self.ppu.read_byte(a), 12)
+                (self.ppu.read_byte(a), 6)
             } else if a < 0x2180 {
-                (self.apu_to_cpu_reg[a % 4], 12)
+                (self.apu_to_cpu_reg[a % 4], 6)
             } else if a >= 0x4218 && a < 0x4220 {
                 // Read controller data
                 let i = (a / 2) % 2;
@@ -93,12 +95,19 @@ impl ExternalArchitecture {
                     }
                 }
             } else if a < 0x8000 {
-                (self.ppu.read_byte(a), 12)
+                (self.ppu.read_byte(a), 6)
             } else {
-                (self.cartridge.read_byte(addr), 12)
+                (self.cartridge.read_byte(addr), 8)
             }
         } else {
-            (self.cartridge.read_byte(addr), 12)
+            (
+                self.cartridge.read_byte(addr),
+                if addr > 0x800000 && self.fast_rom_enabled {
+                    6
+                } else {
+                    8
+                },
+            )
         }
     }
     // Writes a byte without advancing anything
@@ -107,7 +116,7 @@ impl ExternalArchitecture {
     pub fn write_byte(&mut self, addr: usize, value: u8) -> u32 {
         if (0x7E0000..0x800000).contains(&addr) {
             self.ram[addr - 0x7E0000] = value;
-            12
+            8
         } else {
             let a = addr % (0x800000);
             // Check for non-rom area
@@ -116,24 +125,24 @@ impl ExternalArchitecture {
                 match a {
                     (0..0x2000) => {
                         self.ram[a] = value;
-                        12
+                        8
                     }
                     (0x2000..0x2100) => {
                         // Open bus?
-                        12
+                        6
                     }
                     (0x2100..0x2140) => {
                         // PPU Registers
                         self.ppu.write_byte(a, value);
-                        12
+                        6
                     }
                     (0x2140..0x2180) => {
                         self.cpu_to_apu_reg[a % 4] = value;
-                        12
+                        6
                     }
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
-                        12
+                        6
                     }
                     0x420B => {
                         (0..8).for_each(|i| {
@@ -143,15 +152,17 @@ impl ExternalArchitecture {
                                     self.dma_channels[i].byte_counter;
                             }
                         });
-                        return 12;
+                        return 6;
                     }
-                    0x420C => 12,
+                    0x420C => 6,
+                    0x420D => {
+                        self.fast_rom_enabled = value & 0x01 != 0;
+                        6
+                    }
                     0x4300..0x43F8 => {
                         let lsb = a & 0x0F;
                         let r = (a & 0xF0) >> 4;
-                        if r > 7 {
-                            12
-                        } else {
+                        if r < 8 {
                             let d = &mut self.dma_channels[r];
                             // DMA register
                             if lsb == 0 {
@@ -189,27 +200,39 @@ impl ExternalArchitecture {
                                 // Byte counter high byte
                                 d.byte_counter = (d.byte_counter & 0x00FF) | (value as u16 * 0x100);
                             }
-                            12
                         }
+                        6
                     }
-                    _ => 12,
+                    _ => 6,
                 }
             } else {
-                // self.cartridge.read_byte(a)
-                12
+                if addr >= 0x800000 && self.fast_rom_enabled {
+                    6
+                } else {
+                    8
+                }
             }
         }
     }
     fn advance(&mut self, master_clocks: u32) {
         self.total_master_clocks += master_clocks as u64;
         self.ppu.advance_master_clock(master_clocks);
-        (0..3).for_each(|i| {
-            // Increment timer and increment counter if it overflows
-            let t = self.timers[i].timer.wrapping_add(master_clocks as u8 / 12);
-            if t < self.timers[i].timer {
-                self.timers[i].counter = self.timers[i].counter.wrapping_add(1);
-            }
-            self.timers[i].timer = t;
+    }
+    fn advance_apu(&mut self, apu_clocks: u64) {
+        // Todo maybe: clean this up
+        (0..apu_clocks).for_each(|_| {
+            self.total_apu_clocks += 1;
+            // Clock the timers every 16 (timers 0 and 1) or 128 (timer 2) APU cycles
+            [16, 16, 128].into_iter().enumerate().for_each(|(i, clks)| {
+                if self.total_apu_clocks % clks == 0 {
+                    // Increment timer and increment counter if it overflows
+                    let t = self.timers[i].timer.wrapping_add(1);
+                    if t < self.timers[i].timer {
+                        self.timers[i].counter = self.timers[i].counter.wrapping_add(1);
+                    }
+                    self.timers[i].timer = t;
+                }
+            });
         });
     }
     pub fn read_apu(&self, address: usize) -> u8 {
@@ -255,10 +278,10 @@ impl HasAddressBus for ExternalArchitecture {
 }
 impl Spc700AddressBuss for ExternalArchitecture {
     fn io(&mut self) {
-        self.apu_master_clocks += 1;
+        self.advance_apu(1);
     }
     fn read(&mut self, address: usize) -> u8 {
-        self.apu_master_clocks += 1;
+        self.advance_apu(1);
         match address {
             0x00FD..0x00FF => {
                 let v = self.timers[address - 0x00FD].counter;
@@ -269,7 +292,7 @@ impl Spc700AddressBuss for ExternalArchitecture {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
-        self.apu_master_clocks += 1;
+        self.advance_apu(1);
         match address {
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
@@ -323,6 +346,7 @@ impl Console {
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
     rest_field! {total_master_clocks, u64}
+    rest_field! {total_apu_clocks, u64}
     rest_field! {input_ports, [InputPort; 2]}
     rest_field! {apu_to_cpu_reg, [u8; 4]}
     rest_field! {cpu_to_apu_reg, [u8; 4]}
@@ -353,10 +377,11 @@ impl Console {
                 ppu: Ppu::default(),
                 dma_channels: core::array::from_fn(|_| DmaChannel::default()),
                 total_master_clocks: 0,
-                apu_master_clocks: 0,
+                total_apu_clocks: 0,
                 open_bus_value: 0,
                 nmi_enabled: false,
                 timers: [ApuTimer::default(); 3],
+                fast_rom_enabled: false,
             },
         };
         c.cpu.reset(&mut c.rest);
@@ -379,7 +404,7 @@ impl Console {
             if !vblank && self.ppu().vblank && self.rest.nmi_enabled {
                 self.cpu.on_nmi(&mut self.rest);
             }
-            while self.rest.apu_master_clocks * 1_000_000 / 1_024_000
+            while self.rest.total_apu_clocks * 1_000_000 / 1_024_000
                 < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000
             {
                 // Catch up the APU

@@ -570,8 +570,9 @@ impl Application {
                         button(">>50,000").on_press(Message::AdvanceInstructions(50000)),
                     ],
                     row![text(format!(
-                        "Total Cycles: {:08}, total instructions: {:08}",
+                        "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",
                         self.console.total_master_clocks(),
+                        self.console.total_apu_clocks(),
                         self.total_instructions
                     ))]
                 ])
