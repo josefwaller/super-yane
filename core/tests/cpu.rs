@@ -4,28 +4,28 @@ use super_yane::Console;
 mod common;
 
 // use common::cpu_rom_test;
-cpu_rom_test! {adc, 500_000}
-cpu_rom_test! {and, 350_000}
-cpu_rom_test! {asl, 100_000}
-cpu_rom_test! {bit, 400_000}
-cpu_rom_test! {bra, 50_000}
-cpu_rom_test! {cmp, 500_000}
-cpu_rom_test! {dec, 150_000}
-cpu_rom_test! {eor, 350_000}
-cpu_rom_test! {inc, 150_000}
-cpu_rom_test! {jmp, 50_000}
-cpu_rom_test! {ldr, 600_000}
-cpu_rom_test! {lsr, 100_000}
-cpu_rom_test! {mov, 100_000}
-cpu_rom_test! {msc, 50_000}
-cpu_rom_test! {ora, 350_000}
-cpu_rom_test! {phl, 400_000}
-cpu_rom_test! {psr, 50_000}
-cpu_rom_test! {ret, 50_000}
-cpu_rom_test! {rol, 100_000}
-cpu_rom_test! {ror, 100_000}
-cpu_rom_test! {sbc, 400_000}
-cpu_rom_test! {str, 550_000}
-cpu_rom_test! {trn, 350_000}
+cpu_rom_test! {adc}
+cpu_rom_test! {and}
+cpu_rom_test! {asl}
+cpu_rom_test! {bit}
+cpu_rom_test! {bra}
+cpu_rom_test! {cmp}
+cpu_rom_test! {dec}
+cpu_rom_test! {eor}
+cpu_rom_test! {inc}
+cpu_rom_test! {jmp}
+cpu_rom_test! {ldr}
+cpu_rom_test! {lsr}
+cpu_rom_test! {mov}
+cpu_rom_test! {msc}
+cpu_rom_test! {ora}
+cpu_rom_test! {phl}
+cpu_rom_test! {psr}
+cpu_rom_test! {ret}
+cpu_rom_test! {rol}
+cpu_rom_test! {ror}
+cpu_rom_test! {sbc}
+cpu_rom_test! {str}
+cpu_rom_test! {trn}
 cpu_rom_test! {test_basic, 1_400_000}
 cpu_rom_test! {test_full, 1_950_000}

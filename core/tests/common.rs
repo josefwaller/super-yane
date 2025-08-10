@@ -23,6 +23,9 @@ macro_rules! rom_test {
 
 #[macro_export]
 macro_rules! cpu_rom_test {
+    ($name: expr) => {
+        cpu_rom_test! {$name, 1_000_000}
+    };
     ($name: expr, $num_inst: expr) => {
         rom_test! {$name, concat!("./roms/CPU", stringify!([<$name:upper>]), ".sfc"), $num_inst}
     };

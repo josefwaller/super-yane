@@ -410,7 +410,7 @@ impl Application {
                             "a" => left = val,
                             "s" => down = val,
                             "d" => right = val,
-                            "n" => a = val,
+                            "n" => y = val,
                             "m" => b = val,
                             "r" => start = val,
                             "f" => select = val,

@@ -19,6 +19,10 @@ pub struct Channel {
     pub src_bank: u8,
     /// The byte counter, or number of bytes to transfer
     pub byte_counter: u16,
+    /// The byte counter at the moment hte DMA is triggered
+    pub(crate) init_byte_counter: u16,
+    /// Whether the DMA is being executed right now
+    pub(crate) is_executing: bool,
 }
 
 impl Default for Channel {
@@ -32,6 +36,8 @@ impl Default for Channel {
             src_addr: 0,
             src_bank: 0,
             byte_counter: 0,
+            init_byte_counter: 0,
+            is_executing: false,
         }
     }
 }

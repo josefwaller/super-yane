@@ -138,37 +138,11 @@ impl ExternalArchitecture {
                     0x420B => {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
-                                let mut d = self.dma_channels[i].clone();
-                                let mut bytes_transferred = 0;
-                                // Todo: handling timing of DMA
-                                loop {
-                                    let src = d.src_bank as usize * 0x10000 + d.src_addr as usize;
-                                    let dest = d.dest_addr
-                                        + d.transfer_pattern
-                                            [bytes_transferred % d.transfer_pattern.len()]
-                                            as usize;
-                                    let v = HasAddressBus::read(self, src);
-                                    HasAddressBus::write(self, dest, v);
-                                    let md = &mut self.dma_channels[i];
-                                    bytes_transferred += 1;
-                                    match md.adjust_mode {
-                                        DmaAddressAdjustMode::Increment => {
-                                            md.src_addr = d.src_addr.wrapping_add(1)
-                                        }
-                                        DmaAddressAdjustMode::Decrement => {
-                                            md.src_addr = d.src_addr.wrapping_sub(1)
-                                        }
-                                        _ => {}
-                                    }
-                                    md.byte_counter = md.byte_counter.wrapping_sub(1);
-                                    if md.byte_counter == 0 {
-                                        break;
-                                    }
-                                    d = md.clone();
-                                }
+                                self.dma_channels[i].is_executing = true;
+                                self.dma_channels[i].init_byte_counter =
+                                    self.dma_channels[i].byte_counter;
                             }
                         });
-                        // Todo: determine how many clock cycles consumed
                         return 12;
                     }
                     0x420C => 12,
