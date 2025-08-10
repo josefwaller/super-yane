@@ -420,10 +420,9 @@ impl Ppu {
                 (b.tilemap_addr, x, y)
             }
         };
-        // These are here since they will have to change once the background scrolling is implemented
+        // Calculate what tile we are drawing
         let tile_x = x / 8;
         let tile_y = y / 8;
-        let fine_y = y % 8;
         // 2 bytes/tile, 32 tiles/row
         // Note that there's always 2 bytes per tile of the TILEMAP, regardless of how many bpp the tile will use
         let addr = 2 * (32 * tile_y + tile_x);
@@ -434,6 +433,10 @@ impl Ppu {
         let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
         let palette_index = (tile_high as usize & 0x1C) >> 2;
         let priority = tile_high & 0x20 != 0;
+        let flip_x = tile_high & 0x40 != 0;
+        let flip_y = tile_high & 0x80 != 0;
+
+        let fine_y = if flip_y { 7 - y % 8 } else { y % 8 };
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
         // Get all the slices
@@ -481,7 +484,7 @@ impl Ppu {
                     .enumerate()
                     .map(|(j, s)|
                     // Shifted left by 2 since each slice will have 2 bits per pixel
-                    (s[i] as usize) << (2 * j))
+                    (s[if flip_x {7 - i } else { i }] as usize) << (2 * j))
                     .sum::<usize>();
                 if v == 0 {
                     None
