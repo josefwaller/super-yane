@@ -441,12 +441,14 @@ impl Application {
             Message::OnEvent(e) => self.handle_input(e),
             Message::NewFrame() => {
                 if !self.is_paused {
-                    while self.console.ppu().is_in_vblank() && !self.is_paused {
-                        self.advance();
-                    }
-                    while !self.console.ppu().is_in_vblank() && !self.is_paused {
-                        self.advance();
-                    }
+                    (0..2).for_each(|_| {
+                        while self.console.ppu().is_in_vblank() && !self.is_paused {
+                            self.advance();
+                        }
+                        while !self.console.ppu().is_in_vblank() && !self.is_paused {
+                            self.advance();
+                        }
+                    });
                 }
             }
             Message::AdvanceBreakpoint => {

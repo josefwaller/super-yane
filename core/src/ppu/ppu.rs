@@ -497,8 +497,11 @@ impl Ppu {
         self.oam_sprites.iter().for_each(|s| {
             let size = self.oam_sizes[s.size_select];
             if s.y <= y && s.y + size.1 > y {
-                let fine_y = (y - s.y) % 8;
-                let tile_y = (y - s.y) / 8;
+                let (fine_y, tile_y) = if s.flip_y {
+                    (7 - (y - s.y) % 8, (size.1 - 1 - (y - s.y)) / 8)
+                } else {
+                    ((y - s.y) % 8, (y - s.y) / 8)
+                };
                 let tile_index = s.tile_index + 16 * tile_y;
                 let slice_addr = 2 * (self.oam_name_addr + s.name_select * self.oam_name_select)
                     + 32 * tile_index;
@@ -521,9 +524,15 @@ impl Ppu {
                 let palette_index = 0x80 + 0x10 * s.palette_index;
                 let palette = &self.cgram[palette_index..(palette_index + 0x10)];
                 (0..width).for_each(|i| {
-                    let tile_low = tile_lows[i / 8];
-                    let tile_high = tile_highs[i / 8];
-                    let x = i % 8;
+                    let (tile_low, tile_high, x) = if s.flip_x {
+                        (
+                            tile_lows[(size.0 - 1 - i) / 8],
+                            tile_highs[(size.0 - 1 - i) / 8],
+                            7 - i % 8,
+                        )
+                    } else {
+                        (tile_lows[i / 8], tile_highs[i / 8], i % 8)
+                    };
                     if s.x + i < 0x100 {
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
