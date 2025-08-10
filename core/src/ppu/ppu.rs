@@ -19,6 +19,7 @@ pub struct Sprite {
     pub priority: usize,
     pub palette_index: usize,
     pub size_select: usize,
+    pub msb_x: bool,
 }
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
@@ -362,7 +363,7 @@ impl Ppu {
             (0..4).for_each(|i| {
                 let d = value >> (2 * i);
                 let s = &mut self.oam_sprites[index + i];
-                s.x = (s.x & 0xFFFF) + 0x10000 * (d as usize & 0x01);
+                s.msb_x = d & 0x01 != 0;
                 s.size_select = if d & 0x02 == 0 { 0 } else { 1 };
             })
         }
@@ -527,21 +528,24 @@ impl Ppu {
                 let palette_index = 0x80 + 0x10 * s.palette_index;
                 let palette = &self.cgram[palette_index..(palette_index + 0x10)];
                 (0..width).for_each(|i| {
-                    let (tile_low, tile_high, x) = if s.flip_x {
-                        (
-                            tile_lows[(size.0 - 1 - i) / 8],
-                            tile_highs[(size.0 - 1 - i) / 8],
-                            7 - i % 8,
-                        )
-                    } else {
-                        (tile_lows[i / 8], tile_highs[i / 8], i % 8)
-                    };
-                    if s.x + i < 0x100 {
+                    // Check if the pixel at (sprite x + i) is on the screen
+                    let sx = s.x as i32 + i as i32 + if s.msb_x { -0x100 } else { 0 };
+                    if sx < 0x100 && sx > 0x00 {
+                        // Get slice to draw
+                        let (tile_low, tile_high, x) = if s.flip_x {
+                            (
+                                tile_lows[(size.0 - 1 - i) / 8],
+                                tile_highs[(size.0 - 1 - i) / 8],
+                                7 - i % 8,
+                            )
+                        } else {
+                            (tile_lows[i / 8], tile_highs[i / 8], i % 8)
+                        };
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
                         let buf = &mut buffers[s.priority];
-                        buf[s.x + i] =
-                            buf[s.x + i].or(if p == 0 { None } else { Some(palette[p]) });
+                        buf[sx as usize] =
+                            buf[sx as usize].or(if p == 0 { None } else { Some(palette[p]) });
                     }
                 })
             }
