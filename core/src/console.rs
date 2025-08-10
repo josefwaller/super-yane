@@ -5,7 +5,7 @@ use spc700::{HasAddressBus as Spc700AddressBuss, IPL, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
 
 use crate::{
-    Cartridge, InputPort, Ppu,
+    Cartridge, Cpu, InputPort, Ppu,
     dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
 };
 use paste::paste;
@@ -323,12 +323,9 @@ impl Spc700AddressBuss for ExternalArchitecture {
 /// The entire S.N.E.S. Console
 #[derive(Clone)]
 pub struct Console {
-    // The processor is the driving force behind the emulator, so the console is split into 2 parts
-    // so that the CPU can be passed the rest of the console, and advance it in sync
-    // i.e. cpu.advance_instructions(&rest) will advacne both by 3 CPU instructions
-    // Since this is a bit of a weird structure we provide methods to get the different parts of the console as mutable/immuatable
-    // references
-    cpu: Processor,
+    /// The CPU is the driving force of the console.
+    /// It advances the rest of the console through read and write methods in rest.
+    cpu: Cpu,
     apu: Spc700,
     rest: ExternalArchitecture,
 }
@@ -356,10 +353,10 @@ impl Console {
     rest_field! {apu_to_cpu_reg, [u8; 4]}
     rest_field! {cpu_to_apu_reg, [u8; 4]}
     pub fn cpu(&self) -> &Processor {
-        &self.cpu
+        &self.cpu.core
     }
     pub fn cpu_mut(&mut self) -> &mut Processor {
-        &mut self.cpu
+        &mut self.cpu.core
     }
     pub fn apu(&self) -> &Spc700 {
         &self.apu
@@ -369,7 +366,7 @@ impl Console {
     }
     pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
         let mut c = Console {
-            cpu: Processor::default(),
+            cpu: Cpu::default(),
             apu: Spc700::default(),
             rest: ExternalArchitecture {
                 ram: [0; 0x20000],
@@ -388,9 +385,8 @@ impl Console {
                 timers: [ApuTimer::default(); 3],
             },
         };
-        c.cpu.pc =
-            c.cartridge().read_byte(0xFFFC) as u16 + 0x100 * c.cartridge().read_byte(0xFFFD) as u16;
-        debug!("Initialized PC to {:X}", c.cpu.pc);
+        c.cpu.reset(&mut c.rest);
+        debug!("Initialized PC to {:X}", c.cpu.core.pc);
         c
     }
     pub fn advance_instructions(&mut self, num_instructions: u32) {
@@ -436,7 +432,7 @@ impl Console {
     }
     /// Get the current program counter of the console
     pub fn pc(&self) -> usize {
-        self.cpu.pbr as usize * 0x10000 + self.cpu.pc as usize
+        self.cpu.core.pbr as usize * 0x10000 + self.cpu.core.pc as usize
     }
     /// Reset the console
     pub fn reset(&mut self) {

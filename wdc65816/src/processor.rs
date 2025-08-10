@@ -16,7 +16,7 @@ pub trait HasAddressBus {
     fn io(&mut self);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Processor {
     /// Program Counter
     pub pc: u16,
@@ -1482,10 +1482,10 @@ impl Processor {
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
     }
-    pub fn reset(&mut self, rest: &mut impl HasAddressBus) {
+    pub fn reset(&mut self, memory: &mut impl HasAddressBus) {
         self.p.e = true;
         self.pbr = 0x00;
-        self.pc = u16::from_le_bytes([rest.read(0xFFFC), rest.read(0xFFFD)]);
+        self.pc = u16::from_le_bytes([memory.read(0xFFFC), memory.read(0xFFFD)]);
         self.dbr = 0;
         self.dl = 0;
         self.dh = 0;
