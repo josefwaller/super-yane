@@ -57,6 +57,7 @@ pub struct Ppu {
     cgram_latch: Option<u8>,
     /// Screen buffer
     pub screen_buffer: [u16; 256 * 240],
+    /// This is not hte dot, should rename
     pub dot: usize,
     pub oam_sizes: [(usize, usize); 2],
     // Internal OAM address
@@ -684,6 +685,12 @@ impl Ppu {
         })
     }
     pub fn is_in_vblank(&self) -> bool {
-        self.dot > 88 + 240 * PIXELS_PER_SCANLINE
+        (self.dot / 4) / PIXELS_PER_SCANLINE > 240
+    }
+    pub fn is_in_hblank(&self) -> bool {
+        (self.dot / 4) % PIXELS_PER_SCANLINE >= 274
+    }
+    pub fn scanline(&self) -> usize {
+        (self.dot / 4) / PIXELS_PER_SCANLINE
     }
 }

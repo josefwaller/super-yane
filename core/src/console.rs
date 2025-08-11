@@ -154,7 +154,15 @@ impl ExternalArchitecture {
                         });
                         return 6;
                     }
-                    0x420C => 6,
+                    0x420C => {
+                        (0..8).for_each(|i| {
+                            if (value >> i) & 0x01 != 0 {
+                                let d = &mut self.dma_channels[i];
+                                d.hdma_enable = true;
+                            }
+                        });
+                        6
+                    }
                     0x420D => {
                         self.fast_rom_enabled = value & 0x01 != 0;
                         6
@@ -165,40 +173,65 @@ impl ExternalArchitecture {
                         if r < 8 {
                             let d = &mut self.dma_channels[r];
                             // DMA register
-                            if lsb == 0 {
-                                d.transfer_pattern = match value & 0x07 {
-                                    0 => vec![0],
-                                    1 => vec![0, 1],
-                                    2 | 6 => vec![0; 2],
-                                    3 | 7 => vec![0, 0, 1, 1],
-                                    4 => vec![0, 1, 2, 3],
-                                    5 => vec![0, 1, 0, 1],
-                                    _ => panic!("Should be impossible {:X}", (value & 0x07)),
-                                };
-                                d.adjust_mode = match value & 0x18 {
-                                    0x00 => DmaAddressAdjustMode::Increment,
-                                    0x10 => DmaAddressAdjustMode::Decrement,
-                                    _ => DmaAddressAdjustMode::Fixed,
-                                };
-                                d.indirect = (value & 0x40) != 0;
-                                d.direction = (value & 0x80) != 0;
-                            } else if lsb == 1 {
-                                d.dest_addr = 0x2100 + value as usize;
-                            } else if lsb == 2 {
-                                // Address low byte
-                                d.src_addr = (d.src_addr & 0xFF00) | value as u16;
-                            } else if lsb == 3 {
-                                // Address high byte
-                                d.src_addr = (d.src_addr & 0x00FF) | (value as u16 * 0x100);
-                            } else if lsb == 4 {
-                                // Address bank
-                                d.src_bank = value;
-                            } else if lsb == 5 {
-                                // Byte counter low byte
-                                d.byte_counter = (d.byte_counter & 0xFF00) | value as u16;
-                            } else if lsb == 6 {
-                                // Byte counter high byte
-                                d.byte_counter = (d.byte_counter & 0x00FF) | (value as u16 * 0x100);
+                            match lsb {
+                                0 => {
+                                    d.transfer_pattern = match value & 0x07 {
+                                        0 => vec![0],
+                                        1 => vec![0, 1],
+                                        2 | 6 => vec![0; 2],
+                                        3 | 7 => vec![0, 0, 1, 1],
+                                        4 => vec![0, 1, 2, 3],
+                                        5 => vec![0, 1, 0, 1],
+                                        _ => panic!("Should be impossible {:X}", (value & 0x07)),
+                                    };
+                                    d.adjust_mode = match value & 0x18 {
+                                        0x00 => DmaAddressAdjustMode::Increment,
+                                        0x10 => DmaAddressAdjustMode::Decrement,
+                                        _ => DmaAddressAdjustMode::Fixed,
+                                    };
+                                    d.indirect = (value & 0x40) != 0;
+                                    d.direction = (value & 0x80) != 0;
+                                }
+                                1 => {
+                                    d.dest_addr = 0x2100 + value as usize;
+                                }
+                                2 => {
+                                    // Address low byte
+                                    d.src_addr = (d.src_addr & 0xFF00) | value as u16;
+                                }
+                                3 => {
+                                    // Address high byte
+                                    d.src_addr = (d.src_addr & 0x00FF) | (value as u16 * 0x100);
+                                }
+                                4 => {
+                                    // Address bank
+                                    d.src_bank = value;
+                                }
+                                5 => {
+                                    // Byte counter low byte
+                                    d.byte_counter = (d.byte_counter & 0xFF00) | value as u16;
+                                }
+                                6 => {
+                                    // Byte counter high byte
+                                    d.byte_counter =
+                                        (d.byte_counter & 0x00FF) | (value as u16 * 0x100);
+                                }
+                                7 => {
+                                    d.hdma_bank = value;
+                                }
+                                8 => {
+                                    d.hdma_current_table_addr =
+                                        (d.hdma_current_table_addr & 0xFF00) + value as usize;
+                                }
+                                9 => {
+                                    d.hdma_current_table_addr = (value as usize) * 0x10000
+                                        + (d.hdma_current_table_addr & 0x00FF);
+                                }
+                                0xA => {
+                                    d.hdma_line_counter = Some(value & 0x7F);
+                                    d.hdma_repeat = (value & 0x80) != 0;
+                                }
+                                _ => {}
                             }
                         }
                         6
@@ -398,11 +431,59 @@ impl Console {
         before_apu_step: &mut dyn FnMut(&Console),
     ) {
         (0..num_instructions).for_each(|_| {
-            let vblank = self.ppu().vblank;
+            let vblank = self.ppu().is_in_vblank();
+            let hblank = self.ppu().is_in_hblank() && !vblank;
             before_cpu_step(&self);
             self.cpu.step(&mut self.rest);
-            if !vblank && self.ppu().vblank && self.rest.nmi_enabled {
-                self.cpu.on_nmi(&mut self.rest);
+            if !vblank && self.ppu().is_in_vblank() {
+                // Trigger NMI
+                if self.rest.nmi_enabled {
+                    self.cpu.on_nmi(&mut self.rest);
+                }
+                // Disable all HDMA channels
+                self.rest
+                    .dma_channels
+                    .iter_mut()
+                    .for_each(|d| d.hdma_enable = false);
+            }
+            // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
+            if vblank && !self.ppu().is_in_vblank() {
+                (0..self.rest.dma_channels.len()).for_each(|i| {
+                    macro_rules! d {
+                        () => {
+                            self.rest.dma_channels[i]
+                        };
+                    }
+                    if d!().hdma_enable {
+                        // Copy line number
+                        let table_addr = d!().full_src_addr();
+                        let lc = self.rest.read_byte(table_addr).0;
+                        d!().hdma_line_counter = Some(lc);
+                        // Todo: Properly wrap at boundary
+                        d!().hdma_current_table_addr = table_addr + 1;
+                    }
+                });
+            }
+            if !vblank && !hblank && self.ppu().is_in_hblank() {
+                let scanline = self.ppu().scanline();
+                // Trigger HDMAs
+                self.rest
+                    .dma_channels
+                    .iter_mut()
+                    .for_each(|d| match d.hdma_line_counter {
+                        Some(l) => {
+                            let l = l.wrapping_sub(1);
+                            if l == 0 {
+                                d.is_executing = true;
+                                d.init_byte_counter = d.transfer_pattern.len() as u16;
+                                d.byte_counter = d.transfer_pattern.len() as u16;
+                                d.hdma_line_counter = None;
+                            } else {
+                                d.hdma_line_counter = Some(l);
+                            }
+                        }
+                        None => {}
+                    })
             }
             while self.rest.total_apu_clocks * 1_000_000 / 1_024_000
                 < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000

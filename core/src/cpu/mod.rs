@@ -1,6 +1,8 @@
 use crate::{console::ExternalArchitecture, dma::AddressAdjustMode as DmaAddressAdjustMode};
 use wdc65816::{HasAddressBus, Processor as WdcProcessor};
 
+use log::*;
+
 #[derive(Default, Copy, Clone)]
 pub struct Cpu {
     pub(crate) core: WdcProcessor,
@@ -19,27 +21,50 @@ impl Cpu {
                         memory.dma_channels[i]
                     };
                 }
+                // Get number of bytes to transfer
                 let bytes_transferred =
                     d!().init_byte_counter.wrapping_sub(d!().byte_counter) as usize;
-                // Todo: handling timing of DMA
-                let src = d!().src_bank as usize * 0x10000 + d!().src_addr as usize;
+                // Get addresses to read to/from
+                let src = d!().full_src_addr();
                 let dest = d!().dest_addr
                     + d!().transfer_pattern[bytes_transferred % d!().transfer_pattern.len()]
                         as usize;
+                // Transfer
                 let v = memory.read(src);
                 memory.write(dest, v);
-                match d!().adjust_mode {
-                    DmaAddressAdjustMode::Increment => {
-                        d!().src_addr = d!().src_addr.wrapping_add(1)
+                // Increment source address
+                if d!().is_hdma() {
+                    d!().src_addr = d!().src_addr.wrapping_add(1);
+                } else {
+                    match d!().adjust_mode {
+                        DmaAddressAdjustMode::Increment => {
+                            d!().src_addr = d!().src_addr.wrapping_add(1)
+                        }
+                        DmaAddressAdjustMode::Decrement => {
+                            d!().src_addr = d!().src_addr.wrapping_sub(1)
+                        }
+                        _ => {}
                     }
-                    DmaAddressAdjustMode::Decrement => {
-                        d!().src_addr = d!().src_addr.wrapping_sub(1)
-                    }
-                    _ => {}
                 }
+                // Decrement byte counter
                 d!().byte_counter = d!().byte_counter.wrapping_sub(1);
                 if d!().byte_counter == 0 {
-                    d!().is_executing = false;
+                    // Check if we are doing an HDMA (may continue)
+                    if d!().is_hdma() {
+                        let lc = memory.read_byte(d!().full_src_addr()).0;
+                        match lc {
+                            0 => d!().is_executing = false,
+                            0x01..0x80 => {
+                                // Go to next entry
+                                d!().hdma_line_counter = Some(lc);
+                                d!().src_addr = d!().src_addr.wrapping_add(1);
+                            }
+                            // todo
+                            _ => d!().is_executing = false,
+                        }
+                    } else {
+                        d!().is_executing = false;
+                    }
                 }
             }
             None => self.core.step(memory),
