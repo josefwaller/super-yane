@@ -27,5 +27,5 @@ cpu_rom_test! {ror}
 cpu_rom_test! {sbc}
 cpu_rom_test! {str}
 cpu_rom_test! {trn}
-cpu_rom_test! {test_basic, 2_400_000}
-cpu_rom_test! {test_full, 2_950_000}
+cpu_rom_test! {test_basic, 60 * 5}
+cpu_rom_test! {test_full, 60 * 5}
