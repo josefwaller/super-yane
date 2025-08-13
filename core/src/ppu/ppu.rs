@@ -1,11 +1,17 @@
-use std::collections::VecDeque;
-
 use crate::Background;
+use crate::ppu::background::WindowMaskLogic;
 
+use crate::utils::bit;
 use log::*;
 
 const PIXELS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Window {
+    pub left: usize,
+    pub right: usize,
+}
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Sprite {
@@ -69,6 +75,8 @@ pub struct Ppu {
     /// Buffers of sprite pixels for the current scanline.
     /// One for every sprite layer, ordered by priority
     oam_buffers: [[Option<u16>; 0x100]; 4],
+
+    pub windows: [Window; 2],
 }
 
 impl Default for Ppu {
@@ -104,6 +112,7 @@ impl Default for Ppu {
             oam_latch: 0,
             oam_sprites: [Sprite::default(); 0x80],
             oam_buffers: [[None; 0x100]; 4],
+            windows: [Window::default(); 2],
         }
     }
 }
@@ -143,14 +152,19 @@ impl Ppu {
         }
     }
     pub fn write_byte(&mut self, addr: usize, value: u8) {
-        macro_rules! bit {
-            ($bit_num: expr) => {
-                (((value as u32) >> ($bit_num)) & 0x01)
-            };
+        macro_rules! window_settings {
+            ($off: expr) => {{
+                (0..2).for_each(|i| {
+                    (0..2).for_each(|j| {
+                        self.backgrounds[$off + i].window_invert[j] = bit(value, 4 * i + 2 * j);
+                        self.backgrounds[$off + i].window_enabled[j] = bit(value, 4 * i + 2 * j + 1)
+                    })
+                })
+            }};
         }
         match addr {
             0x2100 => {
-                self.forced_blanking = bit!(3) == 1;
+                self.forced_blanking = bit(value, 3);
                 self.brightness = (value & 0x07) as u32;
             }
             0x2101 => {
@@ -197,21 +211,21 @@ impl Ppu {
             0x2105 => {
                 // Copy background sizes
                 (0..4).for_each(|i| {
-                    self.backgrounds[i].tile_size = if bit!(i + 4) == 1 { 16 } else { 8 };
+                    self.backgrounds[i].tile_size = if bit(value, i + 4) { 16 } else { 8 };
                 });
                 self.bg3_prio = (value & 0x08) != 0;
                 self.bg_mode = (value & 0x07) as u32;
             }
             0x2106 => {
                 (0..4).for_each(|i| {
-                    self.backgrounds[i].mosaic = bit!(i) == 1;
+                    self.backgrounds[i].mosaic = bit(value, i);
                 });
                 self.mosaic_size = (value & 0xF0) as u32 / 0x10 + 1;
             }
             0x2107..=0x210A => {
                 let b = &mut self.backgrounds[addr - 0x2107];
-                b.num_horz_tilemaps = if bit!(0) == 0 { 1 } else { 2 };
-                b.num_vert_tilemaps = if bit!(1) == 0 { 1 } else { 2 };
+                b.num_horz_tilemaps = if !bit(value, 0) { 1 } else { 2 };
+                b.num_vert_tilemaps = if !bit(value, 1) { 1 } else { 2 };
                 b.tilemap_addr = ((value & 0xFC) as usize) << 8;
             }
             0x210B => {
@@ -246,10 +260,10 @@ impl Ppu {
                     2 | 3 => 128,
                     _ => unreachable!("Invalud VRAM increment amount value: {:X}", value),
                 };
-                self.vram_increment_mode = match bit!(7) {
-                    0 => VramIncMode::HighReadLowWrite,
-                    1 => VramIncMode::LowReadHighWrite,
-                    _ => panic!("Should never happen"),
+                self.vram_increment_mode = match bit(value, 7) {
+                    false => VramIncMode::HighReadLowWrite,
+                    true => VramIncMode::LowReadHighWrite,
+                    _ => unreachable!("Should never happen"),
                 };
                 self.vram_remap = (value >> 2) as u32 & 0x03;
             }
@@ -289,18 +303,39 @@ impl Ppu {
                 }
                 None => self.cgram_latch = Some(value),
             },
+            0x2123 => window_settings!(0),
+            0x2124 => window_settings!(2),
+            0x2126 => self.windows[0].left = value as usize,
+            0x2127 => self.windows[0].right = value as usize,
+            0x2128 => self.windows[1].left = value as usize,
+            0x2129 => self.windows[1].right = value as usize,
+            0x212A => {
+                self.backgrounds.iter_mut().enumerate().for_each(|(i, b)| {
+                    b.window_mask_logic = WindowMaskLogic::from(value >> (2 * i))
+                })
+            }
             0x212C => {
                 (0..4).for_each(|i| {
-                    self.backgrounds[i].main_screen_enable = bit!(i) == 1;
+                    self.backgrounds[i].main_screen_enable = bit(value, i);
                 });
-                self.obj_main_enable = bit!(4) == 1;
+                self.obj_main_enable = bit(value, 4);
             }
             0x212D => {
                 (0..4).for_each(|i| {
-                    self.backgrounds[i].sub_screen_enable = bit!(i) == 1;
+                    self.backgrounds[i].sub_screen_enable = bit(value, i);
                 });
-                self.obj_subscreen_enable = bit!(4) == 1;
+                self.obj_subscreen_enable = bit(value, 4);
             }
+            0x212E => self
+                .backgrounds
+                .iter_mut()
+                .enumerate()
+                .for_each(|(i, b)| b.windows_enabled_main = bit(value, i)),
+            0x212F => self
+                .backgrounds
+                .iter_mut()
+                .enumerate()
+                .for_each(|(i, b)| b.windows_enabled_sub = bit(value, i)),
             // Todo
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
             0x213B => debug!("Writing to CGRAM read"),
@@ -579,6 +614,9 @@ impl Ppu {
                     }
                 }
                 if x < 256 && y < 240 {
+                    let window_vals: [bool; 2] = core::array::from_fn(|i| {
+                        self.windows[i].left <= x && x <= self.windows[i].right
+                    });
                     // Structured (background_number, bpp)
                     let backgrounds = match self.bg_mode {
                         0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
@@ -606,11 +644,28 @@ impl Ppu {
                         .collect();
                     // Get the pixel from a background layer with a given priority, or None
                     macro_rules! bg {
-                        ($index: expr, $priority: expr) => {
-                            bg_pixels[$index]
-                                .filter(|(_, p)| *p == $priority)
-                                .map(|(v, _)| v)
-                        };
+                        ($index: expr, $priority: expr) => {{
+                            let b = &self.backgrounds[$index];
+                            let v = if b.window_enabled[0] {
+                                if b.window_enabled[1] {
+                                    // todo
+                                    false
+                                } else {
+                                    window_vals[0] ^ b.window_invert[0]
+                                }
+                            } else if b.window_enabled[1] {
+                                window_vals[0] ^ b.window_invert[1]
+                            } else {
+                                false
+                            };
+                            if v {
+                                None
+                            } else {
+                                bg_pixels[$index]
+                                    .filter(|(_, p)| *p == $priority)
+                                    .map(|(v, _)| v)
+                            }
+                        }};
                     }
                     // Get the pixel from a sprite layer with a given priority, or None
                     macro_rules! spr {

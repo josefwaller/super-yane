@@ -146,6 +146,8 @@ pub fn background_table(background: &Background) -> impl Into<Element<'_, Messag
         ("V offset", b.v_off),
         ("# H Tilemaps", b.num_horz_tilemaps),
         ("# V Tilemaps", b.num_vert_tilemaps),
+        ("Windows enabled main", b.windows_enabled_main.into()),
+        ("Windows enabled sub", b.windows_enabled_sub.into()),
     ];
     text_table(
         rows.into_iter()
@@ -791,6 +793,17 @@ impl Application {
                     .into()
                 }
             )),
+            Column::with_children(self.console.ppu().windows.iter().enumerate().map(|(i, w)| {
+                column![
+                    text(format!("Window {}", i)).color(COLORS[0]),
+                    with_indent(text(format!(
+                        "Left: {:02X} | Right: {:02X}",
+                        w.left, w.right
+                    )))
+                    .into()
+                ]
+                .into()
+            }))
         ]
     }
     fn apu_data(&self) -> impl Into<Element<'_, Message>> {

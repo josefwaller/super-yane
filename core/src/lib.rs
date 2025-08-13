@@ -2,6 +2,7 @@ mod cartridge;
 mod console;
 mod cpu;
 mod input_port;
+mod utils;
 
 pub mod dma;
 pub mod ppu;

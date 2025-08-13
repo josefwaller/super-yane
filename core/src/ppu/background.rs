@@ -1,5 +1,26 @@
 use std::collections::VecDeque;
 
+#[derive(Debug, Clone, Copy)]
+pub enum WindowMaskLogic {
+    Or,
+    And,
+    Xor,
+    Xnor,
+}
+
+impl From<u8> for WindowMaskLogic {
+    fn from(value: u8) -> Self {
+        use WindowMaskLogic::*;
+        match value & 0x3 {
+            0 => Or,
+            1 => And,
+            2 => Xor,
+            3 => Xnor,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
@@ -15,6 +36,11 @@ pub struct Background {
     pub sub_screen_enable: bool,
     /// Buffer for pixel data, used by PPU to render the background
     pub(super) pixel_buffer: VecDeque<Option<(u16, bool)>>,
+    pub window_mask_logic: WindowMaskLogic,
+    pub windows_enabled_main: bool,
+    pub windows_enabled_sub: bool,
+    pub window_enabled: [bool; 4],
+    pub window_invert: [bool; 4],
 }
 impl Default for Background {
     fn default() -> Self {
@@ -30,6 +56,11 @@ impl Default for Background {
             main_screen_enable: false,
             sub_screen_enable: false,
             pixel_buffer: VecDeque::new(),
+            window_mask_logic: WindowMaskLogic::And,
+            windows_enabled_main: false,
+            windows_enabled_sub: false,
+            window_enabled: [false; 4],
+            window_invert: [false; 4],
         }
     }
 }
