@@ -35,6 +35,9 @@ pub struct ExternalArchitecture {
     open_bus_value: u8,
     nmi_enabled: bool,
     pub timers: [ApuTimer; 3],
+    // todo rename
+    m_a: u8,
+    m_b: u8,
     /// Whether fast ROM access is enabled through MEMSEL
     fast_rom_enabled: bool,
 }
@@ -54,50 +57,48 @@ impl ExternalArchitecture {
             (self.ram[addr - 0x7E0000], 8)
         } else if addr < 0x400000 {
             let a = addr & 0xFFFF;
-            if a < 0x2000 {
-                (self.ram[a], 6)
-            } else if a < 0x2100 {
-                (0, 6)
-            } else if a < 0x2140 {
-                (self.ppu.read_byte(a), 6)
-            } else if a < 0x2180 {
-                (self.apu_to_cpu_reg[a % 4], 6)
-            } else if a >= 0x4218 && a < 0x4220 {
-                // Read controller data
-                let i = (a / 2) % 2;
-                let j = a % 2;
-                let input_port = self.input_ports[i];
-                match input_port {
-                    InputPort::Empty => (self.open_bus_value, 12),
-                    InputPort::StandardController {
-                        a,
-                        b,
-                        x,
-                        y,
-                        up,
-                        left,
-                        right,
-                        down,
-                        start,
-                        select,
-                        r,
-                        l,
-                    } => {
-                        match j {
-                            // Low byte
-                            0 => (byte_from_bits([false, false, false, false, r, l, x, a]), 12),
-                            1 => (
-                                byte_from_bits([right, left, down, up, start, select, y, b]),
-                                12,
-                            ),
-                            _ => panic!("Should be impossible"),
+            match a {
+                0x0000..0x2000 => (self.ram[a], 6),
+                0x2000..0x2100 => (0, 6),
+                0x2100..0x2140 => (self.ppu.read_byte(a), 6),
+                0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
+                0x4216 => ((self.m_a as u16 * self.m_b as u16).to_le_bytes()[0], 6),
+                0x4217 => ((self.m_a as u16 * self.m_b as u16).to_le_bytes()[1], 6),
+                0x4218..0x4220 => {
+                    // Read controller data
+                    let i = (a / 2) % 2;
+                    let j = a % 2;
+                    let input_port = self.input_ports[i];
+                    match input_port {
+                        InputPort::Empty => (self.open_bus_value, 12),
+                        InputPort::StandardController {
+                            a,
+                            b,
+                            x,
+                            y,
+                            up,
+                            left,
+                            right,
+                            down,
+                            start,
+                            select,
+                            r,
+                            l,
+                        } => {
+                            match j {
+                                // Low byte
+                                0 => (byte_from_bits([false, false, false, false, r, l, x, a]), 12),
+                                1 => (
+                                    byte_from_bits([right, left, down, up, start, select, y, b]),
+                                    12,
+                                ),
+                                _ => unreachable!("Should be impossible"),
+                            }
                         }
                     }
                 }
-            } else if a < 0x8000 {
-                (self.ppu.read_byte(a), 6)
-            } else {
-                (self.cartridge.read_byte(addr), 8)
+                0x4220..0x8000 => (self.ppu.read_byte(a), 6),
+                _ => (self.cartridge.read_byte(addr), 8),
             }
         } else {
             (
@@ -144,12 +145,19 @@ impl ExternalArchitecture {
                         self.nmi_enabled = (value & 0x80) != 0;
                         6
                     }
+                    0x4202 => {
+                        self.m_a = value;
+                        6
+                    }
+                    0x4203 => {
+                        self.m_b = value;
+                        6
+                    }
                     0x420B => {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
                                 self.dma_channels[i].is_executing = true;
                                 self.dma_channels[i].num_bytes_transferred = 0;
-                                debug!("STart DMA {}", i);
                             }
                         });
                         return 6;
@@ -424,6 +432,8 @@ impl Console {
                 nmi_enabled: false,
                 timers: [ApuTimer::default(); 3],
                 fast_rom_enabled: false,
+                m_a: 0,
+                m_b: 0,
             },
         };
         c.cpu.reset(&mut c.rest);
@@ -480,28 +490,49 @@ impl Console {
                                 // Read next byte
                                 match self.rest.read_byte(d.hdma_table_addr()).0 {
                                     0 => d.hdma_enable = false,
-                                    lc @ 1..=0x80 => {
+                                    lc => {
+                                        // Get line counter
+                                        match lc {
+                                            0 => unreachable!(),
+                                            0x01..=0x80 => {
+                                                d.hdma_repeat = false;
+                                                d.hdma_line_counter = lc;
+                                            }
+                                            0x81..=0xFF => {
+                                                d.hdma_repeat = true;
+                                                d.hdma_line_counter = lc - 0x80;
+                                            }
+                                        }
                                         // Copy values
-                                        d.hdma_repeat = false;
-                                        d.hdma_line_counter = lc;
+                                        let table_addr = d.current_hdma_table_addr;
                                         // Set up DMA values
-                                        // Todo: If indirect this should pointer somewhere else
-                                        // And we should add different values to current_hdma_table_addr
-                                        d.src_addr = d.current_hdma_table_addr.wrapping_add(1);
-                                        d.current_hdma_table_addr = d
-                                            .current_hdma_table_addr
-                                            .wrapping_add(1 + d.transfer_pattern.len() as u16);
+                                        if d.indirect {
+                                            d.indirect_data_addr = u16::from_le_bytes([
+                                                self.rest
+                                                    .read_byte(table_addr.wrapping_add(1) as usize)
+                                                    .0,
+                                                self.rest
+                                                    .read_byte(table_addr.wrapping_add(2) as usize)
+                                                    .0,
+                                            ]);
+                                            d.current_hdma_table_addr = table_addr.wrapping_add(3);
+                                        } else {
+                                            d.src_addr = table_addr.wrapping_add(1);
+                                            d.current_hdma_table_addr = table_addr
+                                                .wrapping_add(1 + d.transfer_pattern.len() as u16);
+                                        }
                                         // Trigger DMA
                                         d.is_executing = true;
                                         d.num_bytes_transferred = 0;
                                     }
-                                    // todo
-                                    _ => d.hdma_enable = false,
                                 }
                             }
                             _ => {
-                                // Todo: Repeat
                                 d.hdma_line_counter -= 1;
+                                if d.hdma_repeat {
+                                    d.is_executing = true;
+                                    d.num_bytes_transferred = 0;
+                                }
                             }
                         }
                     }

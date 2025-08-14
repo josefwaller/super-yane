@@ -31,6 +31,8 @@ pub struct Channel {
     pub hdma_bank: u8,
     /// Address of the HDMA table
     pub hdma_table_addr: u16,
+    /// Address of the indirect data, if used
+    pub indirect_data_addr: u16,
     /// Current address of the HDMA table
     /// This should always point to the next table entry to be read.
     /// At the end of VBlank it is initialized to [`Channel::hdma_table_addr`]
@@ -56,6 +58,7 @@ impl Default for Channel {
             hdma_bank: 0,
             hdma_table_addr: 0,
             current_hdma_table_addr: 0,
+            indirect_data_addr: 0,
             hdma_repeat: false,
             hdma_enable: false,
         }
@@ -66,7 +69,12 @@ impl Channel {
         self.src_bank as usize * 0x10000 + self.current_hdma_table_addr as usize
     }
     pub fn full_src_addr(&self) -> usize {
-        self.src_bank as usize * 0x10000 + self.src_addr as usize
+        self.src_bank as usize * 0x10000
+            + if self.indirect {
+                self.indirect_data_addr as usize
+            } else {
+                self.src_addr as usize
+            }
     }
     pub fn hdma_indirect_table_addr(&self) -> usize {
         // Byte counter registers are also used for HDMA table address
@@ -83,13 +91,17 @@ impl Channel {
         }
     }
     pub fn inc_src_addr(&mut self) {
-        if self.is_hdma() {
-            self.src_addr = self.src_addr.wrapping_add(1);
+        if self.indirect {
+            self.indirect_data_addr = self.indirect_data_addr.wrapping_add(1);
         } else {
-            match self.adjust_mode {
-                AddressAdjustMode::Increment => self.src_addr = self.src_addr.wrapping_add(1),
-                AddressAdjustMode::Decrement => self.src_addr = self.src_addr.wrapping_sub(1),
-                _ => {}
+            if self.is_hdma() {
+                self.src_addr = self.src_addr.wrapping_add(1);
+            } else {
+                match self.adjust_mode {
+                    AddressAdjustMode::Increment => self.src_addr = self.src_addr.wrapping_add(1),
+                    AddressAdjustMode::Decrement => self.src_addr = self.src_addr.wrapping_sub(1),
+                    _ => {}
+                }
             }
         }
     }

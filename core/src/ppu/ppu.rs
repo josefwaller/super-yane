@@ -647,19 +647,19 @@ impl Ppu {
                     macro_rules! bg {
                         ($index: expr, $priority: expr) => {{
                             let b = &self.backgrounds[$index];
+                            let wv: [bool; 2] =
+                                core::array::from_fn(|i| window_vals[i] ^ b.window_invert[i]);
                             let v = if b.window_enabled[0] {
                                 if b.window_enabled[1] {
-                                    // todo
-                                    false
+                                    b.window_mask_logic.compute(wv[0], wv[1])
                                 } else {
-                                    window_vals[0] ^ b.window_invert[0]
+                                    wv[0]
                                 }
                             } else if b.window_enabled[1] {
-                                window_vals[0] ^ b.window_invert[1]
+                                wv[1]
                             } else {
                                 false
                             };
-                            let v = false;
                             if v {
                                 None
                             } else {

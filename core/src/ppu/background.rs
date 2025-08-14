@@ -20,6 +20,17 @@ impl From<u8> for WindowMaskLogic {
         }
     }
 }
+impl WindowMaskLogic {
+    pub fn compute(&self, a: bool, b: bool) -> bool {
+        use WindowMaskLogic::*;
+        match self {
+            Or => a | b,
+            And => a & b,
+            Xor => a ^ b,
+            Xnor => !(a ^ b),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Background {
