@@ -98,7 +98,8 @@ impl ExternalArchitecture {
                     }
                 }
                 0x4220..0x8000 => (self.ppu.read_byte(a), 6),
-                _ => (self.cartridge.read_byte(addr), 8),
+                0x8000..=0xFFFF => (self.cartridge.read_byte(addr), 8),
+                _ => (0, 6),
             }
         } else {
             (
