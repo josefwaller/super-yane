@@ -376,6 +376,7 @@ impl Ppu {
     }
     /// Write a single byte to OAM
     fn write_oam_byte(&mut self, addr: usize, value: u8) {
+        let addr = addr % (0x220);
         if addr < 0x200 {
             let sprite_index = (addr / 4) % self.oam_sprites.len();
             let sprite = &mut self.oam_sprites[sprite_index];
@@ -658,6 +659,7 @@ impl Ppu {
                             } else {
                                 false
                             };
+                            let v = false;
                             if v {
                                 None
                             } else {

@@ -148,8 +148,8 @@ impl ExternalArchitecture {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
                                 self.dma_channels[i].is_executing = true;
-                                self.dma_channels[i].init_byte_counter =
-                                    self.dma_channels[i].byte_counter;
+                                self.dma_channels[i].num_bytes_transferred = 0;
+                                debug!("STart DMA {}", i);
                             }
                         });
                         return 6;
@@ -198,10 +198,12 @@ impl ExternalArchitecture {
                                 2 => {
                                     // Address low byte
                                     d.src_addr = (d.src_addr & 0xFF00) | value as u16;
+                                    d.hdma_table_addr = d.src_addr;
                                 }
                                 3 => {
                                     // Address high byte
                                     d.src_addr = (d.src_addr & 0x00FF) | (value as u16 * 0x100);
+                                    d.hdma_table_addr = d.src_addr;
                                 }
                                 4 => {
                                     // Address bank
@@ -220,17 +222,24 @@ impl ExternalArchitecture {
                                     d.hdma_bank = value;
                                 }
                                 8 => {
-                                    d.hdma_current_table_addr =
-                                        (d.hdma_current_table_addr & 0xFF00) + value as usize;
+                                    d.current_hdma_table_addr =
+                                        (d.current_hdma_table_addr & 0xFF00) + value as u16;
                                 }
                                 9 => {
-                                    d.hdma_current_table_addr = (value as usize) * 0x10000
-                                        + (d.hdma_current_table_addr & 0x00FF);
+                                    d.current_hdma_table_addr = (value as u16) * 0x100
+                                        + (d.current_hdma_table_addr & 0x00FF);
                                 }
-                                0xA => {
-                                    d.hdma_line_counter = Some(value & 0x7F);
-                                    d.hdma_repeat = (value & 0x80) != 0;
-                                }
+                                0xA => match value {
+                                    0 => {}
+                                    1..=0x80 => {
+                                        d.hdma_line_counter = value;
+                                        d.hdma_repeat = false;
+                                    }
+                                    0x81..=0xFF => {
+                                        d.hdma_line_counter = value - 0x80;
+                                        d.hdma_repeat = true
+                                    }
+                                },
                                 _ => {}
                             }
                         }
@@ -441,10 +450,10 @@ impl Console {
                     self.cpu.on_nmi(&mut self.rest);
                 }
                 // Disable all HDMA channels
-                self.rest
-                    .dma_channels
-                    .iter_mut()
-                    .for_each(|d| d.hdma_enable = false);
+                self.rest.dma_channels.iter_mut().for_each(|d| {
+                    d.hdma_enable = false;
+                    d.hdma_line_counter = 0;
+                });
             }
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
             if vblank && !self.ppu().is_in_vblank() {
@@ -454,36 +463,50 @@ impl Console {
                             self.rest.dma_channels[i]
                         };
                     }
-                    if d!().hdma_enable {
-                        // Copy line number
-                        let table_addr = d!().full_src_addr();
-                        let lc = self.rest.read_byte(table_addr).0;
-                        d!().hdma_line_counter = Some(lc);
-                        // Todo: Properly wrap at boundary
-                        d!().hdma_current_table_addr = table_addr + 1;
-                    }
+                    // Set line counter to 0 (will trigger an HDMA at scanline 0 if the channel is enabled)
+                    d!().hdma_line_counter = 0;
+                    // Copy table address
+                    d!().current_hdma_table_addr = d!().hdma_table_addr;
                 });
             }
             if !vblank && !hblank && self.ppu().is_in_hblank() {
                 let scanline = self.ppu().scanline();
                 // Trigger HDMAs
-                self.rest
-                    .dma_channels
-                    .iter_mut()
-                    .for_each(|d| match d.hdma_line_counter {
-                        Some(l) => {
-                            let l = l.wrapping_sub(1);
-                            if l == 0 {
-                                d.is_executing = true;
-                                d.init_byte_counter = d.transfer_pattern.len() as u16;
-                                d.byte_counter = d.transfer_pattern.len() as u16;
-                                d.hdma_line_counter = None;
-                            } else {
-                                d.hdma_line_counter = Some(l);
+                (0..self.rest.dma_channels.len()).for_each(|i| {
+                    let mut d = self.rest.dma_channels[i].clone();
+                    if d.hdma_enable {
+                        match d.hdma_line_counter {
+                            0 => {
+                                // Read next byte
+                                match self.rest.read_byte(d.hdma_table_addr()).0 {
+                                    0 => d.hdma_enable = false,
+                                    lc @ 1..=0x80 => {
+                                        // Copy values
+                                        d.hdma_repeat = false;
+                                        d.hdma_line_counter = lc;
+                                        // Set up DMA values
+                                        // Todo: If indirect this should pointer somewhere else
+                                        // And we should add different values to current_hdma_table_addr
+                                        d.src_addr = d.current_hdma_table_addr.wrapping_add(1);
+                                        d.current_hdma_table_addr = d
+                                            .current_hdma_table_addr
+                                            .wrapping_add(1 + d.transfer_pattern.len() as u16);
+                                        // Trigger DMA
+                                        d.is_executing = true;
+                                        d.num_bytes_transferred = 0;
+                                    }
+                                    // todo
+                                    _ => d.hdma_enable = false,
+                                }
+                            }
+                            _ => {
+                                // Todo: Repeat
+                                d.hdma_line_counter -= 1;
                             }
                         }
-                        None => {}
-                    })
+                    }
+                    self.rest.dma_channels[i] = d;
+                })
             }
             while self.rest.total_apu_clocks * 1_000_000 / 1_024_000
                 < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000

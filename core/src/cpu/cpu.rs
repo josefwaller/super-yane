@@ -1,4 +1,4 @@
-use crate::{console::ExternalArchitecture, dma::AddressAdjustMode as DmaAddressAdjustMode};
+use crate::console::ExternalArchitecture;
 use wdc65816::{HasAddressBus, Processor as WdcProcessor};
 
 use log::*;
@@ -14,58 +14,25 @@ impl Cpu {
             (0..memory.dma_channels.len()).find(|i| memory.dma_channels[*i].is_executing);
         match current_dma {
             Some(i) => {
-                // This macro just exists to get around borrowing memory as mutable twice.
-                // Once for the DMA register, and once for the read/write calls.
-                macro_rules! d {
-                    () => {
-                        memory.dma_channels[i]
-                    };
-                }
-                // Get number of bytes to transfer
-                let bytes_transferred =
-                    d!().init_byte_counter.wrapping_sub(d!().byte_counter) as usize;
+                // Temporarily clone
+                let mut d = memory.dma_channels[i].clone();
                 // Get addresses to read to/from
-                let src = d!().full_src_addr();
-                let dest = d!().dest_addr
-                    + d!().transfer_pattern[bytes_transferred % d!().transfer_pattern.len()]
+                let src = d.full_src_addr();
+                let dest = d.dest_addr
+                    + d.transfer_pattern
+                        [d.num_bytes_transferred as usize % d.transfer_pattern.len()]
                         as usize;
                 // Transfer
                 let v = memory.read(src);
                 memory.write(dest, v);
                 // Increment source address
-                if d!().is_hdma() {
-                    d!().src_addr = d!().src_addr.wrapping_add(1);
-                } else {
-                    match d!().adjust_mode {
-                        DmaAddressAdjustMode::Increment => {
-                            d!().src_addr = d!().src_addr.wrapping_add(1)
-                        }
-                        DmaAddressAdjustMode::Decrement => {
-                            d!().src_addr = d!().src_addr.wrapping_sub(1)
-                        }
-                        _ => {}
-                    }
-                }
+                d.inc_src_addr();
                 // Decrement byte counter
-                d!().byte_counter = d!().byte_counter.wrapping_sub(1);
-                if d!().byte_counter == 0 {
-                    // Check if we are doing an HDMA (may continue)
-                    if d!().is_hdma() {
-                        let lc = memory.read_byte(d!().full_src_addr()).0;
-                        match lc {
-                            0 => d!().is_executing = false,
-                            0x01..0x80 => {
-                                // Go to next entry
-                                d!().hdma_line_counter = Some(lc);
-                                d!().src_addr = d!().src_addr.wrapping_add(1);
-                            }
-                            // todo
-                            _ => d!().is_executing = false,
-                        }
-                    } else {
-                        d!().is_executing = false;
-                    }
+                d.num_bytes_transferred = d.num_bytes_transferred.wrapping_add(1);
+                if d.num_bytes_transferred == d.get_num_bytes() {
+                    d.is_executing = false;
                 }
+                memory.dma_channels[i] = d;
             }
             None => self.core.step(memory),
         }
