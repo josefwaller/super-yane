@@ -52,6 +52,7 @@ pub struct Background {
     pub windows_enabled_sub: bool,
     pub window_enabled: [bool; 4],
     pub window_invert: [bool; 4],
+    pub color_math_enable: bool,
 }
 impl Default for Background {
     fn default() -> Self {
@@ -72,6 +73,7 @@ impl Default for Background {
             windows_enabled_sub: false,
             window_enabled: [false; 4],
             window_invert: [false; 4],
+            color_math_enable: false,
         }
     }
 }

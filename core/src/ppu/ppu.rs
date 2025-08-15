@@ -11,6 +11,8 @@ const SCANLINES: usize = 262;
 pub struct Window {
     pub left: usize,
     pub right: usize,
+    pub enabled_color: bool,
+    pub invert_color: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -35,6 +37,73 @@ pub enum VramIncMode {
     /// Increment after reading the low byte or writing the high byte
     LowReadHighWrite = 1,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum ColorBlendMode {
+    Add,
+    Subtract,
+    AddHalf,
+    SubtractHalf,
+}
+impl From<u8> for ColorBlendMode {
+    fn from(value: u8) -> Self {
+        use ColorBlendMode::*;
+        match value & 0x03 {
+            0 => Add,
+            1 => Subtract,
+            2 => AddHalf,
+            3 => SubtractHalf,
+            _ => unreachable!(),
+        }
+    }
+}
+impl ColorBlendMode {
+    fn compute(&self, left: u16, right: u16) -> u16 {
+        use ColorBlendMode::*;
+        match self {
+            Add => left.wrapping_add(right),
+            Subtract => left.wrapping_sub(right),
+            AddHalf => (left / 2).wrapping_add(right / 2),
+            SubtractHalf => (left / 2).wrapping_sub(right / 2),
+        }
+    }
+}
+#[derive(Clone, Copy)]
+pub enum ColorMathSource {
+    Fixed,
+    Subscreen,
+}
+#[derive(Clone, Copy)]
+pub enum WindowRegion {
+    Nowhere,
+    Outside,
+    Inside,
+    Everywhere,
+}
+impl From<u8> for WindowRegion {
+    fn from(value: u8) -> Self {
+        use WindowRegion::*;
+        match value & 003 {
+            0 => Nowhere,
+            1 => Outside,
+            2 => Inside,
+            3 => Everywhere,
+            _ => unreachable!(),
+        }
+    }
+}
+impl WindowRegion {
+    pub fn compute(&self, val: bool) -> bool {
+        use WindowRegion::*;
+        match self {
+            Nowhere => false,
+            Everywhere => true,
+            Inside => val,
+            Outside => !val,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Ppu {
     /// VBlank flag
@@ -75,8 +144,17 @@ pub struct Ppu {
     /// Buffers of sprite pixels for the current scanline.
     /// One for every sprite layer, ordered by priority
     oam_buffers: [[Option<u16>; 0x100]; 4],
-
+    pub color_blend_mode: ColorBlendMode,
+    pub color_math_enable_backdrop: bool,
+    pub color_math_enable_obj: bool,
+    // RGB format
+    pub fixed_color: [u8; 3],
+    pub color_math_src: ColorMathSource,
+    pub color_window_main_region: WindowRegion,
+    pub color_window_sub_region: WindowRegion,
     pub windows: [Window; 2],
+    pub color_window_logic: WindowMaskLogic,
+    pub direct_color: bool,
 }
 
 impl Default for Ppu {
@@ -113,6 +191,15 @@ impl Default for Ppu {
             oam_sprites: [Sprite::default(); 0x80],
             oam_buffers: [[None; 0x100]; 4],
             windows: [Window::default(); 2],
+            color_blend_mode: ColorBlendMode::Add,
+            color_math_enable_backdrop: false,
+            color_math_enable_obj: false,
+            fixed_color: [0; 3],
+            color_math_src: ColorMathSource::Fixed,
+            color_window_main_region: WindowRegion::Nowhere,
+            color_window_sub_region: WindowRegion::Nowhere,
+            color_window_logic: WindowMaskLogic::And,
+            direct_color: false,
         }
     }
 }
@@ -312,6 +399,12 @@ impl Ppu {
             },
             0x2123 => window_settings!(0),
             0x2124 => window_settings!(2),
+            0x2125 => {
+                self.windows[0].invert_color = bit(value, 4);
+                self.windows[0].enabled_color = bit(value, 5);
+                self.windows[1].invert_color = bit(value, 6);
+                self.windows[1].enabled_color = bit(value, 7);
+            }
             0x2126 => self.windows[0].left = value as usize,
             0x2127 => self.windows[0].right = value as usize,
             0x2128 => self.windows[1].left = value as usize,
@@ -320,6 +413,9 @@ impl Ppu {
                 self.backgrounds.iter_mut().enumerate().for_each(|(i, b)| {
                     b.window_mask_logic = WindowMaskLogic::from(value >> (2 * i))
                 })
+            }
+            0x212B => {
+                self.color_window_logic = WindowMaskLogic::from(value >> 2);
             }
             0x212C => {
                 (0..4).for_each(|i| {
@@ -343,6 +439,37 @@ impl Ppu {
                 .iter_mut()
                 .enumerate()
                 .for_each(|(i, b)| b.windows_enabled_sub = bit(value, i)),
+            0x2130 => {
+                self.direct_color = bit(value, 0);
+                self.color_math_src = if bit(value, 1) {
+                    ColorMathSource::Subscreen
+                } else {
+                    ColorMathSource::Fixed
+                };
+                self.color_window_sub_region = WindowRegion::from(value >> 4);
+                self.color_window_main_region = WindowRegion::from(value >> 6);
+            }
+            0x2131 => {
+                self.backgrounds
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, b)| b.color_math_enable = bit(value, i));
+                self.color_math_enable_obj = bit(value, 4);
+                self.color_math_enable_backdrop = bit(value, 5);
+                self.color_blend_mode = ColorBlendMode::from(value >> 6);
+            }
+            0x2132 => {
+                let v = value & 0x1F;
+                if bit(value, 5) {
+                    self.fixed_color[2] = v;
+                }
+                if bit(value, 6) {
+                    self.fixed_color[1] = v;
+                }
+                if bit(value, 7) {
+                    self.fixed_color[0] = v;
+                }
+            }
             // Todo
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
             0x213B => debug!("Writing to CGRAM read"),
@@ -625,6 +752,20 @@ impl Ppu {
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
                         self.windows[i].left <= x && x <= self.windows[i].right
                     });
+                    let color_window_value = if self.windows[0].enabled_color {
+                        if self.windows[1].enabled_color {
+                            self.color_window_logic.compute(
+                                window_vals[0] ^ self.windows[0].invert_color,
+                                window_vals[1] ^ self.windows[1].invert_color,
+                            )
+                        } else {
+                            window_vals[0] ^ self.windows[0].invert_color
+                        }
+                    } else if self.windows[1].enabled_color {
+                        window_vals[1] ^ self.windows[1].invert_color
+                    } else {
+                        false
+                    };
                     // Structured (background_number, bpp)
                     let backgrounds = match self.bg_mode {
                         0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
@@ -694,6 +835,7 @@ impl Ppu {
                                 bg_value!($index, $priority),
                                 bg_on_layer!($index, main_screen_enable, windows_enabled_main),
                                 bg_on_layer!($index, sub_screen_enable, windows_enabled_sub),
+                                self.backgrounds[$index].color_math_enable,
                             )
                         };
                     }
@@ -704,14 +846,16 @@ impl Ppu {
                                 self.oam_buffers[$index][x],
                                 self.obj_main_enable,
                                 self.obj_subscreen_enable,
+                                // Todo: check if sprite is using palette 4-7
+                                false,
                             )
                         };
                     }
-
-                    const EMPTY: (Option<u16>, bool, bool) = (None, false, false);
+                    // Format (pixel value, draw on main screen, draw on subscreen, apply color math)
+                    const EMPTY: (Option<u16>, bool, bool, bool) = (None, false, false, false);
                     // The pixels at the given dot, in order from front to back
                     // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
-                    let in_order_pixels: Vec<(Option<u16>, bool, bool)> = match self.bg_mode {
+                    let in_order_pixels: Vec<(Option<u16>, bool, bool, bool)> = match self.bg_mode {
                         0 => [
                             spr!(3),
                             bg!(0, true),
@@ -773,18 +917,61 @@ impl Ppu {
                                 .iter()
                                 // todo can probably combine these two lines
                                 .find(|bg_pixel| bg_pixel.0.is_some() && bg_pixel.$field)
-                                .map_or(None, |p| p.0)
+                                .map_or(None, |b| Some((b.0.unwrap(), b.3)))
                         }};
                     }
                     // Evaluate subscreen value
                     let subscreen_val = get_pixel!(2);
                     let mainscreen_val = get_pixel!(1);
+                    // Can be none if if the color window makes the sub screen transparent
+                    let color_math_source = match self.color_math_src {
+                        ColorMathSource::Subscreen => {
+                            // Backdrop for the subscreen is the fixed color
+                            subscreen_val.map_or(
+                                if self.color_window_sub_region.compute(color_window_value) {
+                                    None
+                                } else {
+                                    Some(self.fixed_color_value())
+                                },
+                                |ss| Some(ss.0),
+                            )
+                        }
+                        ColorMathSource::Fixed => Some(self.fixed_color_value()),
+                    };
+                    // Whether the window is masking the main layer
+                    let hide_main = match self.color_window_main_region {
+                        WindowRegion::Nowhere => false,
+                        WindowRegion::Everywhere => true,
+                        WindowRegion::Inside => color_window_value,
+                        WindowRegion::Outside => !color_window_value,
+                    };
                     // Color math goes here
-
+                    let p = if hide_main {
+                        0
+                    } else {
+                        mainscreen_val
+                            .map(|b| {
+                                if b.1 {
+                                    match color_math_source {
+                                        Some(c) => self.color_blend_mode.compute(b.0, c),
+                                        None => b.0,
+                                    }
+                                } else {
+                                    b.0
+                                }
+                            })
+                            .unwrap_or(if self.color_math_enable_backdrop {
+                                match color_math_source {
+                                    Some(c) => self.color_blend_mode.compute(self.cgram[0], c),
+                                    None => self.cgram[0],
+                                }
+                            } else {
+                                self.cgram[0]
+                            })
+                    };
                     // Set screen pixel
                     // Temporary - just use subscreen as a fallback value
-                    self.screen_buffer[256 * y + x] =
-                        mainscreen_val.or(subscreen_val).unwrap_or(self.cgram[0]) & 0x7FFF;
+                    self.screen_buffer[256 * y + x] = p & 0x7FFF;
                 }
             }
         })
@@ -797,5 +984,9 @@ impl Ppu {
     }
     pub fn scanline(&self) -> usize {
         (self.dot / 4) / PIXELS_PER_SCANLINE
+    }
+    fn fixed_color_value(&self) -> u16 {
+        let c = &self.fixed_color;
+        c[2] as u16 + c[1] as u16 * 0x20 + c[0] as u16 * 0x400
     }
 }
