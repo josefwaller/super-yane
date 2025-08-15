@@ -142,6 +142,13 @@ impl Ppu {
                 }
                 val
             }
+            0x213B => {
+                self.cgram_latch = match self.cgram_latch {
+                    Some(_) => None,
+                    None => Some(0),
+                };
+                0
+            }
             // Todo: This shouldn't be in PPU
             0x4210 => {
                 let v = u8::from(self.vblank) << 7;
@@ -636,48 +643,75 @@ impl Ppu {
                         .map(|(i, _bpp)| {
                             // Should be impossible to there to be no pixels right now
                             let b = &mut self.backgrounds[*i];
-                            if b.main_screen_enable {
+                            if b.main_screen_enable || b.sub_screen_enable {
                                 b.pixel_buffer.pop_front().unwrap()
                             } else {
                                 None
                             }
                         })
                         .collect();
-                    // Get the pixel from a background layer with a given priority, or None
-                    macro_rules! bg {
+                    // Get the pixel from a background layer with a given priority, or None if the background is transparent
+                    macro_rules! bg_value {
                         ($index: expr, $priority: expr) => {{
+                            bg_pixels[$index]
+                                .filter(|(_, p)| *p == $priority)
+                                .map(|(v, _)| v)
+                        }};
+                    }
+                    // Get a bool returning true if a background is on a given layer (i.e. main or sub screen)
+                    macro_rules! bg_on_layer {
+                        ($index: expr, $enabled: ident, $window_enabled: ident) => {{
                             let b = &self.backgrounds[$index];
-                            let wv: [bool; 2] =
-                                core::array::from_fn(|i| window_vals[i] ^ b.window_invert[i]);
-                            let v = if b.window_enabled[0] {
-                                if b.window_enabled[1] {
-                                    b.window_mask_logic.compute(wv[0], wv[1])
-                                } else {
-                                    wv[0]
-                                }
-                            } else if b.window_enabled[1] {
-                                wv[1]
-                            } else {
+                            if !b.$enabled {
                                 false
-                            };
-                            if v {
-                                None
                             } else {
-                                bg_pixels[$index]
-                                    .filter(|(_, p)| *p == $priority)
-                                    .map(|(v, _)| v)
+                                let wv: [bool; 2] =
+                                    core::array::from_fn(|i| window_vals[i] ^ b.window_invert[i]);
+                                let v = if b.$window_enabled {
+                                    if b.window_enabled[0] {
+                                        if b.window_enabled[1] {
+                                            b.window_mask_logic.compute(wv[0], wv[1])
+                                        } else {
+                                            wv[0]
+                                        }
+                                    } else if b.window_enabled[1] {
+                                        wv[1]
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+                                // If window returns false, should return true
+                                !v
                             }
                         }};
+                    }
+                    // Get a tuple of the background's value and whether that pixel is on the main or sub screen
+                    macro_rules! bg {
+                        ($index: expr, $priority: expr) => {
+                            (
+                                bg_value!($index, $priority),
+                                bg_on_layer!($index, main_screen_enable, windows_enabled_main),
+                                bg_on_layer!($index, sub_screen_enable, windows_enabled_sub),
+                            )
+                        };
                     }
                     // Get the pixel from a sprite layer with a given priority, or None
                     macro_rules! spr {
                         ($index: expr) => {
-                            self.oam_buffers[$index][x]
+                            (
+                                self.oam_buffers[$index][x],
+                                self.obj_main_enable,
+                                self.obj_subscreen_enable,
+                            )
                         };
                     }
+
+                    const EMPTY: (Option<u16>, bool, bool) = (None, false, false);
                     // The pixels at the given dot, in order from front to back
                     // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
-                    let in_order_pixels = match self.bg_mode {
+                    let in_order_pixels: Vec<(Option<u16>, bool, bool)> = match self.bg_mode {
                         0 => [
                             spr!(3),
                             bg!(0, true),
@@ -694,7 +728,7 @@ impl Ppu {
                         ]
                         .to_vec(),
                         1 => [
-                            if self.bg3_prio { bg!(2, true) } else { None },
+                            if self.bg3_prio { bg!(2, true) } else { EMPTY },
                             spr!(3),
                             bg!(0, true),
                             bg!(1, true),
@@ -702,7 +736,7 @@ impl Ppu {
                             bg!(0, false),
                             bg!(1, false),
                             spr!(1),
-                            if self.bg3_prio { None } else { bg!(2, true) },
+                            if self.bg3_prio { EMPTY } else { bg!(2, true) },
                             spr!(0),
                             bg!(2, false),
                         ]
@@ -731,12 +765,26 @@ impl Ppu {
                         .to_vec(),
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
-                    let pixel = in_order_pixels
-                        .iter()
-                        // todo can probably combine these two lines
-                        .find(|bg_pixel| bg_pixel.is_some())
-                        .map_or(self.cgram[0], |p| p.unwrap() & 0x7FFF);
-                    self.screen_buffer[256 * y + x] = pixel;
+                    /// This macro gets a pixel if the given field is true
+                    /// Used to avoid duplicate logic for getting the main screen and sub screen pixels
+                    macro_rules! get_pixel {
+                        ($field: tt) => {{
+                            in_order_pixels
+                                .iter()
+                                // todo can probably combine these two lines
+                                .find(|bg_pixel| bg_pixel.0.is_some() && bg_pixel.$field)
+                                .map_or(None, |p| p.0)
+                        }};
+                    }
+                    // Evaluate subscreen value
+                    let subscreen_val = get_pixel!(2);
+                    let mainscreen_val = get_pixel!(1);
+                    // Color math goes here
+
+                    // Set screen pixel
+                    // Temporary - just use subscreen as a fallback value
+                    self.screen_buffer[256 * y + x] =
+                        mainscreen_val.or(subscreen_val).unwrap_or(self.cgram[0]) & 0x7FFF;
                 }
             }
         })
