@@ -545,9 +545,11 @@ impl Ppu {
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
         // Get all the slices
-        let slices = (0..(bpp as usize / 2))
-            .map(|i| self.get_2bpp_slice_at(slice_addr + 16 * i))
-            .collect::<Vec<[u8; 8]>>();
+        // This is just a slightly more optimized way to collect them without any heap allocation
+        const MAX_BPP: usize = 8;
+        let mut slices = [[0; 8]; MAX_BPP / 2];
+        (0..(bpp as usize / 2))
+            .for_each(|i| slices[i] = self.get_2bpp_slice_at(slice_addr + 16 * i));
         // Todo: Make this actually change
         let direct_color = false;
         let temp: [u16; 256] = core::array::from_fn(|i| {
@@ -700,11 +702,11 @@ impl Ppu {
                         false
                     };
                     // Structured (background_number, bpp)
-                    let backgrounds = match self.bg_mode {
-                        0 => [(0, 2), (1, 2), (2, 2), (3, 2)].to_vec(),
-                        1 => [(0, 4), (1, 4), (2, 2)].to_vec(),
-                        3 => [(0, 8), (1, 4)].to_vec(),
-                        5 => [(0, 4), (1, 2)].to_vec(),
+                    let backgrounds: &[(usize, usize)] = match self.bg_mode {
+                        0 => &[(0, 2), (1, 2), (2, 2), (3, 2)],
+                        1 => &[(0, 4), (1, 4), (2, 2)],
+                        3 => &[(0, 8), (1, 4)],
+                        5 => &[(0, 4), (1, 2)],
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
                     for (i, bpp) in backgrounds.iter() {
@@ -712,18 +714,15 @@ impl Ppu {
                             self.extend_background_byte_buffer(*i, (x, y), *bpp);
                         }
                     }
-                    let bg_pixels: Vec<Option<(u16, bool)>> = backgrounds
-                        .iter()
-                        .map(|(i, _bpp)| {
-                            // Should be impossible to there to be no pixels right now
-                            let b = &mut self.backgrounds[*i];
-                            if b.main_screen_enable || b.sub_screen_enable {
-                                b.pixel_buffer.pop_front().unwrap()
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
+                    let bg_pixels: [Option<(u16, bool)>; 4] = core::array::from_fn(|i| {
+                        // Should be impossible to there to be no pixels right now
+                        let b = &mut self.backgrounds[i];
+                        if b.main_screen_enable || b.sub_screen_enable {
+                            b.pixel_buffer.pop_front().unwrap()
+                        } else {
+                            None
+                        }
+                    });
                     // Get the pixel from a background layer with a given priority, or None if the background is transparent
                     macro_rules! bg_value {
                         ($index: expr, $priority: expr) => {{
