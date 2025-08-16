@@ -1,4 +1,4 @@
-use crate::ppu::utils::{color_to_rgb, rgb_to_color};
+use crate::utils::{color_to_rgb, rgb_to_color};
 
 #[derive(Clone, Copy, Debug)]
 pub enum ColorBlendMode {

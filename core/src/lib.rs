@@ -3,10 +3,10 @@ mod console;
 mod cpu;
 mod input_port;
 mod math;
-mod utils;
 
 pub mod dma;
 pub mod ppu;
+pub mod utils;
 pub use cartridge::Cartridge;
 pub use console::Console;
 pub use cpu::Cpu;

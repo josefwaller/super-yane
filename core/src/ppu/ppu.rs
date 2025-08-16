@@ -1,10 +1,12 @@
 use crate::Background;
-use crate::ppu::{
-    Sprite,
-    background::WindowMaskLogic,
-    color_math::{ColorBlendMode, ColorMathSource},
+use crate::{
+    ppu::{
+        Sprite,
+        background::WindowMaskLogic,
+        color_math::{ColorBlendMode, ColorMathSource},
+        window::{Window, WindowRegion},
+    },
     utils::rgb_to_color,
-    window::{Window, WindowRegion},
 };
 
 use crate::utils::bit;
