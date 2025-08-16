@@ -172,6 +172,7 @@ pub struct Ppu {
     pub windows: [Window; 2],
     pub color_window_logic: WindowMaskLogic,
     pub direct_color: bool,
+    pub overscan: bool,
 }
 
 impl Default for Ppu {
@@ -217,6 +218,7 @@ impl Default for Ppu {
             color_window_sub_region: WindowRegion::Nowhere,
             color_window_logic: WindowMaskLogic::And,
             direct_color: false,
+            overscan: false,
         }
     }
 }
@@ -484,7 +486,9 @@ impl Ppu {
                 });
             }
             // Todo
-            0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
+            0x2133 => {
+                self.overscan = bit(value, 2);
+            }
             0x213B => debug!("Writing to CGRAM read"),
             _ => {}
         }
@@ -985,7 +989,7 @@ impl Ppu {
         })
     }
     pub fn is_in_vblank(&self) -> bool {
-        (self.dot / 4) / PIXELS_PER_SCANLINE > 240
+        (self.dot / 4) / PIXELS_PER_SCANLINE > if self.overscan { 240 } else { 225 }
     }
     pub fn is_in_hblank(&self) -> bool {
         (self.dot / 4) % PIXELS_PER_SCANLINE >= 274
