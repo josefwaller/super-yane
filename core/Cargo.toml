@@ -2,10 +2,12 @@
 name = "super-yane"
 version = "0.1.0"
 edition = "2024"
+description = "An emulation library for the Super Nintendo Entertainment System"
+license = "MIT"
 
 [dependencies]
-wdc65816 = { path = "../wdc65816" }
-spc700 = { path = "../spc700" }
+wdc65816 = { path = "../wdc65816", version = "0.1.0" }
+spc700 = { path = "../spc700", version = "0.1.0" }
 log = { workspace = true }
 paste = "1.0.15"
 

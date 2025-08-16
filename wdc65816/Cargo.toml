@@ -2,6 +2,8 @@
 name = "wdc65816"
 version = "0.1.0"
 edition = "2024"
+description = "An emulation library for the WDC 65816 processor"
+license = "MIT"
 
 [dependencies]
 log = { workspace = true }

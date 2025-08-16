@@ -2,6 +2,8 @@
 name = "spc700"
 version = "0.1.0"
 edition = "2024"
+description = "An emulation library of the SPC700 library"
+license = "MIT"
 
 [dependencies]
 log = { workspace = true }
