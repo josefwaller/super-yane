@@ -44,6 +44,9 @@ pub struct Ppu {
     pub vram_addr: usize,
     pub vram_remap: u32,
     pub vram: [u8; 0x10000],
+    // Cache of VRAM decoded in 2BPP format
+    // Hopefully speeds things up a bit
+    vram_cache_2bpp: Box<[[u8; 8]; 0x10000 / 2]>,
     vram_latch_low: u8,
     vram_latch_high: u8,
     pub cgram: [u16; 0x100],
@@ -96,6 +99,7 @@ impl Default for Ppu {
             vram_remap: 0,
             vram_addr: 0,
             vram: [0; 0x10000],
+            vram_cache_2bpp: Box::new([[0; 8]; 0x10000 / 2]),
             vram_latch_low: 0,
             vram_latch_high: 0,
             cgram: [0; 0x100],
@@ -293,7 +297,7 @@ impl Ppu {
             0x2118 => {
                 let remapped_addr = self.remapped_vram_addr();
                 // Write the low byte
-                self.vram[2 * remapped_addr] = value;
+                self.write_vram(2 * remapped_addr, value);
                 if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
                     self.inc_vram_addr();
                 }
@@ -301,7 +305,7 @@ impl Ppu {
             0x2119 => {
                 let remapped_addr = self.remapped_vram_addr();
                 // Write the high byte
-                self.vram[2 * remapped_addr + 1] = value;
+                self.write_vram(2 * remapped_addr + 1, value);
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
                     self.inc_vram_addr();
                 }
@@ -395,6 +399,15 @@ impl Ppu {
             _ => {}
         }
     }
+    fn write_vram(&mut self, addr: usize, value: u8) {
+        self.vram[addr] = value;
+        // Update cache
+        let cache_addr = (addr / 2) * 2;
+        let low = self.vram[cache_addr % self.vram.len()];
+        let high = self.vram[(cache_addr + 1) % self.vram.len()];
+        self.vram_cache_2bpp[addr / 2] =
+            core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01));
+    }
     fn inc_vram_addr(&mut self) {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % 0x8000;
     }
@@ -459,9 +472,10 @@ impl Ppu {
         }
     }
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
-        let low = self.vram[addr % self.vram.len()];
-        let high = self.vram[(addr + 1) % self.vram.len()];
-        core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01))
+        // let low = self.vram[addr % self.vram.len()];
+        // let high = self.vram[(addr + 1) % self.vram.len()];
+        // core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01))
+        self.vram_cache_2bpp[addr / 2]
     }
     fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
         // Get an immutable reference to the background
