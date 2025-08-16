@@ -13,6 +13,8 @@ use paste::paste;
 
 pub const APU_CLOCK_SPEED_HZ: u64 = 1_024_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
+pub const WRAM_SIZE: usize = 0x20000;
+pub const APU_RAM_SIZE: usize = 0x10000;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ApuTimer {
@@ -24,8 +26,8 @@ pub struct ApuTimer {
 // Contains everything except the processor(s)
 #[derive(Clone)]
 pub struct ExternalArchitecture {
-    pub ram: [u8; 0x20000],
-    pub spc_ram: [u8; 0x10000],
+    pub ram: Box<[u8; WRAM_SIZE]>,
+    pub spc_ram: Box<[u8; APU_RAM_SIZE]>,
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
     pub expose_ipl_rom: bool,
@@ -385,7 +387,7 @@ macro_rules! rest_field {
 }
 impl Console {
     rest_field! {ppu, Ppu}
-    rest_field! {ram, [u8; 0x20000]}
+    rest_field! {ram, Box<[u8; WRAM_SIZE]>}
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
     rest_field! {total_master_clocks, u64}
@@ -410,11 +412,11 @@ impl Console {
             cpu: Cpu::default(),
             apu: Spc700::default(),
             rest: ExternalArchitecture {
-                ram: [0; 0x20000],
+                ram: Box::new([0; WRAM_SIZE]),
                 cpu_to_apu_reg: [0; 4],
                 apu_to_cpu_reg: [0; 4],
                 expose_ipl_rom: true,
-                spc_ram: [0; 0x10000],
+                spc_ram: Box::new([0; APU_RAM_SIZE]),
                 cartridge: Cartridge::from_data(cartridge_data),
                 input_ports: [InputPort::default_standard_controller(); 2],
                 ppu: Ppu::default(),

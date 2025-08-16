@@ -627,7 +627,7 @@ impl Application {
                 ram(
                     match self.ram_display {
                         RamDisplay::VideoRam => &self.console.ppu().vram,
-                        RamDisplay::WorkRam => self.console.ram(),
+                        RamDisplay::WorkRam => self.console.ram().as_slice(),
                         RamDisplay::ColorRam => &[],
                     },
                     self.ram_offset,
