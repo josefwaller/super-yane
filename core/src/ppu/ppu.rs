@@ -12,8 +12,8 @@ use crate::{
 use crate::utils::bit;
 use log::*;
 
-const PIXELS_PER_SCANLINE: usize = 341;
-const SCANLINES: usize = 262;
+pub const PIXELS_PER_SCANLINE: usize = 341;
+pub const SCANLINES: usize = 262;
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 pub enum VramIncMode {

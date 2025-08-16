@@ -6,5 +6,5 @@ mod utils;
 mod window;
 
 pub use background::Background;
-pub use ppu::Ppu;
+pub use ppu::*;
 pub use sprite::Sprite;
