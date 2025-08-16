@@ -7,6 +7,7 @@ use wdc65816::{HasAddressBus, Processor};
 use crate::{
     Cartridge, Cpu, InputPort, Ppu,
     dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
+    math::Math,
 };
 use paste::paste;
 
@@ -27,6 +28,8 @@ pub struct ExternalArchitecture {
     pub expose_ipl_rom: bool,
     pub cartridge: Cartridge,
     pub ppu: Ppu,
+    // Math module for multiplication and division
+    pub math: Math,
     /// DMA Channels
     pub dma_channels: [DmaChannel; 8],
     pub input_ports: [InputPort; 2],
@@ -35,9 +38,6 @@ pub struct ExternalArchitecture {
     open_bus_value: u8,
     nmi_enabled: bool,
     pub timers: [ApuTimer; 3],
-    // todo rename
-    m_a: u8,
-    m_b: u8,
     /// Whether fast ROM access is enabled through MEMSEL
     fast_rom_enabled: bool,
 }
@@ -62,8 +62,7 @@ impl ExternalArchitecture {
                 0x2000..0x2100 => (0, 6),
                 0x2100..0x2140 => (self.ppu.read_byte(a), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
-                0x4216 => ((self.m_a as u16 * self.m_b as u16).to_le_bytes()[0], 6),
-                0x4217 => ((self.m_a as u16 * self.m_b as u16).to_le_bytes()[1], 6),
+                0x4002..=0x4006 | 0x4214..=0x4217 => (self.math.read_byte(a), 6),
                 0x4218..0x4220 => {
                     // Read controller data
                     let i = (a / 2) % 2;
@@ -146,14 +145,6 @@ impl ExternalArchitecture {
                         self.nmi_enabled = (value & 0x80) != 0;
                         6
                     }
-                    0x4202 => {
-                        self.m_a = value;
-                        6
-                    }
-                    0x4203 => {
-                        self.m_b = value;
-                        6
-                    }
                     0x420B => {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
@@ -170,6 +161,10 @@ impl ExternalArchitecture {
                                 d.hdma_enable = true;
                             }
                         });
+                        6
+                    }
+                    0x4202..=0x4206 | 0x4214..=0x4217 => {
+                        self.math.write_byte(a, value);
                         6
                     }
                     0x420D => {
@@ -427,8 +422,7 @@ impl Console {
                 nmi_enabled: false,
                 timers: [ApuTimer::default(); 3],
                 fast_rom_enabled: false,
-                m_a: 0,
-                m_b: 0,
+                math: Math::default(),
             },
         };
         c.cpu.reset(&mut c.rest);
