@@ -168,6 +168,7 @@ impl ExternalArchitecture {
                             if (value >> i) & 0x01 != 0 {
                                 let d = &mut self.dma_channels[i];
                                 d.hdma_enable = true;
+                                debug!("HDMA {} enabled scanline {:X}", i, self.ppu.scanline());
                             }
                         });
                         6
@@ -288,10 +289,7 @@ impl ExternalArchitecture {
     }
     pub fn read_apu(&self, address: usize) -> u8 {
         match address {
-            0x00F4..0x00F8 => {
-                // debug!("APU reading from CPU {:04X}", address);
-                self.cpu_to_apu_reg[address - 0x00F4]
-            }
+            0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
             0x0000..0xFFC0 => self.spc_ram[address],
             0xFFC0..0x10000 => {
                 if self.expose_ipl_rom {
@@ -466,8 +464,10 @@ impl Console {
                     d.hdma_line_counter = 0;
                 });
             }
+            let scanline = self.ppu().scanline();
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
             if vblank && !self.ppu().is_in_vblank() {
+                debug!("End of VBLank scanline {:X}", scanline);
                 (0..self.rest.dma_channels.len()).for_each(|i| {
                     macro_rules! d {
                         () => {
@@ -478,10 +478,18 @@ impl Console {
                     d!().hdma_line_counter = 0;
                     // Copy table address
                     d!().current_hdma_table_addr = d!().hdma_table_addr;
+                    if d!().hdma_enable {
+                        debug!(
+                            "(H)DMA {} triggered, table address {:04X}, indirect {} repeat {}",
+                            i,
+                            d!().hdma_table_addr,
+                            d!().indirect,
+                            d!().hdma_repeat
+                        );
+                    }
                 });
             }
             if !vblank && !hblank && self.ppu().is_in_hblank() {
-                let scanline = self.ppu().scanline();
                 // Trigger HDMAs
                 (0..self.rest.dma_channels.len()).for_each(|i| {
                     let mut d = self.rest.dma_channels[i].clone();
@@ -527,6 +535,10 @@ impl Console {
                                         d.num_bytes_transferred = 0;
                                     }
                                 }
+                                debug!(
+                                    "Reloaded HDMA at {:X}, LC is {:X}",
+                                    scanline, d.hdma_line_counter
+                                );
                             }
                             _ => {
                                 d.hdma_line_counter -= 1;

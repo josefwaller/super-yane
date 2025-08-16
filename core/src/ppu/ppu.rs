@@ -7,6 +7,15 @@ use log::*;
 const PIXELS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
 
+// Split a color up into its RGB components
+fn color_to_rgb(color: u16) -> [u16; 3] {
+    [color & 0x1F, (color >> 5) & 0x1F, (color >> 10) & 0x1F]
+}
+// Build a color from its RGB components
+fn rgb_to_color(rgb: [u16; 3]) -> u16 {
+    rgb[0] as u16 + rgb[1] as u16 * 0x20 + rgb[2] as u16 * 0x400
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Window {
     pub left: usize,
@@ -50,8 +59,8 @@ impl From<u8> for ColorBlendMode {
         use ColorBlendMode::*;
         match value & 0x03 {
             0 => Add,
-            1 => Subtract,
-            2 => AddHalf,
+            1 => AddHalf,
+            2 => Subtract,
             3 => SubtractHalf,
             _ => unreachable!(),
         }
@@ -60,15 +69,23 @@ impl From<u8> for ColorBlendMode {
 impl ColorBlendMode {
     fn compute(&self, left: u16, right: u16) -> u16 {
         use ColorBlendMode::*;
-        match self {
-            Add => left.wrapping_add(right),
-            Subtract => left.wrapping_sub(right),
-            AddHalf => (left / 2).wrapping_add(right / 2),
-            SubtractHalf => (left / 2).wrapping_sub(right / 2),
-        }
+        let l_rgb = color_to_rgb(left);
+        let r_rgb = color_to_rgb(right);
+        let c = core::array::from_fn(|i| {
+            let l = l_rgb[i];
+            let r = r_rgb[i];
+            match self {
+                Add => l.saturating_add(r),
+                Subtract => l.saturating_sub(r),
+                AddHalf => l.saturating_add(r) / 2,
+                SubtractHalf => l.saturating_sub(r) / 2,
+            }
+            .clamp(0, 31)
+        });
+        rgb_to_color(c)
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ColorMathSource {
     Fixed,
     Subscreen,
@@ -148,7 +165,7 @@ pub struct Ppu {
     pub color_math_enable_backdrop: bool,
     pub color_math_enable_obj: bool,
     // RGB format
-    pub fixed_color: [u8; 3],
+    pub fixed_color: [u16; 3],
     pub color_math_src: ColorMathSource,
     pub color_window_main_region: WindowRegion,
     pub color_window_sub_region: WindowRegion,
@@ -460,15 +477,11 @@ impl Ppu {
             }
             0x2132 => {
                 let v = value & 0x1F;
-                if bit(value, 5) {
-                    self.fixed_color[2] = v;
-                }
-                if bit(value, 6) {
-                    self.fixed_color[1] = v;
-                }
-                if bit(value, 7) {
-                    self.fixed_color[0] = v;
-                }
+                (0..3).for_each(|i| {
+                    if bit(value, 5 + i) {
+                        self.fixed_color[i] = v as u16;
+                    }
+                });
             }
             // Todo
             0x2133 => {} // _ => debug!("Writing {:X} to {:X}, not handled", value, addr),
@@ -939,12 +952,7 @@ impl Ppu {
                         ColorMathSource::Fixed => Some(self.fixed_color_value()),
                     };
                     // Whether the window is masking the main layer
-                    let hide_main = match self.color_window_main_region {
-                        WindowRegion::Nowhere => false,
-                        WindowRegion::Everywhere => true,
-                        WindowRegion::Inside => color_window_value,
-                        WindowRegion::Outside => !color_window_value,
-                    };
+                    let hide_main = self.color_window_main_region.compute(color_window_value);
                     // Color math goes here
                     let p = if hide_main {
                         0
@@ -986,7 +994,6 @@ impl Ppu {
         (self.dot / 4) / PIXELS_PER_SCANLINE
     }
     fn fixed_color_value(&self) -> u16 {
-        let c = &self.fixed_color;
-        c[2] as u16 + c[1] as u16 * 0x20 + c[0] as u16 * 0x400
+        rgb_to_color(self.fixed_color)
     }
 }
