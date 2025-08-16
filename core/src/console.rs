@@ -11,6 +11,9 @@ use crate::{
 };
 use paste::paste;
 
+const APU_CLOCK_SPEED_HZ: u64 = 1_024_000;
+const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ApuTimer {
     pub timer: u8,
@@ -260,7 +263,7 @@ impl ExternalArchitecture {
             }
         }
     }
-    fn advance(&mut self, master_clocks: u32) {
+    pub fn advance(&mut self, master_clocks: u32) {
         self.total_master_clocks += master_clocks as u64;
         self.ppu.advance_master_clock(master_clocks);
     }
@@ -530,8 +533,8 @@ impl Console {
                     self.rest.dma_channels[i] = d;
                 })
             }
-            while self.rest.total_apu_clocks * 1_000_000 / 1_024_000
-                < self.rest.total_master_clocks * 1_000_000_000 / 21_477_000_000
+            while (self.rest.total_apu_clocks as f64 / APU_CLOCK_SPEED_HZ as f64)
+                < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
             {
                 // Catch up the APU
                 before_apu_step(&self);
