@@ -1,7 +1,6 @@
 use crate::console::ExternalArchitecture;
-use wdc65816::{HasAddressBus, Processor as WdcProcessor};
-
 use log::*;
+use wdc65816::{HasAddressBus, Processor as WdcProcessor};
 
 #[derive(Default, Copy, Clone)]
 pub struct Cpu {

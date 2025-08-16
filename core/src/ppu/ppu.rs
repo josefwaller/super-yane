@@ -844,14 +844,12 @@ impl Ppu {
                     let color_math_source = match self.color_math_src {
                         ColorMathSource::Subscreen => {
                             // Backdrop for the subscreen is the fixed color
-                            subscreen_val.map_or(
-                                if self.color_window_sub_region.compute(color_window_value) {
-                                    None
-                                } else {
-                                    Some(self.fixed_color_value())
-                                },
-                                |ss| Some(ss.0),
-                            )
+                            if self.color_window_sub_region.compute(color_window_value) {
+                                None
+                            } else {
+                                subscreen_val
+                                    .map_or(Some(self.fixed_color_value()), |ss| Some(ss.0))
+                            }
                         }
                         ColorMathSource::Fixed => Some(self.fixed_color_value()),
                     };

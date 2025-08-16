@@ -6,7 +6,7 @@ pub struct Window {
     pub invert_color: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum WindowRegion {
     Nowhere,
     Outside,
