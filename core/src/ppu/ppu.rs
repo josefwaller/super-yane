@@ -1,5 +1,11 @@
 use crate::Background;
-use crate::ppu::background::WindowMaskLogic;
+use crate::ppu::{
+    Sprite,
+    background::WindowMaskLogic,
+    color_math::{ColorBlendMode, ColorMathSource},
+    utils::rgb_to_color,
+    window::{Window, WindowRegion},
+};
 
 use crate::utils::bit;
 use log::*;
@@ -7,118 +13,12 @@ use log::*;
 const PIXELS_PER_SCANLINE: usize = 341;
 const SCANLINES: usize = 262;
 
-// Split a color up into its RGB components
-fn color_to_rgb(color: u16) -> [u16; 3] {
-    [color & 0x1F, (color >> 5) & 0x1F, (color >> 10) & 0x1F]
-}
-// Build a color from its RGB components
-fn rgb_to_color(rgb: [u16; 3]) -> u16 {
-    rgb[0] as u16 + rgb[1] as u16 * 0x20 + rgb[2] as u16 * 0x400
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Window {
-    pub left: usize,
-    pub right: usize,
-    pub enabled_color: bool,
-    pub invert_color: bool,
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Sprite {
-    pub x: usize,
-    pub y: usize,
-    pub tile_index: usize,
-    // 0 or 1, to select the nametable
-    pub name_select: usize,
-    pub flip_x: bool,
-    pub flip_y: bool,
-    pub priority: usize,
-    pub palette_index: usize,
-    pub size_select: usize,
-    pub msb_x: bool,
-}
-
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
     HighReadLowWrite = 0,
     /// Increment after reading the low byte or writing the high byte
     LowReadHighWrite = 1,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum ColorBlendMode {
-    Add,
-    Subtract,
-    AddHalf,
-    SubtractHalf,
-}
-impl From<u8> for ColorBlendMode {
-    fn from(value: u8) -> Self {
-        use ColorBlendMode::*;
-        match value & 0x03 {
-            0 => Add,
-            1 => AddHalf,
-            2 => Subtract,
-            3 => SubtractHalf,
-            _ => unreachable!(),
-        }
-    }
-}
-impl ColorBlendMode {
-    fn compute(&self, left: u16, right: u16) -> u16 {
-        use ColorBlendMode::*;
-        let l_rgb = color_to_rgb(left);
-        let r_rgb = color_to_rgb(right);
-        let c = core::array::from_fn(|i| {
-            let l = l_rgb[i];
-            let r = r_rgb[i];
-            match self {
-                Add => l.saturating_add(r),
-                Subtract => l.saturating_sub(r),
-                AddHalf => l.saturating_add(r) / 2,
-                SubtractHalf => l.saturating_sub(r) / 2,
-            }
-            .clamp(0, 31)
-        });
-        rgb_to_color(c)
-    }
-}
-#[derive(Clone, Copy, Debug)]
-pub enum ColorMathSource {
-    Fixed,
-    Subscreen,
-}
-#[derive(Clone, Copy)]
-pub enum WindowRegion {
-    Nowhere,
-    Outside,
-    Inside,
-    Everywhere,
-}
-impl From<u8> for WindowRegion {
-    fn from(value: u8) -> Self {
-        use WindowRegion::*;
-        match value & 003 {
-            0 => Nowhere,
-            1 => Outside,
-            2 => Inside,
-            3 => Everywhere,
-            _ => unreachable!(),
-        }
-    }
-}
-impl WindowRegion {
-    pub fn compute(&self, val: bool) -> bool {
-        use WindowRegion::*;
-        match self {
-            Nowhere => false,
-            Everywhere => true,
-            Inside => val,
-            Outside => !val,
-        }
-    }
 }
 
 #[derive(Clone)]
