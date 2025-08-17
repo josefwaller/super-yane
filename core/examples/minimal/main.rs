@@ -3,6 +3,7 @@ extern crate sdl3;
 
 use std::{env::args, fs};
 
+use log::debug;
 use sdl3::{event::Event, pixels::PixelFormatEnum};
 use super_yane::{
     Console,
@@ -40,27 +41,16 @@ fn main() {
             console.advance_instructions(1);
         }
         // Gather pixel data
-        let pixel_data: Vec<u8> = console
+        let pixel_data: [[u8; 4]; 256 * 240] = console
             .ppu()
-            .screen_buffer
-            .iter()
-            .map(|s| color_to_rgba(*s))
-            .flatten()
-            .map(|s| s)
-            .collect();
+            .screen_data_rgb()
+            // SDL defaults to BGR
+            .map(|[r, g, b]| [b, g, r, 255]);
         // Apply to window
         let mut surface = window
             .surface(&event_pump)
             .expect("Unable to initialize surface: ");
-        surface.with_lock_mut(|p| p.copy_from_slice(&pixel_data));
+        surface.with_lock_mut(|p| p.copy_from_slice(pixel_data.as_flattened()));
         surface.finish().expect("Error while rendering: ");
     }
-}
-fn color_to_rgba(c: u16) -> [u8; 4] {
-    [
-        ((c / 0x400) as u8 & 0x1F) << 3,
-        ((c / 0x20) as u8 & 0x1F) << 3,
-        (c as u8 & 0x1F) << 3,
-        255,
-    ]
 }

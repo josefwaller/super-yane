@@ -1,4 +1,9 @@
-use std::{collections::VecDeque, fmt::Display, string::FromUtf16Error};
+use std::{
+    collections::VecDeque,
+    fmt::Display,
+    string::FromUtf16Error,
+    time::{Duration, Instant},
+};
 
 use crate::{cell, widgets::text_table};
 use iced::{
@@ -34,7 +39,7 @@ use iced::widget::text;
 
 use rfd::FileDialog;
 use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
-use super_yane::{Background, Console, InputPort};
+use super_yane::{Background, Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
@@ -282,6 +287,9 @@ pub struct Application {
     inst_display: InstDisplay,
     log_cpu: bool,
     log_apu: bool,
+    screen_data: [[u8; 4]; 256 * 240],
+    emu_time: Duration,
+    last_frame_time: Instant,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -310,6 +318,9 @@ impl Default for Application {
             inst_display: InstDisplay::Cpu,
             log_cpu: false,
             log_apu: false,
+            screen_data: [[0; 4]; 256 * 240],
+            emu_time: Duration::from_micros(0),
+            last_frame_time: Instant::now(),
         }
     }
 }
@@ -341,6 +352,7 @@ impl Application {
                 self.previous_breakpoint_states.pop_front();
             }
         }
+        let vblank = self.console.ppu().is_in_vblank();
         self.console.advance_instructions_with_hooks(
             1,
             &mut |c| {
@@ -369,6 +381,13 @@ impl Application {
                 }
             },
         );
+        if !vblank && self.console.ppu().is_in_vblank() {
+            self.screen_data = self
+                .console
+                .ppu()
+                .screen_data_rgb()
+                .map(|[r, g, b]| [r, g, b, 0xFF]);
+        }
         self.total_instructions += 1;
         self.previous_console_lag += 1;
         while self.previous_console_lag > 500 {
@@ -442,16 +461,17 @@ impl Application {
         match message {
             Message::OnEvent(e) => self.handle_input(e),
             Message::NewFrame() => {
+                let ft = Instant::now();
                 if !self.is_paused {
-                    (0..2).for_each(|_| {
-                        while self.console.ppu().is_in_vblank() && !self.is_paused {
-                            self.advance();
-                        }
-                        while !self.console.ppu().is_in_vblank() && !self.is_paused {
-                            self.advance();
-                        }
-                    });
+                    self.emu_time += ft - self.last_frame_time;
                 }
+                while (1_000_000_000.0 * *self.console.total_master_clocks() as f64
+                    / MASTER_CLOCK_SPEED_HZ as f64)
+                    < self.emu_time.as_nanos() as f64
+                {
+                    self.advance();
+                }
+                self.last_frame_time = ft;
             }
             Message::AdvanceBreakpoint => {
                 self.is_paused = false;
@@ -523,26 +543,11 @@ impl Application {
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
-        let data: Vec<[u8; 4]> = self
+        let data: [[u8; 4]; 256 * 240] = self
             .console
             .ppu()
-            .screen_buffer
-            .iter()
-            .enumerate()
-            .map(|(i, color)| {
-                if i == self.console.ppu().dot {
-                    // Highlight the current pixel
-                    return [0xFF, 0x00, 0x00, 0xFF];
-                } else {
-                    [
-                        ((color & 0x001F) << 3) as u8,
-                        ((color & 0x03E0) >> 2) as u8,
-                        ((color & 0x7C00) >> 7) as u8,
-                        0xFF,
-                    ]
-                }
-            })
-            .collect();
+            .screen_data_rgb()
+            .map(|[r, g, b]| [r, g, b, 0xFF]);
         column![
             row![
                 scrollable(column![
@@ -554,7 +559,7 @@ impl Application {
                 .spacing(0)
                 .width(Length::Shrink),
                 container(column![
-                    Image::new(Handle::from_rgba(256, 240, data.as_flattened().to_vec()))
+                    Image::new(Handle::from_rgba(256, 240, self.screen_data.as_flattened().to_vec()))
                         .height(Length::Fill)
                         .width(Length::Fill)
                         .content_fit(iced::ContentFit::Contain)

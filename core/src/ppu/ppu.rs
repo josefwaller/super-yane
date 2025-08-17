@@ -9,7 +9,7 @@ use crate::{
     utils::rgb_to_color,
 };
 
-use crate::utils::bit;
+use crate::utils::{bit, color_to_rgb, color_to_rgb_bytes};
 use log::*;
 
 pub const PIXELS_PER_SCANLINE: usize = 341;
@@ -472,10 +472,7 @@ impl Ppu {
         }
     }
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
-        // let low = self.vram[addr % self.vram.len()];
-        // let high = self.vram[(addr + 1) % self.vram.len()];
-        // core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01))
-        self.vram_cache_2bpp[addr / 2]
+        self.vram_cache_2bpp[(addr / 2) % self.vram_cache_2bpp.len()]
     }
     fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
         // Get an immutable reference to the background
@@ -787,8 +784,8 @@ impl Ppu {
                     const EMPTY: (Option<u16>, bool, bool, bool) = (None, false, false, false);
                     // The pixels at the given dot, in order from front to back
                     // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
-                    let in_order_pixels: Vec<(Option<u16>, bool, bool, bool)> = match self.bg_mode {
-                        0 => [
+                    let in_order_pixels: &[(Option<u16>, bool, bool, bool)] = match self.bg_mode {
+                        0 => &[
                             spr!(3),
                             bg!(0, true),
                             bg!(1, true),
@@ -801,9 +798,8 @@ impl Ppu {
                             spr!(0),
                             bg!(2, false),
                             bg!(3, false),
-                        ]
-                        .to_vec(),
-                        1 => [
+                        ],
+                        1 => &[
                             if self.bg3_prio { bg!(2, true) } else { EMPTY },
                             spr!(3),
                             bg!(0, true),
@@ -815,9 +811,8 @@ impl Ppu {
                             if self.bg3_prio { EMPTY } else { bg!(2, true) },
                             spr!(0),
                             bg!(2, false),
-                        ]
-                        .to_vec(),
-                        3 => [
+                        ],
+                        3 => &[
                             spr!(3),
                             bg!(0, true),
                             spr!(2),
@@ -826,9 +821,8 @@ impl Ppu {
                             bg!(0, false),
                             spr!(0),
                             bg!(1, false),
-                        ]
-                        .to_vec(),
-                        5 => [
+                        ],
+                        5 => &[
                             spr!(3),
                             bg!(0, true),
                             spr!(2),
@@ -837,8 +831,7 @@ impl Ppu {
                             bg!(0, false),
                             spr!(0),
                             bg!(1, false),
-                        ]
-                        .to_vec(),
+                        ],
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
                     /// This macro gets a pixel if the given field is true
@@ -912,5 +905,8 @@ impl Ppu {
     }
     fn fixed_color_value(&self) -> u16 {
         rgb_to_color(self.fixed_color)
+    }
+    pub fn screen_data_rgb(&self) -> [[u8; 3]; 256 * 240] {
+        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i]))
     }
 }
