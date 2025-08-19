@@ -78,6 +78,14 @@ pub struct Ppu {
     pub color_window_logic: WindowMaskLogic,
     pub direct_color: bool,
     pub overscan: bool,
+    /// 16-bit multiplication factor
+    pub factor_a: i16,
+    /// 8-bit multiplication factor
+    pub factor_b: i8,
+    /// Multiplication latch
+    pub multi_latch: u8,
+    /// Multiplication result
+    pub multi_res: i32,
 }
 
 impl Default for Ppu {
@@ -125,6 +133,10 @@ impl Default for Ppu {
             color_window_logic: WindowMaskLogic::And,
             direct_color: false,
             overscan: false,
+            factor_a: 0,
+            factor_b: 0,
+            multi_latch: 0,
+            multi_res: 0,
         }
     }
 }
@@ -161,6 +173,7 @@ impl Ppu {
                 };
                 0
             }
+            0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x21234],
             // Todo: This shouldn't be in PPU
             0x4210 => {
                 let v = u8::from(self.vblank) << 7;
@@ -310,6 +323,16 @@ impl Ppu {
                     self.inc_vram_addr();
                 }
             }
+            0x211B => {
+                self.factor_a = ((self.multi_latch as i16) << 8) | value as i16;
+                self.multi_latch = value;
+                self.multi_res = self.factor_a as i32 * self.factor_b as i32;
+            }
+            0x211C => {
+                self.factor_b = value as i8;
+                self.multi_res = self.factor_a as i32 * self.factor_b as i32;
+            }
+
             0x2121 => {
                 self.cgram_addr = value as usize;
                 self.cgram_latch = None;
@@ -396,7 +419,9 @@ impl Ppu {
                 self.overscan = bit(value, 2);
             }
             0x213B => debug!("Writing to CGRAM read"),
-            _ => {}
+            _ => {
+                // debug!("Write PPU addr={addr:04X} value={value:02X}");
+            }
         }
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
