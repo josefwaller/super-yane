@@ -18,7 +18,11 @@ use iced::{
     keyboard::{
         Event::{KeyPressed, KeyReleased},
         Key,
-        key::{Code, Key::Character, Physical::Code as KeyCode},
+        key::{
+            Code,
+            Key::{Character, Named},
+            Physical::Code as KeyCode,
+        },
     },
     widget::{
         Column, Container, Row, Scrollable, Slider, TextInput, button, checkbox, column, container,
@@ -397,64 +401,75 @@ impl Application {
             self.on_breakpoint();
         }
     }
+    fn on_key_change(&mut self, key: Key, value: bool) {
+        let key_value: Option<(String, bool)> = match key {
+            Character(c) => Some((c.to_string(), value)),
+            Named(c) => {
+                if c == iced::keyboard::key::Named::Space {
+                    Some((' '.to_string(), value))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let c = self.console.input_ports()[0];
+        match c {
+            InputPort::Empty => {}
+            InputPort::StandardController {
+                mut a,
+                mut b,
+                mut x,
+                mut y,
+                mut up,
+                mut left,
+                mut right,
+                mut down,
+                mut start,
+                mut select,
+                mut r,
+                mut l,
+            } => match key_value {
+                Some((key, val)) => {
+                    match key.as_str() {
+                        "w" => up = val,
+                        "a" => left = val,
+                        "s" => down = val,
+                        "d" => right = val,
+                        "n" => y = val,
+                        "m" => x = val,
+                        " " => b = val,
+                        "r" => start = val,
+                        "f" => select = val,
+                        _ => {}
+                    };
+                    self.console.input_ports_mut()[0] = InputPort::StandardController {
+                        a,
+                        b,
+                        x,
+                        y,
+                        up,
+                        left,
+                        right,
+                        down,
+                        start,
+                        select,
+                        r,
+                        l,
+                    };
+                }
+                _ => {}
+            },
+        }
+    }
     fn handle_input(&mut self, event: Event) {
         if let Keyboard(keyboard_event) = event {
-            let key_value: Option<(String, bool)> = match keyboard_event {
-                KeyPressed {
-                    key: Character(c), ..
-                } => Some((c.to_string(), true)),
-                KeyReleased {
-                    key: Character(c), ..
-                } => Some((c.to_string(), false)),
-                _ => None,
+            debug!("{:?}", &keyboard_event);
+            match keyboard_event {
+                KeyPressed { key, .. } => self.on_key_change(key, true),
+                KeyReleased { key, .. } => self.on_key_change(key, false),
+                _ => {}
             };
-            let c = self.console.input_ports()[0];
-            match c {
-                InputPort::Empty => {}
-                InputPort::StandardController {
-                    mut a,
-                    mut b,
-                    mut x,
-                    mut y,
-                    mut up,
-                    mut left,
-                    mut right,
-                    mut down,
-                    mut start,
-                    mut select,
-                    mut r,
-                    mut l,
-                } => match key_value {
-                    Some((key, val)) => {
-                        match key.as_str() {
-                            "w" => up = val,
-                            "a" => left = val,
-                            "s" => down = val,
-                            "d" => right = val,
-                            "n" => y = val,
-                            "m" => b = val,
-                            "r" => start = val,
-                            "f" => select = val,
-                            _ => {}
-                        };
-                        self.console.input_ports_mut()[0] = InputPort::StandardController {
-                            a,
-                            b,
-                            x,
-                            y,
-                            up,
-                            left,
-                            right,
-                            down,
-                            start,
-                            select,
-                            r,
-                            l,
-                        };
-                    }
-                    _ => {}
-                },
-            }
         }
     }
     pub fn update(&mut self, message: Message) {
