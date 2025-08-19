@@ -112,12 +112,14 @@ struct ApuSnapshot {
 
 impl ApuSnapshot {
     fn from(console: &Console) -> Self {
-        let apu = console.apu();
+        let apu = console.apu().core;
         ApuSnapshot {
             cpu: apu.clone(),
-            opcode: console.read_byte_apu(apu.pc as usize),
+            opcode: console.apu().read_ram(apu.pc as usize),
             operands: core::array::from_fn(|i| {
-                console.read_byte_apu(apu.pc.wrapping_add(1 + i as u16) as usize)
+                console
+                    .apu()
+                    .read_ram(apu.pc.wrapping_add(1 + i as u16) as usize)
             }),
         }
     }
@@ -827,7 +829,7 @@ impl Application {
         ]
     }
     fn apu_data(&self) -> impl Into<Element<'_, Message>> {
-        let apu = self.console.apu();
+        let apu = self.console.apu().core;
         let values = text_table(
             [
                 ("PC", apu.pc, 4),
@@ -853,14 +855,8 @@ impl Application {
                 .chain((0..4).into_iter().map(|i| {
                     [
                         (format!("{:02X}", 0xF4 + i).to_string(), Some(COLORS[1])),
-                        (
-                            format!("{:02X}", self.console.read_byte_apu(0xF4 + i)),
-                            None,
-                        ),
-                        (
-                            format!("{:02X}", self.console.read_byte_cpu(0x2140 + i)),
-                            None,
-                        ),
+                        (format!("{:02X}", self.console.cpu_to_apu_reg()[i]), None),
+                        (format!("{:02X}", self.console.apu_to_cpu_reg()[i]), None),
                     ]
                 }))
                 .flatten(),

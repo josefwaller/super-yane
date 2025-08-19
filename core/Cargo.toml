@@ -10,6 +10,7 @@ wdc65816 = { path = "../wdc65816", version = "0.1.0" }
 spc700 = { path = "../spc700", version = "0.1.0" }
 log = { workspace = true }
 paste = "1.0.15"
+derivative = "2.2.0"
 
 [dev-dependencies]
 insta = "1.43.1"

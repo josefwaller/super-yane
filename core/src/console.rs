@@ -1,9 +1,9 @@
 use log::*;
-use spc700::{HasAddressBus as Spc700AddressBuss, IPL, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
 
 use crate::{
     Cartridge, Cpu, InputPort, Ppu,
+    apu::Apu,
     dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
     math::Math,
 };
@@ -12,7 +12,6 @@ use paste::paste;
 pub const APU_CLOCK_SPEED_HZ: u64 = 1_024_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
-pub const APU_RAM_SIZE: usize = 0x10000;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub enum TimerMode {
@@ -35,21 +34,13 @@ impl From<u8> for TimerMode {
         }
     }
 }
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ApuTimer {
-    pub timer: u8,
-    /// Really u4
-    pub counter: u8,
-}
 
 // Contains everything except the processor(s)
 #[derive(Clone)]
 pub struct ExternalArchitecture {
     pub ram: Box<[u8; WRAM_SIZE]>,
-    pub spc_ram: Box<[u8; APU_RAM_SIZE]>,
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
-    pub expose_ipl_rom: bool,
     pub cartridge: Cartridge,
     pub ppu: Ppu,
     // Math module for multiplication and division
@@ -61,7 +52,6 @@ pub struct ExternalArchitecture {
     total_apu_clocks: u64,
     open_bus_value: u8,
     nmi_enabled: bool,
-    pub timers: [ApuTimer; 3],
     /// Whether fast ROM access is enabled through MEMSEL
     fast_rom_enabled: bool,
     /// IRQ timer mode
@@ -323,37 +313,6 @@ impl ExternalArchitecture {
         self.total_master_clocks += master_clocks as u64;
         self.ppu.advance_master_clock(master_clocks);
     }
-    fn advance_apu(&mut self, apu_clocks: u64) {
-        // Todo maybe: clean this up
-        (0..apu_clocks).for_each(|_| {
-            self.total_apu_clocks += 1;
-            // Clock the timers every 16 (timers 0 and 1) or 128 (timer 2) APU cycles
-            [16, 16, 128].into_iter().enumerate().for_each(|(i, clks)| {
-                if self.total_apu_clocks % clks == 0 {
-                    // Increment timer and increment counter if it overflows
-                    let t = self.timers[i].timer.wrapping_add(1);
-                    if t < self.timers[i].timer {
-                        self.timers[i].counter = self.timers[i].counter.wrapping_add(1);
-                    }
-                    self.timers[i].timer = t;
-                }
-            });
-        });
-    }
-    pub fn read_apu(&self, address: usize) -> u8 {
-        match address {
-            0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
-            0x0000..0xFFC0 => self.spc_ram[address],
-            0xFFC0..0x10000 => {
-                if self.expose_ipl_rom {
-                    IPL[address - 0xFFC0]
-                } else {
-                    self.spc_ram[address]
-                }
-            }
-            _ => panic!("Should be impossible"),
-        }
-    }
 }
 impl HasAddressBus for ExternalArchitecture {
     fn io(&mut self) {
@@ -387,43 +346,6 @@ impl HasAddressBus for ExternalArchitecture {
         self.advance(clks);
     }
 }
-impl Spc700AddressBuss for ExternalArchitecture {
-    fn io(&mut self) {
-        self.advance_apu(1);
-    }
-    fn read(&mut self, address: usize) -> u8 {
-        self.advance_apu(1);
-        match address {
-            0x00FD..0x00FF => {
-                let v = self.timers[address - 0x00FD].counter;
-                self.timers[address - 0x00FD].counter = 0;
-                v
-            }
-            _ => self.read_apu(address),
-        }
-    }
-    fn write(&mut self, address: usize, value: u8) {
-        self.advance_apu(1);
-        match address {
-            0x00F1 => {
-                self.expose_ipl_rom = (value & 0x80) != 0;
-                if value & 0x10 != 0 {
-                    self.cpu_to_apu_reg[0] = 0x00;
-                    self.cpu_to_apu_reg[1] = 0x00;
-                }
-                if value & 0x20 != 0 {
-                    self.cpu_to_apu_reg[2] = 0x00;
-                    self.cpu_to_apu_reg[3] = 0x00;
-                }
-            }
-            0x00F4..0x00F8 => self.apu_to_cpu_reg[address - 0x00F4] = value,
-            0x00FA..0x00FD => {
-                self.timers[address - 0x00FA].timer = value;
-            }
-            _ => self.spc_ram[address] = value,
-        }
-    }
-}
 
 /// The entire S.N.E.S. Console
 #[derive(Clone)]
@@ -431,7 +353,7 @@ pub struct Console {
     /// The CPU is the driving force of the console.
     /// It advances the rest of the console through read and write methods in rest.
     cpu: Cpu,
-    apu: Spc700,
+    apu: Apu,
     rest: ExternalArchitecture,
 }
 
@@ -464,7 +386,7 @@ impl Console {
     pub fn cpu_mut(&mut self) -> &mut Processor {
         &mut self.cpu.core
     }
-    pub fn apu(&self) -> &Spc700 {
+    pub fn apu(&self) -> &Apu {
         &self.apu
     }
     pub fn apu_opcode(&self) -> u8 {
@@ -473,13 +395,11 @@ impl Console {
     pub fn with_cartridge(cartridge_data: &[u8]) -> Console {
         let mut c = Console {
             cpu: Cpu::default(),
-            apu: Spc700::default(),
+            apu: Apu::default(),
             rest: ExternalArchitecture {
                 ram: Box::new([0; WRAM_SIZE]),
                 cpu_to_apu_reg: [0; 4],
                 apu_to_cpu_reg: [0; 4],
-                expose_ipl_rom: true,
-                spc_ram: Box::new([0; APU_RAM_SIZE]),
                 cartridge: Cartridge::from_data(cartridge_data),
                 input_ports: [InputPort::default_standard_controller(); 2],
                 ppu: Ppu::default(),
@@ -488,7 +408,6 @@ impl Console {
                 total_apu_clocks: 0,
                 open_bus_value: 0,
                 nmi_enabled: false,
-                timers: [ApuTimer::default(); 3],
                 fast_rom_enabled: false,
                 math: Math::default(),
                 timer_mode: TimerMode::default(),
@@ -618,22 +537,22 @@ impl Console {
                     self.rest.dma_channels[i] = d;
                 })
             }
-            while (self.rest.total_apu_clocks as f64 / APU_CLOCK_SPEED_HZ as f64)
+            while (*self.apu.total_clocks() as f64 / APU_CLOCK_SPEED_HZ as f64)
                 < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
             {
                 // Catch up the APU
                 before_apu_step(&self);
-                self.apu.step(&mut self.rest);
+                self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
             }
         });
     }
     pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
+        todo!();
         std::iter::from_fn(|| {
             if should_stop(&self) {
                 None
             } else {
                 self.cpu.step(&mut self.rest);
-                self.apu.step(&mut self.rest);
                 Some(1)
             }
         })
@@ -659,9 +578,5 @@ impl Console {
     /// Read a byte in CPU space
     pub fn read_byte_cpu(&self, address: usize) -> u8 {
         self.rest.read_byte(address).0
-    }
-    /// Read a byte in APU space
-    pub fn read_byte_apu(&self, address: usize) -> u8 {
-        self.rest.read_apu(address)
     }
 }
