@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use log::*;
 use spc700::{HasAddressBus as Spc700AddressBuss, IPL, Processor as Spc700};
 use wdc65816::{HasAddressBus, Processor};
@@ -16,6 +14,27 @@ pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 pub const APU_RAM_SIZE: usize = 0x10000;
 
+#[derive(Debug, Copy, Clone, Default)]
+pub enum TimerMode {
+    #[default]
+    Disabled,
+    Horizontal,
+    Vertical,
+    HorizontalVertical,
+}
+
+impl From<u8> for TimerMode {
+    fn from(value: u8) -> Self {
+        use TimerMode::*;
+        match value & 0x03 {
+            0 => Disabled,
+            1 => Horizontal,
+            2 => Vertical,
+            3 => HorizontalVertical,
+            _ => unreachable!(),
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ApuTimer {
     pub timer: u8,
@@ -45,6 +64,16 @@ pub struct ExternalArchitecture {
     pub timers: [ApuTimer; 3],
     /// Whether fast ROM access is enabled through MEMSEL
     fast_rom_enabled: bool,
+    /// IRQ timer mode
+    timer_mode: TimerMode,
+    /// IRQ timer H target
+    pub h_timer: u16,
+    /// IRQ timer V target
+    pub v_timer: u16,
+    /// Whether we have triggered an IRQ this frame
+    triggered_irq_this_frame: bool,
+    /// Timer flag
+    pub timer_flag: bool,
 }
 
 // Todo: move somewhere
@@ -68,6 +97,11 @@ impl ExternalArchitecture {
                 0x2100..0x2140 => (self.ppu.read_byte(a), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
                 0x4002..=0x4006 | 0x4214..=0x4217 => (self.math.read_byte(a), 6),
+                0x4212 => {
+                    let v = (u8::from(self.ppu.is_in_vblank()) << 7)
+                        | (u8::from(self.ppu.is_in_hblank()) << 6);
+                    (v, 6)
+                }
                 0x4218..0x4220 => {
                     // Read controller data
                     let i = (a / 2) % 2;
@@ -148,6 +182,23 @@ impl ExternalArchitecture {
                     }
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
+                        self.timer_mode = TimerMode::from(value >> 4);
+                        6
+                    }
+                    0x4207 => {
+                        self.h_timer = (self.h_timer & 0x0100) | value as u16;
+                        6
+                    }
+                    0x4208 => {
+                        self.h_timer = (value as u16 & 0x01) | (self.h_timer & 0xFF);
+                        6
+                    }
+                    0x4209 => {
+                        self.v_timer = (self.v_timer & 0x0100) | value as u16;
+                        6
+                    }
+                    0x420A => {
+                        self.v_timer = (value as u16 & 0x01) | (self.v_timer & 0xFF);
                         6
                     }
                     0x420B => {
@@ -254,7 +305,10 @@ impl ExternalArchitecture {
                         }
                         6
                     }
-                    _ => 6,
+                    _ => {
+                        debug!("Write to unknown register addr={addr:04X} value={value:02X}");
+                        6
+                    }
                 }
             } else {
                 if addr >= 0x800000 && self.fast_rom_enabled {
@@ -308,10 +362,19 @@ impl HasAddressBus for ExternalArchitecture {
     fn read(&mut self, address: usize) -> u8 {
         // Todo find a better solution
         // really need todo
+        // exteremely need todo, this is horrendous
         if address & 0x800000 < 0x400000
-            && (address & 0xFFFF == 0x2139 || address & 0xFFFF == 0x4210)
+            && (address & 0xFFFF == 0x2139
+                || address & 0xFFFF == 0x4210
+                || address & 0xFFFF == 0x4211)
         {
-            self.ppu.read_byte_mut(address, self.open_bus_value)
+            if address & 0xFFFF == 0x4211 {
+                let v = u8::from(self.timer_flag) << 7;
+                self.timer_flag = false;
+                v
+            } else {
+                self.ppu.read_byte_mut(address, self.open_bus_value)
+            }
         } else {
             let (v, clks) = self.read_byte(address);
             self.advance(clks);
@@ -428,6 +491,11 @@ impl Console {
                 timers: [ApuTimer::default(); 3],
                 fast_rom_enabled: false,
                 math: Math::default(),
+                timer_mode: TimerMode::default(),
+                h_timer: 0,
+                v_timer: 0,
+                triggered_irq_this_frame: false,
+                timer_flag: false,
             },
         };
         c.cpu.reset(&mut c.rest);
@@ -459,9 +527,24 @@ impl Console {
                     d.hdma_line_counter = 0;
                 });
             }
-            let scanline = self.ppu().scanline();
+            if !self.rest.triggered_irq_this_frame {
+                let h = self.ppu().cursor_x() >= self.rest.h_timer as usize;
+                let v = self.ppu().cursor_y() >= self.rest.v_timer as usize;
+                let trigger_irq = match self.rest.timer_mode {
+                    TimerMode::Disabled => false,
+                    TimerMode::Horizontal => h,
+                    TimerMode::Vertical => v,
+                    TimerMode::HorizontalVertical => h && v,
+                };
+                if trigger_irq {
+                    self.cpu.on_irq(&mut self.rest);
+                    self.rest.triggered_irq_this_frame = true;
+                    self.rest.timer_flag = true;
+                }
+            }
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
             if vblank && !self.ppu().is_in_vblank() {
+                self.rest.triggered_irq_this_frame = false;
                 (0..self.rest.dma_channels.len()).for_each(|i| {
                     macro_rules! d {
                         () => {

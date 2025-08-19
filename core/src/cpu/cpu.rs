@@ -39,6 +39,9 @@ impl Cpu {
     pub fn on_nmi(&mut self, memory: &mut impl HasAddressBus) {
         self.core.on_nmi(memory);
     }
+    pub fn on_irq(&mut self, memory: &mut impl HasAddressBus) {
+        self.core.on_irq(memory);
+    }
     pub fn reset(&mut self, memory: &mut impl HasAddressBus) {
         self.core.reset(memory);
     }

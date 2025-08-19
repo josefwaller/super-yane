@@ -895,12 +895,18 @@ impl Ppu {
         })
     }
     pub fn is_in_vblank(&self) -> bool {
-        (self.dot / 4) / PIXELS_PER_SCANLINE > if self.overscan { 240 } else { 225 }
+        self.cursor_y() > if self.overscan { 240 } else { 225 }
     }
     pub fn is_in_hblank(&self) -> bool {
-        (self.dot / 4) % PIXELS_PER_SCANLINE >= 274
+        self.cursor_x() >= 274
     }
-    pub fn scanline(&self) -> usize {
+    /// X coordinate of the cursor
+    pub fn cursor_x(&self) -> usize {
+        (self.dot / 4) % PIXELS_PER_SCANLINE
+    }
+    /// Y coordinate of the cursor.
+    /// Equivalent to the scanline number
+    pub fn cursor_y(&self) -> usize {
         (self.dot / 4) / PIXELS_PER_SCANLINE
     }
     fn fixed_color_value(&self) -> u16 {

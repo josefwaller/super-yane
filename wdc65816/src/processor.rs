@@ -1493,4 +1493,9 @@ impl Processor {
     pub fn on_nmi(&mut self, memory: &mut impl HasAddressBus) {
         self.break_to(memory, 0xFFEA, 0xFFFA, true)
     }
+    pub fn on_irq(&mut self, memory: &mut impl HasAddressBus) {
+        if !self.p.i {
+            self.break_to(memory, 0xFFEE, 0xFFFE, false);
+        }
+    }
 }
