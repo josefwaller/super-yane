@@ -426,6 +426,9 @@ impl Application {
         if self.channel.size() == 0 {
             // error!("Empty queue");
         }
+        if self.channel.size() > 50_000 {
+            self.channel.clear();
+        }
         self.channel
             .queue_audio(samples.as_slice())
             .expect("Unable to enqueue audio");

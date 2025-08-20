@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 pub struct Voice {
     pub enabled: bool,
     /// Volume, first left, then right
-    pub volume: [u8; 2],
+    pub volume: [i8; 2],
     /// Sample pitch, i.e. rate at which samples are consumed
     pub sample_pitch: u16,
     /// Sample source
@@ -25,4 +25,6 @@ pub struct Voice {
     pub(super) samples: [i16; 16],
     /// Counter value
     pub(super) counter: u16,
+    /// Whether pitch modulation is enabled
+    pub(super) pitch_mod_enabled: bool,
 }

@@ -16,6 +16,13 @@ pub struct Dsp {
 impl Dsp {
     pub fn write(&mut self, address: usize, value: u8) {
         match address {
+            0x2D => {
+                self.channels
+                    .iter_mut()
+                    .enumerate()
+                    .skip(1)
+                    .for_each(|(i, c)| c.pitch_mod_enabled = bit(value, i));
+            }
             0x4C => {
                 // debug!("Write");
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
@@ -41,8 +48,8 @@ impl Dsp {
                 if channel_index < self.channels.len() {
                     let c = &mut self.channels[channel_index];
                     match reg & 0x0F {
-                        0 => c.volume[0] = value,
-                        1 => c.volume[1] = value,
+                        0 => c.volume[0] = value as i8,
+                        1 => c.volume[1] = value as i8,
                         2 => {
                             c.sample_pitch = (c.sample_pitch & 0x3F00) | (value as u16);
                             // debug!("Sample rate is {:04X}", c.sample_pitch);
@@ -72,13 +79,20 @@ impl Dsp {
         0
     }
     pub fn generate_sample(&mut self, ram: &[u8]) {
+        let mut prev_pitch: i16 = 0;
         let s = self
             .channels
             .iter_mut()
             .map(|c| {
                 if c.enabled {
                     // Add sample pitch to counter
-                    let (counter, o) = c.counter.overflowing_add(c.sample_pitch);
+                    let (counter, o) = c.counter.overflowing_add(if c.pitch_mod_enabled {
+                        (c.sample_pitch as i32
+                            + ((prev_pitch as i32) >> 5) * ((c.sample_pitch as i32) >> 10))
+                            .clamp(0, u16::MAX as i32) as u16
+                    } else {
+                        c.sample_pitch
+                    });
                     // If overflowed, we need to load the next block
                     if o {
                         // If enabled and block address is None, we need to load the first address
@@ -145,8 +159,11 @@ impl Dsp {
                 let sample_index = (c.counter >> 12) as usize;
                 // Gaussian interpolation goes here
 
+                prev_pitch = c.samples[sample_index];
                 // For now, just return sample
                 c.samples[sample_index] as f32 / std::i16::MAX as f32
+                    * (c.volume[0] / 2 + c.volume[1] / 2) as f32
+                    / u8::MAX as f32
             })
             .sum::<f32>()
             / self.channels.len() as f32;

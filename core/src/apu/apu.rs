@@ -39,6 +39,7 @@ struct ApuMemory {
     pub expose_ipl_rom: bool,
     pub dsp_addr: usize,
     pub dsp: Dsp,
+    pub dsp_read_only: bool,
 }
 
 impl ApuMemory {
@@ -105,8 +106,15 @@ impl HasAddressBus for ApuMemory {
                     self.cpu_to_apu_reg[3] = 0x00;
                 }
             }
-            0x00F2 => self.dsp_addr = (value & 0x7F) as usize,
-            0x00F3 => self.dsp.write(self.dsp_addr, value),
+            0x00F2 => {
+                self.dsp_addr = (value & 0x7F) as usize;
+                self.dsp_read_only = bit(value, 7);
+            }
+            0x00F3 => {
+                if !self.dsp_read_only {
+                    self.dsp.write(self.dsp_addr, value);
+                }
+            }
             0x00F4..0x00F8 => self.apu_to_cpu_reg[address - 0x00F4] = value,
             0x00FA..0x00FD => {
                 self.timers[address - 0x00FA].timer = value;
