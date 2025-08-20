@@ -9,7 +9,7 @@ use crate::{
 };
 use paste::paste;
 
-pub const APU_CLOCK_SPEED_HZ: u64 = 1_024_000;
+pub const APU_CLOCK_SPEED_HZ: u64 = 2_048_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 

@@ -8,8 +8,8 @@ use derivative::Derivative;
 use paste::paste;
 
 pub const APU_RAM_SIZE: usize = 0x10000;
-/// Generate a new sample every 32 clocks
-pub const CLOCKS_PER_SAMPLE: usize = 32;
+/// Generate a new sample every 64 APU clocks (32 SPC700 clocks)
+pub const CLOCKS_PER_SAMPLE: usize = 64;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ApuTimer {
@@ -39,8 +39,10 @@ impl Dsp {
     pub fn write(&mut self, address: usize, value: u8) {
         match address {
             0x4C => {
+                // debug!("Write");
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
+                        // debug!("Start channel {i}");
                         c.enabled = true;
                     }
                 });
@@ -83,7 +85,7 @@ impl Dsp {
             }
             _ => {
                 // Ignore for now
-                debug!("Unknown DSP register {address:04X} value={value:02X}");
+                // debug!("Unknown DSP register {address:04X} value={value:02X}");
             }
         }
     }
@@ -198,7 +200,7 @@ struct ApuMemory {
 }
 
 impl ApuMemory {
-    pub fn advance_clocks(&mut self, clocks: usize) {
+    pub fn advance_apu_clocks(&mut self, clocks: usize) {
         // Advance timers
         (0..clocks).for_each(|_| {
             self.total_clocks += 1;
@@ -222,11 +224,13 @@ impl ApuMemory {
 
 impl HasAddressBus for ApuMemory {
     fn io(&mut self) {
-        self.advance_clocks(1);
+        // Advance by 2 cycles since the SPC700 is only clocked on every other clock
+        self.advance_apu_clocks(2);
     }
     fn read(&mut self, address: usize) -> u8 {
-        self.advance_clocks(1);
+        self.advance_apu_clocks(2);
         match address {
+            0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr),
             0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
             0x00FD..0x00FF => {
@@ -246,7 +250,7 @@ impl HasAddressBus for ApuMemory {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
-        self.advance_clocks(1);
+        self.advance_apu_clocks(2);
         match address {
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
