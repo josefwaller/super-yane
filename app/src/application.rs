@@ -15,6 +15,7 @@ use iced::{
     Padding, Renderer, Subscription, Theme,
     alignment::Horizontal,
     color, event,
+    futures::channel,
     keyboard::{
         Event::{KeyPressed, KeyReleased},
         Key,
@@ -42,6 +43,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
 use super_yane::{Background, Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 use wdc65816::{format_address_mode, opcode_data};
@@ -296,6 +298,7 @@ pub struct Application {
     screen_data: [[u8; 4]; 256 * 240],
     emu_time: Duration,
     last_frame_time: Instant,
+    channel: AudioQueue<f32>,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -304,6 +307,19 @@ const NUM_PREVIOUS_STATES: usize = 200;
 impl Default for Application {
     fn default() -> Self {
         let default_console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
+        let sdl = sdl2::init().expect("Unable to init SDL");
+        let audio = sdl.audio().unwrap();
+        let channel: AudioQueue<f32> = audio
+            .open_queue(
+                None,
+                &AudioSpecDesired {
+                    freq: Some(32_000),
+                    channels: Some(1),
+                    samples: None,
+                },
+            )
+            .unwrap();
+        debug!("Channel spec is {:?}", channel.spec());
         Application {
             console: default_console.clone(),
             ram_offset: 0,
@@ -327,6 +343,7 @@ impl Default for Application {
             screen_data: [[0; 4]; 256 * 240],
             emu_time: Duration::from_micros(0),
             last_frame_time: Instant::now(),
+            channel,
         }
     }
 }
@@ -402,6 +419,16 @@ impl Application {
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
+        let samples: Vec<f32> = self.console.apu_mut().sample_queue().into_iter().collect();
+        if samples.iter().find(|x| **x != 0.0).is_some() {
+            // debug!("samples {samples:?}");
+        }
+        if self.channel.size() == 0 {
+            // error!("Empty queue");
+        }
+        self.channel
+            .queue_audio(samples.as_slice())
+            .expect("Unable to enqueue audio");
     }
     fn on_key_change(&mut self, key: Key, value: bool) {
         let key_value: Option<(String, bool)> = match key {
@@ -466,7 +493,6 @@ impl Application {
     }
     fn handle_input(&mut self, event: Event) {
         if let Keyboard(keyboard_event) = event {
-            debug!("{:?}", &keyboard_event);
             match keyboard_event {
                 KeyPressed { key, .. } => self.on_key_change(key, true),
                 KeyReleased { key, .. } => self.on_key_change(key, false),
@@ -519,6 +545,7 @@ impl Application {
                 } else {
                     self.is_paused = false;
                     self.ignore_breakpoints = true;
+                    self.channel.resume();
                 }
             }
             Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
@@ -546,7 +573,7 @@ impl Application {
                     self.total_instructions = 0;
                     self.previous_apu_snapshots.clear();
                     self.previous_instruction_snapshots.clear();
-                    self.is_paused = true
+                    self.is_paused = true;
                 }
                 None => {}
             },

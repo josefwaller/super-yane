@@ -389,6 +389,9 @@ impl Console {
     pub fn apu(&self) -> &Apu {
         &self.apu
     }
+    pub fn apu_mut(&mut self) -> &mut Apu {
+        &mut self.apu
+    }
     pub fn apu_opcode(&self) -> u8 {
         0
     }
