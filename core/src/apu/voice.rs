@@ -23,6 +23,8 @@ pub struct Voice {
     pub(super) prev_samples: [i16; 2],
     /// Decoded samples from the BRR block
     pub(super) samples: [i16; 16],
+    /// Copy of previous sample data, for gaussian interpolation
+    pub(super) prev_sample_data: [i16; 16],
     /// Counter value
     pub(super) counter: u16,
     /// Whether pitch modulation is enabled
