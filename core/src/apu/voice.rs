@@ -66,8 +66,6 @@ pub struct Voice {
     pub fir_enabled: bool,
     /// Current address of the block being played
     pub(super) block_addr: Option<usize>,
-    /// Previous two samples, used for decoding filter
-    pub(super) prev_samples: [i16; 2],
     /// Decoded samples from the BRR block
     pub(super) samples: [i16; 16],
     /// Copy of previous sample data, for gaussian interpolation

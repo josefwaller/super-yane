@@ -67,7 +67,7 @@ impl ApuMemory {
                         }
                     });
                 if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
-                    self.dsp.generate_sample(self.ram.as_slice());
+                    self.dsp.generate_sample(self.ram.as_mut_slice());
                 }
             }
             self.dsp.clock(self.total_clocks);

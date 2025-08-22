@@ -50,7 +50,7 @@ use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
 
-pub const VOLUME: f32 = 20.0;
+pub const VOLUME: f32 = 5.0;
 
 macro_rules! hex_fmt {
     () => {
