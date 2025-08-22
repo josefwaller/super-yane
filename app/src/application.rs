@@ -50,6 +50,8 @@ use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
 
+pub const VOLUME: f32 = 20.0;
+
 macro_rules! hex_fmt {
     () => {
         "0x{:04X}"
@@ -419,19 +421,34 @@ impl Application {
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
-        let samples: Vec<f32> = self.console.apu_mut().sample_queue().into_iter().collect();
+        let samples: Vec<f32> = self
+            .console
+            .apu_mut()
+            .sample_queue()
+            .into_iter()
+            .map(|s| VOLUME * s)
+            .collect();
         if samples.iter().find(|x| **x != 0.0).is_some() {
             // debug!("samples {samples:?}");
         }
         if self.channel.size() == 0 {
             // error!("Empty queue");
         }
-        if self.channel.size() > 50_000 {
+        if self.channel.size() > 20_000 {
             self.channel.clear();
         }
-        self.channel
-            .queue_audio(samples.as_slice())
-            .expect("Unable to enqueue audio");
+
+        if samples
+            .iter()
+            .find(|x| **x > VOLUME || **x < -VOLUME)
+            .is_some()
+        {
+            error!("INVALID SAMPLE");
+        } else {
+            self.channel
+                .queue_audio(samples.as_slice())
+                .expect("Unable to enqueue audio");
+        }
     }
     fn on_key_change(&mut self, key: Key, value: bool) {
         let key_value: Option<(String, bool)> = match key {

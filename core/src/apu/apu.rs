@@ -9,11 +9,14 @@ use paste::paste;
 
 pub const APU_RAM_SIZE: usize = 0x10000;
 /// Generate a new sample every 64 APU clocks (32 SPC700 clocks)
-pub const CLOCKS_PER_SAMPLE: usize = 64;
+pub const CLOCKS_PER_SAMPLE: usize = 96;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ApuTimer {
-    pub timer: u8,
+    // Set by program
+    pub timer_target: u8,
+    // Automatically counts up
+    pub timer_value: u8,
     /// Really u4
     pub counter: u8,
 }
@@ -47,20 +50,27 @@ impl ApuMemory {
         // Advance timers
         (0..clocks).for_each(|_| {
             self.total_clocks += 1;
-            // Clock the timers every 16 (timers 0 and 1) or 128 (timer 2) APU cycles
-            [16, 16, 128].into_iter().enumerate().for_each(|(i, clks)| {
-                if self.total_clocks % clks == 0 {
-                    // Increment timer and increment counter if it overflows
-                    let t = self.timers[i].timer.wrapping_add(1);
-                    if t < self.timers[i].timer {
-                        self.timers[i].counter = self.timers[i].counter.wrapping_add(1);
-                    }
-                    self.timers[i].timer = t;
+            if self.total_clocks % 3 == 0 {
+                // Clock the timers every 16 (timers 0 and 1) or 128 (timer 2) APU cycles
+                [128, 128, 16]
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, clks)| {
+                        if (self.total_clocks / 3) % clks == 0 {
+                            let t = &mut self.timers[i];
+                            // Increment timer and increment counter if it overflows
+                            t.timer_value = t.timer_value.wrapping_add(1);
+                            if t.timer_value == t.timer_target {
+                                t.counter = t.counter.wrapping_add(1);
+                                t.timer_value = 0;
+                            }
+                        }
+                    });
+                if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
+                    self.dsp.generate_sample(self.ram.as_slice());
                 }
-            });
-            if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
-                self.dsp.generate_sample(self.ram.as_slice());
             }
+            self.dsp.clock(self.total_clocks);
         });
     }
 }
@@ -68,10 +78,10 @@ impl ApuMemory {
 impl HasAddressBus for ApuMemory {
     fn io(&mut self) {
         // Advance by 2 cycles since the SPC700 is only clocked on every other clock
-        self.advance_apu_clocks(2);
+        self.advance_apu_clocks(3);
     }
     fn read(&mut self, address: usize) -> u8 {
-        self.advance_apu_clocks(2);
+        self.advance_apu_clocks(3);
         match address {
             0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr),
@@ -93,7 +103,7 @@ impl HasAddressBus for ApuMemory {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
-        self.advance_apu_clocks(2);
+        self.advance_apu_clocks(3);
         match address {
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
@@ -117,7 +127,7 @@ impl HasAddressBus for ApuMemory {
             }
             0x00F4..0x00F8 => self.apu_to_cpu_reg[address - 0x00F4] = value,
             0x00FA..0x00FD => {
-                self.timers[address - 0x00FA].timer = value;
+                self.timers[address - 0x00FA].timer_target = value;
             }
             _ => self.ram[address] = value,
         }

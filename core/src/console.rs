@@ -9,7 +9,7 @@ use crate::{
 };
 use paste::paste;
 
-pub const APU_CLOCK_SPEED_HZ: u64 = 2_048_000;
+pub const APU_CLOCK_SPEED_HZ: u64 = 3_072_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 
@@ -548,18 +548,6 @@ impl Console {
                 self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
             }
         });
-    }
-    pub fn advance_until(&mut self, should_stop: &mut impl FnMut(&Console) -> bool) -> u32 {
-        todo!();
-        std::iter::from_fn(|| {
-            if should_stop(&self) {
-                None
-            } else {
-                self.cpu.step(&mut self.rest);
-                Some(1)
-            }
-        })
-        .sum()
     }
     /// Get the opcode that the console will execute on the next call to [`Console::advance_instructions``]
     pub fn opcode(&self) -> u8 {

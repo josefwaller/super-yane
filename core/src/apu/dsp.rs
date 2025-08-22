@@ -1,4 +1,11 @@
-use crate::{apu::Voice, utils::bit};
+use crate::{
+    apu::{
+        Voice,
+        voice::{AdsrStage, ENVELOPE_MAX_VALUE, GainMode},
+    },
+    utils::bit,
+};
+use derivative::Derivative;
 use log::*;
 use std::collections::VecDeque;
 
@@ -52,6 +59,12 @@ pub struct Dsp {
     pub channels: [Voice; 8],
     /// Sample directory
     pub sample_dir: usize,
+    /// FIR (Finite Impulse Response) values
+    pub fir: [u8; 8],
+    /// Previous 8 samples, used for the FIR/echo effect
+    pub fir_cache: [f32; 8],
+    /// Index of head of fir cache
+    fir_index: usize,
     /// The generated samples
     pub(super) sample_queue: VecDeque<f32>,
 }
@@ -66,12 +79,22 @@ impl Dsp {
                     .skip(1)
                     .for_each(|(i, c)| c.pitch_mod_enabled = bit(value, i));
             }
+            0x3D => {
+                self.channels
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, c)| c.fir_enabled = bit(value, i));
+            }
             0x4C => {
                 // debug!("Write");
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
                         // debug!("Start channel {i}");
                         c.enabled = true;
+                        if c.adsr_enabled {
+                            c.adsr_stage = AdsrStage::Attack;
+                            c.envelope = 0;
+                        }
                     }
                 });
             }
@@ -105,9 +128,33 @@ impl Dsp {
                         4 => {
                             c.sample_src = (value as usize) * 0x04;
                         }
-                        // todo
-                        5..=9 => {}
-                        _ => unreachable!(),
+                        5 => {
+                            c.adsr_enabled = bit(value, 7);
+                            c.decay_rate = 0x2 * ((value >> 4) as usize & 0x07) + 0x10;
+                            c.attack_rate = 0x2 * (value as usize & 0xF) + 1;
+                            c.envelope = 0;
+                        }
+                        6 => {
+                            c.sustain_rate = (value & 0x1F) as usize;
+                            c.sustain_level = (value >> 5) as u32;
+                        }
+                        7 => {
+                            if !bit(value, 7) {
+                                c.envelope = (value as u16 & 0x7F) << 4;
+                                c.gain_mode = GainMode::Fixed;
+                            } else {
+                                c.gain_rate = (value & 0x1F) as usize;
+                                c.gain_mode = GainMode::from(value >> 5);
+                                c.envelope = match c.gain_mode {
+                                    GainMode::LinearIncrease | GainMode::BentIncrease => 0,
+                                    GainMode::LinearDecrease | GainMode::ExponentialDecrease => {
+                                        ENVELOPE_MAX_VALUE
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -117,21 +164,26 @@ impl Dsp {
             }
         }
     }
+    pub fn clock(&mut self, total_clocks: usize) {
+        // self.channels.iter_mut().for_each(|c| c.clock(total_clocks));
+    }
     pub fn read(&mut self, address: usize) -> u8 {
         debug!("APU read {address:04X}");
         0
     }
     pub fn generate_sample(&mut self, ram: &[u8]) {
-        let mut prev_pitch: i16 = 0;
+        let mut prev_pitch: i32 = 0;
+        let mut fir_cache = 0.0;
         let s = self
             .channels
             .iter_mut()
             .map(|c| {
                 if c.enabled {
+                    c.clock(0);
                     // Add sample pitch to counter
                     let (counter, o) = c.counter.overflowing_add(if c.pitch_mod_enabled {
                         (c.sample_pitch as i32
-                            + ((prev_pitch as i32) >> 5) * ((c.sample_pitch as i32) >> 10))
+                            + (prev_pitch >> 5) * ((c.sample_pitch as i32) >> 10))
                             .clamp(0, u16::MAX as i32) as u16
                     } else {
                         c.sample_pitch
@@ -161,24 +213,29 @@ impl Dsp {
                                     } else {
                                         v as u16
                                     };
-                                    (v << shift) as i16
+                                    // shift right by 1 since the sample is out of 15 bits
+                                    ((v << shift) as i16) >> 1
                                 })
                             });
                         c.prev_sample_data = c.samples;
+                        // The previous 2 samples only, used for the filter for the block
+                        let mut prev = [c.samples[14] as i32, c.samples[15] as i32];
                         let samples: [i16; 16] = core::array::from_fn(|i| {
                             let s = sample_bytes.as_flattened()[i] as i32;
-                            let ps: [i32; 2] = core::array::from_fn(|i| c.prev_samples[i] as i32);
-                            c.prev_samples[1] = c.prev_samples[0];
-                            c.prev_samples[0] = s as i16;
+                            let ps = prev.clone();
+                            prev[1] = prev[0];
+                            prev[0] = s;
                             match filter {
                                 0 => s,
-                                1 => s + 15 * ps[0] / 16,
-                                2 => s + 61 * ps[0] / 32 + 15 * ps[1] / 16,
-                                3 => s + 115 * ps[0] / 64 + 13 * ps[1] / 16,
+                                1 => s + ps[0] + (-ps[0] >> 4),
+                                2 => s + 2 * ps[0] + ((-3 * ps[0]) >> 5) - ps[1] + (ps[1] >> 4),
+                                3 => {
+                                    s + 2 * ps[0] + ((-13 * ps[0]) >> 6) - ps[1]
+                                        + ((ps[1] * 3) >> 4)
+                                }
                                 _ => unreachable!(),
                             }
-                            .clamp(i16::MIN as i32, i16::MAX as i32)
-                                as i16
+                            .clamp(-0x3FFA, 0x3FF8) as i16
                         });
                         c.samples.copy_from_slice(&samples);
 
@@ -218,17 +275,25 @@ impl Dsp {
                             } else {
                                 c.samples[sample_index - i]
                             } as i32)
-                            >> 10) as i16
+                            >> 10) as i32
                     })
-                    .fold(0i16, |a, b| a.saturating_add(b));
+                    .fold(0i32, |a, b| a.saturating_add(b))
+                    .clamp(i16::MIN as i32, i16::MAX as i32);
 
                 prev_pitch = sample;
-                // Compute sample as a value between 0-1
-                sample as f32 / 0x3FFF as f32 * (c.volume[0] / 2 + c.volume[1] / 2) as f32
-                    / i8::MAX as f32
+
+                let s = (sample * c.envelope as i32) / ENVELOPE_MAX_VALUE as i32;
+
+                // if c.fir_enabled {
+                //     // fir_cache += s;
+                // }
+                ((s * c.volume[0] as i32) >> 7, (s * c.volume[1] as i32) >> 7)
             })
-            .sum::<f32>()
+            .fold(0.0, |acc, (l, r)| {
+                acc + (l + r) as f32 / 2.0 / 0x3FFF as f32
+            })
             / self.channels.len() as f32;
+        // self.
         if s > 1.0 {
             error!("Invalid audio sample generated: {}", s);
             self.sample_queue.push_back(0.0);
