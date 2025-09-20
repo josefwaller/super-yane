@@ -2,14 +2,14 @@ use crate::Background;
 use crate::{
     ppu::{
         Sprite,
-        background::WindowMaskLogic,
+        background::{BackgroundPixel, WindowMaskLogic},
         color_math::{ColorBlendMode, ColorMathSource},
         window::{Window, WindowRegion},
     },
     utils::rgb_to_color,
 };
 
-use crate::utils::{bit, color_to_rgb, color_to_rgb_bytes};
+use crate::utils::{bit, color_to_rgb_bytes};
 use log::*;
 
 pub const PIXELS_PER_SCANLINE: usize = 341;
@@ -742,7 +742,7 @@ impl Ppu {
                             self.extend_background_byte_buffer(*i, (x, y), *bpp);
                         }
                     }
-                    let bg_pixels: [Option<(u16, bool)>; 4] = core::array::from_fn(|i| {
+                    let bg_pixels: [BackgroundPixel; 4] = core::array::from_fn(|i| {
                         // Should be impossible to there to be no pixels right now
                         let b = &mut self.backgrounds[i];
                         if b.main_screen_enable || b.sub_screen_enable {

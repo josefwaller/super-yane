@@ -32,6 +32,8 @@ impl WindowMaskLogic {
     }
 }
 
+pub type BackgroundPixel = Option<(u16, bool)>; // (color, priority)
+
 #[derive(Clone)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
@@ -46,7 +48,7 @@ pub struct Background {
     pub main_screen_enable: bool,
     pub sub_screen_enable: bool,
     /// Buffer for pixel data, used by PPU to render the background
-    pub(super) pixel_buffer: VecDeque<Option<(u16, bool)>>,
+    pub(super) pixel_buffer: VecDeque<BackgroundPixel>,
     pub window_mask_logic: WindowMaskLogic,
     pub windows_enabled_main: bool,
     pub windows_enabled_sub: bool,
@@ -55,7 +57,7 @@ pub struct Background {
     pub color_math_enable: bool,
     /// Colors of the top-left pixel for each mosaic block.
     /// Not all of these values will be used
-    pub mosaic_values: [Option<(u16, bool)>; 256],
+    pub mosaic_values: [BackgroundPixel; 256],
 }
 impl Default for Background {
     fn default() -> Self {
