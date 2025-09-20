@@ -53,6 +53,9 @@ pub struct Background {
     pub window_enabled: [bool; 4],
     pub window_invert: [bool; 4],
     pub color_math_enable: bool,
+    /// Colors of the top-left pixel for each mosaic block.
+    /// Not all of these values will be used
+    pub mosaic_values: [Option<(u16, bool)>; 256],
 }
 impl Default for Background {
     fn default() -> Self {
@@ -74,6 +77,7 @@ impl Default for Background {
             window_enabled: [false; 4],
             window_invert: [false; 4],
             color_math_enable: false,
+            mosaic_values: [None; 256],
         }
     }
 }

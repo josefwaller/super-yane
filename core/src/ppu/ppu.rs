@@ -32,7 +32,7 @@ pub struct Ppu {
     pub bg_mode: u32,
     pub bg3_prio: bool,
     pub backgrounds: [Background; 4],
-    pub mosaic_size: u32,
+    pub mosaic_size: usize,
     /// Background H off latch
     pub bg_h_off: u32,
     /// Background V off latch
@@ -86,6 +86,9 @@ pub struct Ppu {
     pub multi_latch: u8,
     /// Multiplication result
     pub multi_res: i32,
+    /// Vertical count of the current mosaic block.
+    /// Basically a countdown (or count up) until when to recompute the mosaic latches
+    mosaic_v_latch: usize,
 }
 
 impl Default for Ppu {
@@ -137,6 +140,7 @@ impl Default for Ppu {
             factor_b: 0,
             multi_latch: 0,
             multi_res: 0,
+            mosaic_v_latch: 0,
         }
     }
 }
@@ -252,7 +256,7 @@ impl Ppu {
                 (0..4).for_each(|i| {
                     self.backgrounds[i].mosaic = bit(value, i);
                 });
-                self.mosaic_size = (value & 0xF0) as u32 / 0x10 + 1;
+                self.mosaic_size = (value & 0xF0) as usize / 0x10 + 1;
             }
             0x2107..=0x210A => {
                 let b = &mut self.backgrounds[addr - 0x2107];
@@ -704,6 +708,8 @@ impl Ppu {
                     if y > 0 {
                         self.reset_oam_buffer(y - 1);
                     }
+                    // Update mosaic latch
+                    self.mosaic_v_latch = (self.mosaic_v_latch + 1) % self.mosaic_size;
                 }
                 if x < 256 && y < 240 {
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
@@ -740,7 +746,18 @@ impl Ppu {
                         // Should be impossible to there to be no pixels right now
                         let b = &mut self.backgrounds[i];
                         if b.main_screen_enable || b.sub_screen_enable {
-                            b.pixel_buffer.pop_front().unwrap()
+                            // Get next pixel in the buffer
+                            let v = b.pixel_buffer.pop_front().unwrap();
+                            // Use/update mosaic latch if enabled
+                            if b.mosaic {
+                                let p = &mut b.mosaic_values[x / self.mosaic_size];
+                                if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0 {
+                                    *p = v;
+                                }
+                                *p
+                            } else {
+                                v
+                            }
                         } else {
                             None
                         }
@@ -913,7 +930,6 @@ impl Ppu {
                             })
                     };
                     // Set screen pixel
-                    // Temporary - just use subscreen as a fallback value
                     self.screen_buffer[256 * y + x] = p & 0x7FFF;
                 }
             }
