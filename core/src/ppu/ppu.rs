@@ -503,9 +503,16 @@ impl Ppu {
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
         self.vram_cache_2bpp[(addr / 2) % self.vram_cache_2bpp.len()]
     }
-    fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
-        // Get an immutable reference to the background
-        let b = &self.backgrounds[index];
+    /// Get a slice of 8 background pixels that contains the given coordinates.
+    /// Also return the X offset that the given coordinate is at in the slice.
+    /// i.e. if x=13 y=0, then return the second slice in the background with offset 5
+    fn get_background_slice(
+        &self,
+        bg_index: usize,
+        (x, y): (usize, usize),
+        bpp: usize,
+    ) -> ([BackgroundPixel; 8], usize) {
+        let b = &self.backgrounds[bg_index];
         // Get the tilemaps to render, relative to the current tilemap address
         // So thi is basically an offset to add to the tilemap address
         // [top left, top right, bot left, bot right]
@@ -576,6 +583,7 @@ impl Ppu {
         let mut slices = [[0; 8]; MAX_BPP / 2];
         (0..(bpp as usize / 2))
             .for_each(|i| slices[i] = self.get_2bpp_slice_at(slice_addr + 16 * i));
+
         // Todo: Make this actually change
         let direct_color = false;
         let temp: [u16; 256] = core::array::from_fn(|i| {
@@ -589,7 +597,7 @@ impl Ppu {
         // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
             2 => {
-                let i = if self.bg_mode == 0 { index } else { 0 };
+                let i = if self.bg_mode == 0 { bg_index } else { 0 };
                 &self.cgram[(4 * 8 * i + 4 * palette_index)..(4 * 8 * i + 4 * palette_index + 4)]
             }
             4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
@@ -602,30 +610,34 @@ impl Ppu {
             }
             _ => panic!("Unsupported bpp: {}", bpp),
         };
-        // Get a mutable reference to the background now
-        let b = &mut self.backgrounds[index];
+        let slice_values: [BackgroundPixel; 8] = core::array::from_fn(|i| {
+            let v = (0..4)
+                .map(|j| {
+                    let s = slices[j];
+                    // Shifted left by 2 since each slice will have 2 bits per pixel
+                    (s[if flip_x { 7 - i } else { i }] as usize) << (2 * j)
+                })
+                .sum::<usize>();
+            if v == 0 {
+                None
+            } else {
+                Some((palette[v], priority))
+            }
+        });
         // We "skip" the first (x % 8) pixels
         // Since each byte contains data for 8 consecutive pixels
         // if the screen is scrolled over horizontally by less than 8 pixels
         // (or any amount that isn't a multiple of 8), we need to load the
         // byte and then only use some of the data it in
         // So we skip the first (x % 8) pixels by starting with that offset
-        ((x % 8)..8).for_each(|i| {
-            b.pixel_buffer.push_back({
-                let v = slices
-                    .iter()
-                    .enumerate()
-                    .map(|(j, s)|
-                    // Shifted left by 2 since each slice will have 2 bits per pixel
-                    (s[if flip_x {7 - i } else { i }] as usize) << (2 * j))
-                    .sum::<usize>();
-                if v == 0 {
-                    None
-                } else {
-                    Some((palette[v], priority))
-                }
-            })
-        });
+        (slice_values, (x % 8))
+    }
+    fn extend_background_byte_buffer(&mut self, index: usize, (x, y): (usize, usize), bpp: usize) {
+        // Get the data to extend the buffer with
+        let (slices, offset) = self.get_background_slice(index, (x, y), bpp);
+        // Extend the buffer
+        let b = &mut self.backgrounds[index];
+        b.pixel_buffer.extend(&slices[offset..slices.len()]);
     }
     fn reset_oam_buffer(&mut self, y: usize) {
         // Todo: Don't copy this every scanline
