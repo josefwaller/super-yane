@@ -63,7 +63,7 @@ pub struct Voice {
     pub sustain_rate: usize,
     pub gain_rate: usize,
     pub gain_mode: GainMode,
-    pub fir_enabled: bool,
+    pub echo_enabled: bool,
     /// Current address of the block being played
     pub(super) block_addr: Option<usize>,
     /// Decoded samples from the BRR block
@@ -97,16 +97,16 @@ impl Voice {
                     } else {
                         self.envelope
                     };
-                    if v >= ENVELOPE_MAX_VALUE {
+                    if v >= 0x7E0 {
                         self.adsr_stage = Decay;
                     }
-                    v
+                    v.max(0x7FF)
                 }
                 Decay => {
                     if self.get_period_elapsed(self.decay_rate) {
-                        let v =
-                            (self.envelope.saturating_sub(1)).saturating_sub(self.envelope >> 8);
-                        if v <= (self.sustain_level as u16 + 1) * ENVELOPE_MAX_VALUE / 8 {
+                        let v = self.envelope.saturating_sub(1);
+                        let v = v.saturating_sub((v >> 8) + 1);
+                        if v <= self.sustain_level as u16 {
                             self.adsr_stage = Sustain;
                         }
                         v
@@ -116,8 +116,9 @@ impl Voice {
                 }
                 Sustain => {
                     if self.get_period_elapsed(self.sustain_rate) {
-                        (self.envelope.saturating_sub(1)).saturating_sub(self.envelope >> 8)
-                        // self.envelope
+                        let v = self.envelope.saturating_sub(1);
+                        let v = v.saturating_sub((v >> 8) + 1);
+                        v
                     } else {
                         self.envelope
                     }
@@ -130,7 +131,8 @@ impl Voice {
                 self.envelope = match self.gain_mode {
                     Fixed => self.envelope,
                     LinearDecrease => self.envelope - 32,
-                    ExponentialDecrease => self.envelope,
+                    // ExponentialDecrease => ((self.envelope.saturating_sub(1)) >> 8) + 1,
+                    ExponentialDecrease => todo!("Exponential Decrease"),
                     LinearIncrease => self.envelope + 32,
                     BentIncrease => {
                         if self.envelope < 0x600 {

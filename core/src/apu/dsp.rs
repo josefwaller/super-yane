@@ -5,6 +5,7 @@ use crate::{
     },
     utils::bit,
 };
+use derivative::Derivative;
 use log::*;
 use std::collections::VecDeque;
 
@@ -52,7 +53,8 @@ const GAUSS_TABLE: [i16; 0x200] = [
 ];
 
 /// The DSP
-#[derive(Clone, Default)]
+#[derive(Clone, Derivative)]
+#[derivative(Default)]
 pub struct Dsp {
     /// The sound channels
     pub channels: [Voice; 8],
@@ -70,6 +72,9 @@ pub struct Dsp {
     pub echo_feedback: i8,
     /// Echo volumes, left then right
     pub echo_volume: [i8; 2],
+    // ARAM
+    #[derivative(Default(value = "[0; 0x10000]"))]
+    aram: [u8; 0x10000],
     /// Index of head of fir cache
     fir_index: usize,
     /// Index of the echo sample about to be read
@@ -95,7 +100,7 @@ impl Dsp {
                 self.channels
                     .iter_mut()
                     .enumerate()
-                    .for_each(|(i, c)| c.fir_enabled = bit(value, i));
+                    .for_each(|(i, c)| c.echo_enabled = bit(value, i));
             }
             0x4C => {
                 // debug!("Write");
@@ -150,7 +155,7 @@ impl Dsp {
                         }
                         6 => {
                             c.sustain_rate = (value & 0x1F) as usize;
-                            c.sustain_level = (value >> 5) as u32;
+                            c.sustain_level = ((value >> 5) as u32 + 1) * 0x100;
                         }
                         7 => {
                             if !bit(value, 7) {
@@ -302,10 +307,18 @@ impl Dsp {
             core::array::from_fn(|i| ((s * c.volume[i] as i32) >> 7) as i32)
         });
 
+        let new_echo_value = voices
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| self.channels[*i].echo_enabled)
+            .fold([0, 0], |acc, (_, v)| [acc[0] + v[0], acc[1] + v[1]]);
+
         // Read echo value
         if self.echo_size != 0 {
+            // Read 4 bytes
             let values: [u8; 4] =
                 core::array::from_fn(|i| ram[(self.echo_addr + self.echo_index + i) % ram.len()]);
+            // Transform into 2 LE 16bit values
             self.fir_cache[self.fir_index] =
                 core::array::from_fn(|i| i16::from_le_bytes([values[2 * i], values[2 * i + 1]]));
         }
@@ -324,8 +337,9 @@ impl Dsp {
                 + ((echo_val as i32 * self.echo_volume[i] as i32) >> 7)) as i16
         });
         let echo_in: [i16; 2] = core::array::from_fn(|i| {
-            (voices.iter().map(|arr| arr[i]).sum::<i32>() / self.channels.len() as i32
-                + ((echo_val as i32 * self.echo_feedback as i32) >> 7)) as i16
+            // (voices.iter().map(|arr| arr[i]).sum::<i32>() / self.channels.len() as i32
+            //     + ((echo_val as i32 * self.echo_feedback as i32) >> 7)) as i16
+            new_echo_value.map(|v| ((v * self.echo_feedback as i32) >> 7) as i16)[i]
         });
 
         // Go to next cache value
