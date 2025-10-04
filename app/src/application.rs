@@ -5,7 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{cell, widgets::text_table};
+use crate::{
+    cell,
+    widgets::{screen::Screen, text_table},
+};
 use iced::{
     Alignment::{self, Center},
     Color, Element,
@@ -26,8 +29,8 @@ use iced::{
         },
     },
     widget::{
-        Column, Container, Row, Scrollable, Slider, TextInput, button, checkbox, column, container,
-        horizontal_space,
+        Column, Container, Row, Scrollable, Slider, TextInput, button, canvas, checkbox, column,
+        container, horizontal_space,
         image::{FilterMethod, Handle, Image},
         keyed_column, pick_list, row, scrollable,
         scrollable::RelativeOffset,
@@ -607,11 +610,6 @@ impl Application {
         }
     }
     pub fn view(&self) -> Element<'_, Message> {
-        let data: [[u8; 4]; 256 * 240] = self
-            .console
-            .ppu()
-            .screen_data_rgb()
-            .map(|[r, g, b]| [r, g, b, 0xFF]);
         column![
             row![
                 scrollable(column![
@@ -623,11 +621,11 @@ impl Application {
                 .spacing(0)
                 .width(Length::Shrink),
                 container(column![
-                    Image::new(Handle::from_rgba(256, 240, self.screen_data.as_flattened().to_vec()))
-                        .height(Length::Fill)
-                        .width(Length::Fill)
-                        .content_fit(iced::ContentFit::Contain)
-                        .filter_method(FilterMethod::Nearest),
+                    canvas(Screen { 
+                        frame_data: self.screen_data.as_flattened(),
+                        })
+                    .height(Length::Fill)
+                    .width(Length::Fill),
                     row![
                         button("OPEN").on_press(Message::LoadRom),
                         button("RESET").on_press(Message::Reset),

@@ -13,6 +13,6 @@ wdc65816 = { path = "../wdc65816" }
 spc700 = { path = "../spc700" }
 log = { workspace = true }
 simplelog = "0.12.2"
-iced = { version = "0.13.1", features = ["image"] }
+iced = { version = "0.13.1", features = ["image", "canvas"] }
 itertools = "0.14.0"
 rfd = "0.15.3"

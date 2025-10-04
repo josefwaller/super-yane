@@ -131,8 +131,8 @@ impl Voice {
                 self.envelope = match self.gain_mode {
                     Fixed => self.envelope,
                     LinearDecrease => self.envelope - 32,
-                    // ExponentialDecrease => ((self.envelope.saturating_sub(1)) >> 8) + 1,
-                    ExponentialDecrease => todo!("Exponential Decrease"),
+                    ExponentialDecrease => ((self.envelope.saturating_sub(1)) >> 8) + 1,
+                    // ExponentialDecrease => todo!("Exponential Decrease"),
                     LinearIncrease => self.envelope + 32,
                     BentIncrease => {
                         if self.envelope < 0x600 {
