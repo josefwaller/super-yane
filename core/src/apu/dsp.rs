@@ -103,22 +103,18 @@ impl Dsp {
                     .for_each(|(i, c)| c.echo_enabled = bit(value, i));
             }
             0x4C => {
-                // debug!("Write");
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
-                        // debug!("Start channel {i}");
                         c.enabled = true;
-                        if c.adsr_enabled {
-                            c.adsr_stage = AdsrStage::Attack;
-                            c.envelope = 0;
-                        }
+                        c.adsr_stage = AdsrStage::Attack;
+                        c.envelope = 0;
                     }
                 });
             }
             0x5C => {
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
-                        c.enabled = false
+                        c.adsr_stage = AdsrStage::Release;
                     }
                 });
             }
@@ -137,12 +133,10 @@ impl Dsp {
                         1 => c.volume[1] = value as i8,
                         2 => {
                             c.sample_pitch = (c.sample_pitch & 0x3F00) | (value as u16);
-                            // debug!("Sample rate is {:04X}", c.sample_pitch);
                         }
                         3 => {
                             c.sample_pitch =
                                 ((value & 0x3F) as u16 * 0x100) | (c.sample_pitch & 0xFF);
-                            // debug!("Sample rate is {:04X}", c.sample_pitch);
                         }
                         4 => {
                             c.sample_src = (value as usize) * 0x04;

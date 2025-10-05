@@ -4,6 +4,8 @@ use log::debug;
 
 pub const ENVELOPE_MAX_VALUE: u16 = 0x7FF;
 
+pub const RELEASE_PERIOD_RATE: usize = 31;
+
 pub const PERIOD_TABLE: [usize; 32] = [
     0, 2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32,
     24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1,
@@ -42,7 +44,7 @@ pub enum AdsrStage {
     Attack,
     Decay,
     Sustain,
-    Releast,
+    Release,
 }
 
 #[derive(Default, Clone)]
@@ -123,7 +125,13 @@ impl Voice {
                         self.envelope
                     }
                 }
-                _ => self.envelope,
+                Release => {
+                    if self.get_period_elapsed(RELEASE_PERIOD_RATE) {
+                        self.envelope.saturating_sub(8)
+                    } else {
+                        self.envelope
+                    }
+                }
             }
         } else {
             if self.get_period_elapsed(self.gain_rate) {
