@@ -72,9 +72,6 @@ pub struct Dsp {
     pub echo_feedback: i8,
     /// Echo volumes, left then right
     pub echo_volume: [i8; 2],
-    // ARAM
-    #[derivative(Default(value = "[0; 0x10000]"))]
-    aram: [u8; 0x10000],
     /// Index of head of fir cache
     fir_index: usize,
     /// Index of the echo sample about to be read
@@ -199,7 +196,7 @@ impl Dsp {
                 c.clock(0);
                 // Add sample pitch to counter
                 let (counter, o) = c.counter.overflowing_add(if c.pitch_mod_enabled {
-                    (c.sample_pitch as i32 + (prev_pitch >> 5) * ((c.sample_pitch as i32) >> 10))
+                    ((c.sample_pitch as i32 * ((prev_pitch >> 4) + 0x400)) >> 10)
                         .clamp(0, u16::MAX as i32) as u16
                 } else {
                     c.sample_pitch
