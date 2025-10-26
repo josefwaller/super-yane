@@ -102,7 +102,7 @@ impl Voice {
                     if v >= 0x7E0 {
                         self.adsr_stage = Decay;
                     }
-                    v.max(0x7FF)
+                    v.min(0x7FF)
                 }
                 Decay => {
                     if self.get_period_elapsed(self.decay_rate) {

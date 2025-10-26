@@ -7,7 +7,7 @@ use crate::{
 };
 use derivative::Derivative;
 use log::*;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Shr};
 
 const GAUSS_TABLE: [i16; 0x200] = [
     0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
@@ -103,8 +103,11 @@ impl Dsp {
                 self.channels.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
                         c.enabled = true;
-                        c.adsr_stage = AdsrStage::Attack;
-                        c.envelope = 0;
+                        // If we are not using ADSR, we don't want to reset the envelope
+                        if c.adsr_enabled {
+                            c.adsr_stage = AdsrStage::Attack;
+                            c.envelope = 0;
+                        }
                     }
                 });
             }
@@ -142,7 +145,7 @@ impl Dsp {
                             c.adsr_enabled = bit(value, 7);
                             c.decay_rate = 0x2 * ((value >> 4) as usize & 0x07) + 0x10;
                             c.attack_rate = 0x2 * (value as usize & 0xF) + 1;
-                            c.envelope = 0;
+                            // c.envelope = 0;
                         }
                         6 => {
                             c.sustain_rate = (value & 0x1F) as usize;
@@ -212,7 +215,9 @@ impl Dsp {
                     });
                     // Read the head and parse into flags
                     let head = ram[block_addr];
+                    // High nibble
                     let shift = head >> 4;
+                    // Low nibble
                     let filter = (head >> 2) & 0x03;
                     let loop_flag = bit(head, 1);
                     let end_flag = bit(head, 0);
@@ -235,7 +240,7 @@ impl Dsp {
                                 }
                             })
                         });
-                    c.prev_sample_data = c.samples;
+                    c.prev_sample_data.copy_from_slice(&c.samples);
                     // The previous 2 samples only, used for the filter for the block
                     let mut prev = [c.samples[14] as i32, c.samples[15] as i32];
                     let samples: [i16; 16] = core::array::from_fn(|i| {
@@ -277,6 +282,7 @@ impl Dsp {
             // Gaussian interpolation goes here
             let sample = (0..4)
                 .map(|i| {
+                    // i = 0 => newest, i = 3 => oldest
                     let gauss_value = match i {
                         0 => GAUSS_TABLE[0x000 + gauss_index],
                         1 => GAUSS_TABLE[0x100 + gauss_index],
@@ -293,6 +299,7 @@ impl Dsp {
                         >> 10) as i32
                 })
                 .fold(0i32, |a, b| a.saturating_add(b))
+                .shr(1i32)
                 .clamp(i16::MIN as i32, i16::MAX as i32);
 
             prev_pitch = sample;
