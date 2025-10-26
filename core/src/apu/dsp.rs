@@ -227,7 +227,12 @@ impl Dsp {
                                     v as u16
                                 };
                                 // shift right by 1 since the sample is out of 15 bits
-                                ((v << shift) as i16) >> 1
+                                if shift >= 0xD {
+                                    // When shift=13..15, decoding works as if shift=12 and nibble=(nibble SAR 3).
+                                    (((v >> 3) << 12) as i16) >> 1
+                                } else {
+                                    ((v << shift) as i16) >> 1
+                                }
                             })
                         });
                     c.prev_sample_data = c.samples;
