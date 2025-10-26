@@ -153,18 +153,11 @@ impl Dsp {
                         }
                         7 => {
                             if !bit(value, 7) {
-                                c.envelope = (value as u16 & 0x7F) << 4;
+                                c.envelope = (value as u16 & 0x7F) * 0x10;
                                 c.gain_mode = GainMode::Fixed;
                             } else {
                                 c.gain_rate = (value & 0x1F) as usize;
                                 c.gain_mode = GainMode::from(value >> 5);
-                                c.envelope = match c.gain_mode {
-                                    GainMode::LinearIncrease | GainMode::BentIncrease => 0,
-                                    GainMode::LinearDecrease | GainMode::ExponentialDecrease => {
-                                        ENVELOPE_MAX_VALUE
-                                    }
-                                    _ => unreachable!(),
-                                }
                             }
                         }
                         _ => {}
