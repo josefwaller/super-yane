@@ -36,6 +36,7 @@ fn main() {
             default_text_size: 12.into(),
             antialiasing: false,
         })
+        .exit_on_close_request(false)
         .run()
         .unwrap();
 }

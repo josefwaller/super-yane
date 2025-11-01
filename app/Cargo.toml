@@ -16,3 +16,4 @@ simplelog = "0.12.2"
 iced = { version = "0.13.1", features = ["image", "canvas"] }
 itertools = "0.14.0"
 rfd = "0.15.3"
+wavers = "1.5.1"

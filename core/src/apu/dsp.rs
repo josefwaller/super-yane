@@ -234,21 +234,21 @@ impl Dsp {
                             })
                         });
                     c.prev_sample_data.copy_from_slice(&c.samples);
-                    // The previous 2 samples only, used for the filter for the block
-                    let mut prev = [c.samples[14] as i32, c.samples[15] as i32];
+
+                    let mut old = c.samples[15] as i32;
+                    let mut older = c.samples[14] as i32;
                     let samples: [i16; 16] = core::array::from_fn(|i| {
                         let s = sample_bytes.as_flattened()[i] as i32;
-                        let ps = prev.clone();
-                        prev[1] = prev[0];
-                        prev[0] = s;
-                        match filter {
+                        let value = match filter {
                             0 => s,
-                            1 => s + ps[0] + (-ps[0] >> 4),
-                            2 => s + 2 * ps[0] + ((-3 * ps[0]) >> 5) - ps[1] + (ps[1] >> 4),
-                            3 => s + 2 * ps[0] + ((-13 * ps[0]) >> 6) - ps[1] + ((ps[1] * 3) >> 4),
+                            1 => s + old + ((-old) >> 4),
+                            2 => s + 2 * old + ((-3 * old) >> 5) - older + (older >> 4),
+                            3 => s + 2 * old + ((-13 * old) >> 6) - older + ((older * 3) >> 4),
                             _ => unreachable!(),
-                        }
-                        .clamp(-0x3FFA, 0x3FF8) as i16
+                        } as i16;
+                        older = old;
+                        old = value as i32;
+                        value
                     });
                     c.samples.copy_from_slice(&samples);
 

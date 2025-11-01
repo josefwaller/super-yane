@@ -1,8 +1,5 @@
 use std::{
-    collections::VecDeque,
-    fmt::Display,
-    string::FromUtf16Error,
-    time::{Duration, Instant},
+    collections::VecDeque, fmt::Display, path::Path, string::FromUtf16Error, time::{Duration, Instant}
 };
 
 use crate::{
@@ -28,6 +25,7 @@ use iced::{
             Physical::Code as KeyCode,
         },
     },
+    Task,
     widget::{
         Column, Container, Row, Scrollable, Slider, TextInput, button, canvas, checkbox, column,
         container, horizontal_space,
@@ -38,7 +36,7 @@ use iced::{
         text::IntoFragment,
         text_input, vertical_space,
     },
-    window,
+    window::{self, Id},
 };
 use itertools::Itertools;
 use log::*;
@@ -49,6 +47,7 @@ use rfd::FileDialog;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
 use super_yane::{Background, Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use wavers::{Samples, write};
 use wdc65816::{format_address_mode, opcode_data};
 
 use crate::widgets::ram::ram;
@@ -278,6 +277,8 @@ pub enum Message {
     Reset,
     ToggleLogCpu(bool),
     ToggleLogApu(bool),
+    Record(bool),
+    WindowClose()
 }
 
 pub struct Application {
@@ -300,6 +301,8 @@ pub struct Application {
     inst_display: InstDisplay,
     log_cpu: bool,
     log_apu: bool,
+    record: bool,
+    samples: Vec<f32>,
     screen_data: [[u8; 4]; 256 * 240],
     emu_time: Duration,
     last_frame_time: Instant,
@@ -345,6 +348,8 @@ impl Default for Application {
             inst_display: InstDisplay::Cpu,
             log_cpu: false,
             log_apu: false,
+            record: false,
+            samples: vec![],
             screen_data: [[0; 4]; 256 * 240],
             emu_time: Duration::from_micros(0),
             last_frame_time: Instant::now(),
@@ -431,8 +436,8 @@ impl Application {
             .into_iter()
             .map(|s| VOLUME * s)
             .collect();
-        if samples.iter().find(|x| **x != 0.0).is_some() {
-            // debug!("samples {samples:?}");
+        if self.record {
+            self.samples.extend_from_slice(samples.as_slice());
         }
         if self.channel.size() == 0 {
             // error!("Empty queue");
@@ -514,18 +519,39 @@ impl Application {
             },
         }
     }
-    fn handle_input(&mut self, event: Event) {
+    fn handle_input(&mut self, event: Event) -> Task<Message> {
         if let Keyboard(keyboard_event) = event {
             match keyboard_event {
                 KeyPressed { key, .. } => self.on_key_change(key, true),
                 KeyReleased { key, .. } => self.on_key_change(key, false),
                 _ => {}
             };
+        } else if let event::Event::Window(window_event) = event {
+            match window_event {
+                window::Event::CloseRequested => {
+                    debug!("Closing application");
+                    let samples = Samples::new(self.samples.clone().into_boxed_slice());
+                    write(
+                        Path::new("./samples.wav"),
+                        &samples,
+                        32_000,
+                        1,
+                    )
+                    .unwrap();
+                    return window::get_latest().and_then(|id| window::close(id));
+                }
+                _ => {}
+            }
         }
+        Task::none()
     }
-    pub fn update(&mut self, message: Message) {
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::OnEvent(e) => self.handle_input(e),
+            Message::WindowClose() => {
+            }
+            Message::OnEvent(e) => {
+                return self.handle_input(e);
+            },
             Message::NewFrame() => {
                 let ft = Instant::now();
                 if !self.is_paused {
@@ -607,7 +633,11 @@ impl Application {
             Message::SetInstDisplay(d) => self.inst_display = d,
             Message::ToggleLogApu(v) => self.log_apu = v,
             Message::ToggleLogCpu(v) => self.log_cpu = v,
-        }
+            Message::Record(v) => {
+                self.record = v;
+            }
+        };
+        Task::none()
     }
     pub fn view(&self) -> Element<'_, Message> {
         column![
@@ -653,6 +683,7 @@ impl Application {
                     row![
                         checkbox("Log CPU", self.log_cpu).on_toggle(Message::ToggleLogCpu),
                         checkbox("Log APU", self.log_apu).on_toggle(Message::ToggleLogApu),
+                        checkbox("Record", self.record).on_toggle(Message::Record)
                     ]
                 ]
                 .width(Length::Shrink)
