@@ -355,8 +355,8 @@ impl Dsp {
                 .for_each(|(i, v)| ram[(self.echo_addr + self.echo_index + i) % ram.len()] = *v);
             self.echo_index = (self.echo_index + 4) % self.echo_size;
         }
-        let s = (echo_out[0] + echo_out[1]) as f32 / 2.0 / 0x3FFF as f32;
-        if s > 1.0 {
+        let s = 10.0 * (echo_out[0] + echo_out[1]) as f32 / 2.0 / 0x3FFF as f32;
+        if s > 10.0 || s < -10.0 {
             error!("Invalid audio sample generated: {}", s);
             self.sample_queue.push_back(0.0);
         } else {
