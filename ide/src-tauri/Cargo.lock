@@ -3697,6 +3697,7 @@ dependencies = [
  "derivative",
  "log",
  "paste",
+ "serde",
  "spc700",
  "wdc65816",
 ]

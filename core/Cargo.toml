@@ -11,6 +11,7 @@ spc700 = { path = "../spc700", version = "0.1.0" }
 log = { workspace = true }
 paste = "1.0.15"
 derivative = "2.2.0"
+serde = "1.0.228"
 
 [dev-dependencies]
 insta = "1.43.1"

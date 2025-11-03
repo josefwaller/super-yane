@@ -12,11 +12,69 @@ import {
   // attachLogger,
 } from "@tauri-apps/plugin-log";
 import "./App.css";
+import { useCallback, useEffect, useRef } from "react";
+
+const DEFAULT_CONTROLLER = {
+  a: false,
+  b: false,
+  x: false,
+  y: false,
+  l: false,
+  r: false,
+  select: false,
+  start: false,
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+};
+
+const KEY_MAP = {
+  w: "up",
+  a: "left",
+  s: "down",
+  d: "right",
+  b: "a",
+  " ": "b",
+  n: "y",
+  m: "x",
+  q: "l",
+  e: "r",
+  r: "start",
+  f: "select",
+};
 
 function App() {
-  // const [greetMsg, setGreetMsg] = useState("");
-  // const [name, setName] = useState("");
+  const controllers = useRef([DEFAULT_CONTROLLER, DEFAULT_CONTROLLER]);
 
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    const button = KEY_MAP[e.key as keyof typeof KEY_MAP];
+    if (button) {
+      controllers.current[0] = {
+        ...controllers.current[0],
+        [button]: true,
+      };
+    }
+  }, []);
+
+  const onKeyUp = useCallback((e: KeyboardEvent) => {
+    const button = KEY_MAP[e.key as keyof typeof KEY_MAP];
+    if (button) {
+      controllers.current[0] = {
+        ...controllers.current[0],
+        [button]: false,
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
   async function on_file_load(e: React.ChangeEvent<HTMLInputElement>) {
     info("File load triggered");
     const file = e.target.files?.item(0);
@@ -30,7 +88,12 @@ function App() {
 
   async function run_frame() {
     info("Running frame update");
-    const pixelData = await invoke("update_emulator", { durationMillis: 16 });
+    const pixelData = await invoke("update_emulator", {
+      userInput: {
+        controllers: controllers.current,
+        reset: false,
+      },
+    });
     const ctx = (
       document.getElementById("canvas") as HTMLCanvasElement
     ).getContext("2d");

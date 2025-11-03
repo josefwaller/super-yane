@@ -3,23 +3,61 @@ extern crate super_yane;
 mod webgl;
 
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::{ops::DerefMut, sync::Mutex, time::Duration};
-use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
+use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 use tauri_plugin_log::{Target, TargetKind};
 use web_sys::{
     wasm_bindgen::JsCast, window, HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram,
     WebGlShader,
 };
 
+#[derive(Serialize, Deserialize, Copy, Clone)]
+struct ControllerValue {
+    a: bool,
+    b: bool,
+    x: bool,
+    y: bool,
+    up: bool,
+    left: bool,
+    right: bool,
+    down: bool,
+    start: bool,
+    select: bool,
+    r: bool,
+    l: bool,
+}
+
+impl From<ControllerValue> for InputPort {
+    fn from(value: ControllerValue) -> Self {
+        InputPort::StandardController {
+            a: value.a,
+            b: value.b,
+            x: value.x,
+            y: value.y,
+            up: value.up,
+            left: value.left,
+            right: value.right,
+            down: value.down,
+            start: value.start,
+            select: value.select,
+            r: value.r,
+            l: value.l,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserInput {
+    controllers: [ControllerValue; 2],
+    reset: bool,
+}
+
 struct AppState {
     // todo make this optional
     console: Console,
     // How long the emulation has been running
     emulation_time: Duration,
-}
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 #[tauri::command]
@@ -42,7 +80,7 @@ fn load_rom(rom_data: Vec<u8>, state: tauri::State<Mutex<AppState>>) -> Result<(
 #[tauri::command]
 // fn update_emulator(duration_millis: u64) {
 fn update_emulator(
-    duration_millis: u64,
+    user_input: UserInput,
     state: tauri::State<Mutex<AppState>>,
     app: tauri::AppHandle,
 ) -> tauri::ipc::Response {
@@ -52,6 +90,14 @@ fn update_emulator(
             return tauri::ipc::Response::new(vec![]);
         }
         Ok(mut guard) => {
+            // Set input
+            user_input
+                .controllers
+                .iter()
+                .enumerate()
+                .for_each(|(i, controller_value)| {
+                    guard.console.input_ports_mut()[i] = InputPort::from(*controller_value)
+                });
             // Advance a frame
             loop {
                 let vblank = guard.console.ppu().is_in_vblank();
@@ -86,7 +132,7 @@ pub fn run() {
                 ))
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![update_emulator, greet, load_rom])
+        .invoke_handler(tauri::generate_handler![update_emulator, load_rom])
         .manage(Mutex::new(AppState {
             console: Console::with_cartridge(
                 include_bytes!("../../../app/roms/HelloWorld.sfc")
