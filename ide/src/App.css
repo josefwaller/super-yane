@@ -114,3 +114,10 @@ button {
     background-color: #0f0f0f69;
   }
 }
+
+
+.canvas {
+  image-rendering: -webkit-optimize-contrast; /* webkit */
+image-rendering: -moz-crisp-edges; /* Firefox */
+width: 400px;
+}
