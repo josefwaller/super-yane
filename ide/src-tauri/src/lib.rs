@@ -19,8 +19,24 @@ struct AppState {
 }
 #[tauri::command]
 fn greet(name: &str) -> String {
-    info!("GREET");
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command]
+fn load_rom(rom_data: Vec<u8>, state: tauri::State<Mutex<AppState>>) -> Result<(), String> {
+    info!("LOAD ROM");
+    match state.lock() {
+        Err(e) => {
+            let err_msg = format!("Failed to lock state mutex: {}", e);
+            eprintln!("{}", err_msg);
+            Err(err_msg)
+        }
+        Ok(mut guard) => {
+            guard.console = Console::with_cartridge(rom_data.as_slice());
+            guard.emulation_time = Duration::ZERO;
+            Ok(())
+        }
+    }
 }
 
 #[tauri::command]
@@ -30,8 +46,6 @@ fn update_emulator(
     state: tauri::State<Mutex<AppState>>,
     app: tauri::AppHandle,
 ) -> tauri::ipc::Response {
-    info!("UPDATE");
-    // let context = webgl::init(app).unwrap();
     match state.lock() {
         Err(e) => {
             eprintln!("Failed to lock state mutex: {}", e);
@@ -41,7 +55,7 @@ fn update_emulator(
             // Advance a frame
             loop {
                 let vblank = guard.console.ppu().is_in_vblank();
-                guard.console.advance_instructions(1000);
+                guard.console.advance_instructions(1);
                 if !vblank && guard.console.ppu().is_in_vblank() {
                     break;
                 }
@@ -72,7 +86,7 @@ pub fn run() {
                 ))
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![update_emulator, greet])
+        .invoke_handler(tauri::generate_handler![update_emulator, greet, load_rom])
         .manage(Mutex::new(AppState {
             console: Console::with_cartridge(
                 include_bytes!("../../../app/roms/HelloWorld.sfc")

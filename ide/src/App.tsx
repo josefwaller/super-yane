@@ -1,25 +1,35 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+// import { useState } from "react";
+// import reactLogo from "./assets/react.svg";
 import useAnimationFrame from "use-animation-frame";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  warn,
-  debug,
-  trace,
+  // warn,
+  // debug,
+  // trace,
   info,
-  error,
-  attachConsole,
-  attachLogger,
+  // error,
+  // attachConsole,
+  // attachLogger,
 } from "@tauri-apps/plugin-log";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  // const [greetMsg, setGreetMsg] = useState("");
+  // const [name, setName] = useState("");
+
+  async function on_file_load(e: React.ChangeEvent<HTMLInputElement>) {
+    info("File load triggered");
+    const file = e.target.files?.item(0);
+    if (!file) {
+      return;
+    }
+    info(`Loading ROM file: ${file.name}`);
+    const arrayBuffer = await file.arrayBuffer();
+    await invoke("load_rom", { romData: arrayBuffer });
+  }
 
   async function run_frame() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+    info("Running frame update");
     const pixelData = await invoke("update_emulator", { durationMillis: 16 });
     const ctx = (
       document.getElementById("canvas") as HTMLCanvasElement
@@ -40,6 +50,7 @@ function App() {
     <main className="container">
       <h1>Welcome to Tauri + React</h1>
       <canvas id="canvas" width="256" height="240" className="canvas" />
+      <input onChange={on_file_load} type="file" />
     </main>
   );
 }
