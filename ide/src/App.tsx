@@ -7,12 +7,13 @@ import {
   // debug,
   // trace,
   info,
-  // error,
+  error,
   // attachConsole,
   // attachLogger,
 } from "@tauri-apps/plugin-log";
 import "./App.css";
 import { useCallback, useEffect, useRef } from "react";
+import useAudio from "./Audio";
 
 const DEFAULT_CONTROLLER = {
   a: false,
@@ -46,6 +47,11 @@ const KEY_MAP = {
 
 function App() {
   const controllers = useRef([DEFAULT_CONTROLLER, DEFAULT_CONTROLLER]);
+  const { start, clear, pushSamples } = useAudio({
+    numChannels: 1,
+    sampleRate: 32_000,
+    bufferSize: 10_000_000,
+  });
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
     const button = KEY_MAP[e.key as keyof typeof KEY_MAP];
@@ -76,7 +82,6 @@ function App() {
     };
   }, []);
   async function on_file_load(e: React.ChangeEvent<HTMLInputElement>) {
-    info("File load triggered");
     const file = e.target.files?.item(0);
     if (!file) {
       return;
@@ -84,10 +89,11 @@ function App() {
     info(`Loading ROM file: ${file.name}`);
     const arrayBuffer = await file.arrayBuffer();
     await invoke("load_rom", { romData: arrayBuffer });
+    start();
   }
 
   async function run_frame() {
-    info("Running frame update");
+    // info("Running frame update");
     const pixelData = await invoke("update_emulator", {
       userInput: {
         controllers: controllers.current,
@@ -105,6 +111,23 @@ function App() {
       );
       ctx.putImageData(imageData, 0, 0);
     }
+    const data = new Uint8ClampedArray(
+      (await invoke("get_audio_samples")) as ArrayBuffer
+    );
+    const float_data = new Float32Array(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength / Float32Array.BYTES_PER_ELEMENT
+    );
+    if (float_data.some((s) => s > 1.0 || s < -1.0)) {
+      error("Invalid audio sample received, skipping frame");
+      return;
+    }
+    const final_arr = float_data.map((s) => 10.0 * s);
+    // const float_data = new Float32Array(data).map(
+    //   (s) => (s / 255.0) * 2.0 - 1.0
+    // );
+    pushSamples([final_arr], final_arr.length);
   }
 
   useAnimationFrame(run_frame);

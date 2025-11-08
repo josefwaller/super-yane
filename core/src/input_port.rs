@@ -1,6 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Debug)]
 pub enum InputPort {
     #[default]
     Empty,

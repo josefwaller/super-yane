@@ -78,7 +78,6 @@ fn load_rom(rom_data: Vec<u8>, state: tauri::State<Mutex<AppState>>) -> Result<(
 }
 
 #[tauri::command]
-// fn update_emulator(duration_millis: u64) {
 fn update_emulator(
     user_input: UserInput,
     state: tauri::State<Mutex<AppState>>,
@@ -120,6 +119,30 @@ fn update_emulator(
     }
 }
 
+#[tauri::command]
+fn get_audio_samples(state: tauri::State<Mutex<AppState>>) -> tauri::ipc::Response {
+    match state.lock() {
+        Err(e) => {
+            eprintln!("Failed to lock state mutex: {}", e);
+            tauri::ipc::Response::new(vec![])
+        }
+        Ok(mut guard) => {
+            let samples = guard
+                .console
+                .apu_mut()
+                .sample_queue()
+                .into_iter()
+                .collect::<Vec<f32>>();
+            let samples = samples
+                .into_iter()
+                .map(|s| s.to_le_bytes())
+                .flatten()
+                .collect::<Vec<u8>>();
+            tauri::ipc::Response::new(samples)
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -132,7 +155,11 @@ pub fn run() {
                 ))
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![update_emulator, load_rom])
+        .invoke_handler(tauri::generate_handler![
+            update_emulator,
+            load_rom,
+            get_audio_samples
+        ])
         .manage(Mutex::new(AppState {
             console: Console::with_cartridge(
                 include_bytes!("../../../app/roms/HelloWorld.sfc")
