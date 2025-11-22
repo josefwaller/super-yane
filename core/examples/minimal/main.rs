@@ -1,22 +1,37 @@
 // Simple application used for profiling
 extern crate sdl3;
 
+use core::ops::DerefMut;
 use std::{env::args, fs};
 
 use log::debug;
-use sdl3::{event::Event, pixels::PixelFormatEnum};
+use sdl3::{
+    event::Event,
+    pixels::{PixelFormat, PixelFormatEnum},
+    rect::Rect,
+    render::{ScaleMode, SurfaceCanvas},
+    surface::Surface,
+};
 use super_yane::{
     Console,
     ppu::{PIXELS_PER_SCANLINE, SCANLINES},
     utils::color_to_rgb,
 };
+
+const SCREEN_SCALE: f32 = 3.0;
 fn main() {
     let context = sdl3::init().expect("Unable to initialize SDL3: ");
     let video = context.video().expect("Unable to initialize video: ");
-    let window = video
-        .window("Super Y.A.N.E.", 256 as u32, 240 as u32)
+    let mut window = video
+        .window(
+            "Super Y.A.N.E.",
+            256 * SCREEN_SCALE as u32,
+            240 * SCREEN_SCALE as u32,
+        )
         .build()
         .expect("Unable to build window:");
+
+    window.raise();
 
     let cartridge_contents = match args().nth(1) {
         Some(s) => fs::read(&s).expect(format!("Unable to read file '{}': ", s).as_str()),
@@ -41,16 +56,34 @@ fn main() {
             console.advance_instructions(1);
         }
         // Gather pixel data
-        let pixel_data: [[u8; 4]; 256 * 240] = console
+        let mut pixel_data: [[u8; 4]; 256 * 240] = console
             .ppu()
             .screen_data_rgb()
             // SDL defaults to BGR
             .map(|[r, g, b]| [b, g, r, 255]);
-        // Apply to window
-        let mut surface = window
+        // Create surface from data
+        let format = unsafe { PixelFormat::from_ll(PixelFormatEnum::ARGB8888.to_ll()) };
+        let small_surface =
+            Surface::from_data(pixel_data.as_flattened_mut(), 256, 240, 256 * 4, format).unwrap();
+        // Get window surface
+        let mut window_surface = window
             .surface(&event_pump)
             .expect("Unable to initialize surface: ");
-        surface.with_lock_mut(|p| p.copy_from_slice(pixel_data.as_flattened()));
-        surface.finish().expect("Error while rendering: ");
+        // Apply to window
+        small_surface
+            .blit_scaled(
+                Rect::new(0, 0, 256, 240),
+                window_surface.deref_mut(),
+                Rect::new(
+                    0,
+                    0,
+                    (SCREEN_SCALE * 256.0) as u32,
+                    (SCREEN_SCALE * 240.0) as u32,
+                ),
+                ScaleMode::Nearest.into(),
+            )
+            .unwrap();
+        // Refresh
+        window_surface.finish().expect("Error while rendering: ");
     }
 }
