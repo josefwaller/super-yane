@@ -7,13 +7,14 @@ use std::{env::args, fs};
 use log::debug;
 use sdl3::{
     event::Event,
+    keyboard::{KeyboardState, Scancode},
     pixels::{PixelFormat, PixelFormatEnum},
     rect::Rect,
     render::{ScaleMode, SurfaceCanvas},
     surface::Surface,
 };
 use super_yane::{
-    Console,
+    Console, InputPort,
     ppu::{PIXELS_PER_SCANLINE, SCANLINES},
     utils::color_to_rgb,
 };
@@ -48,6 +49,23 @@ fn main() {
                 _ => {}
             }
         }
+
+        let keys = KeyboardState::new(&event_pump);
+        let controller: InputPort = InputPort::StandardController {
+            a: keys.is_scancode_pressed(Scancode::B),
+            b: keys.is_scancode_pressed(Scancode::Space),
+            x: keys.is_scancode_pressed(Scancode::N),
+            y: keys.is_scancode_pressed(Scancode::M),
+            left: keys.is_scancode_pressed(Scancode::A),
+            right: keys.is_scancode_pressed(Scancode::D),
+            up: keys.is_scancode_pressed(Scancode::W),
+            down: keys.is_scancode_pressed(Scancode::S),
+            start: false,
+            select: false,
+            r: false,
+            l: false,
+        };
+        console.input_ports_mut()[0] = controller;
         // Advance console
         while !console.ppu().is_in_vblank() {
             console.advance_instructions(1);
