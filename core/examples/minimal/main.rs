@@ -2,7 +2,11 @@
 extern crate sdl3;
 
 use core::ops::DerefMut;
-use std::{env::args, fs};
+use std::{
+    env::args,
+    fs,
+    time::{Duration, Instant},
+};
 
 use log::debug;
 use sdl3::{
@@ -14,7 +18,7 @@ use sdl3::{
     surface::Surface,
 };
 use super_yane::{
-    Console, InputPort,
+    Console, InputPort, MASTER_CLOCK_SPEED_HZ,
     ppu::{PIXELS_PER_SCANLINE, SCANLINES},
     utils::color_to_rgb,
 };
@@ -42,6 +46,7 @@ fn main() {
     let mut event_pump = context
         .event_pump()
         .expect("Unable to initialize EventPump");
+    let start_time = Instant::now();
     'main_loop: loop {
         for e in event_pump.poll_iter() {
             match e {
@@ -103,5 +108,12 @@ fn main() {
             .unwrap();
         // Refresh
         window_surface.finish().expect("Error while rendering: ");
+        // Wait
+        let total_cycles = Duration::from_micros(
+            1_000_000 * *console.total_master_clocks() / MASTER_CLOCK_SPEED_HZ,
+        );
+        if total_cycles > Instant::now() - start_time {
+            std::thread::sleep(total_cycles - (Instant::now() - start_time));
+        }
     }
 }
