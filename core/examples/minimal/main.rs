@@ -47,6 +47,7 @@ fn main() {
         .event_pump()
         .expect("Unable to initialize EventPump");
     let start_time = Instant::now();
+    let mut is_paused = false;
     'main_loop: loop {
         for e in event_pump.poll_iter() {
             match e {
@@ -65,10 +66,10 @@ fn main() {
             right: keys.is_scancode_pressed(Scancode::D),
             up: keys.is_scancode_pressed(Scancode::W),
             down: keys.is_scancode_pressed(Scancode::S),
-            start: false,
-            select: false,
-            r: false,
-            l: false,
+            start: keys.is_scancode_pressed(Scancode::R),
+            select: keys.is_scancode_pressed(Scancode::F),
+            r: keys.is_scancode_pressed(Scancode::E),
+            l: keys.is_scancode_pressed(Scancode::Q),
         };
         console.input_ports_mut()[0] = controller;
         // Advance console

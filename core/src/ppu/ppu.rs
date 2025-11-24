@@ -15,6 +15,20 @@ use log::*;
 pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
 
+fn convert_8p8(value: u16) -> f32 {
+    (value as i16 as f32) / 0x100 as f32
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct Matrix {
+    a: u16,
+    b: u16,
+    c: u16,
+    d: u16,
+    center_x: i16,
+    center_y: i16,
+}
+
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
@@ -78,10 +92,9 @@ pub struct Ppu {
     pub color_window_logic: WindowMaskLogic,
     pub direct_color: bool,
     pub overscan: bool,
-    /// 16-bit multiplication factor
-    pub factor_a: i16,
-    /// 8-bit multiplication factor
-    pub factor_b: i8,
+    // The matrix values (a, b, c, and d), some of which (a, b) are also used for the
+    // multiplication result
+    pub matrix: Matrix,
     /// Multiplication latch
     pub multi_latch: u8,
     /// Multiplication result
@@ -136,8 +149,7 @@ impl Default for Ppu {
             color_window_logic: WindowMaskLogic::And,
             direct_color: false,
             overscan: false,
-            factor_a: 0,
-            factor_b: 0,
+            matrix: Matrix::default(),
             multi_latch: 0,
             multi_res: 0,
             mosaic_v_latch: 0,
@@ -327,16 +339,37 @@ impl Ppu {
                     self.inc_vram_addr();
                 }
             }
-            0x211B => {
-                self.factor_a = ((self.multi_latch as i16) << 8) | value as i16;
+            0x211A => {
+                info!("Write to settings {:02X}", value);
+            }
+            0x211B..=0x2120 => {
+                let v = ((value as u16) << 8) | self.multi_latch as u16;
+                match addr & 0xFF {
+                    0x1B => self.matrix.a = v,
+                    0x1C => self.matrix.b = v,
+                    0x1D => self.matrix.c = v,
+                    0x1E => self.matrix.d = v,
+                    0x1F => {
+                        // Keep it as a 13 bit signed number
+                        if v & 0x1000 != 0 {
+                            self.matrix.center_x = (0xE000 | (v & 0x1FFF)) as i16;
+                        } else {
+                            self.matrix.center_x = (v & 0x1FFF) as i16;
+                        }
+                    }
+                    0x20 => {
+                        // Keep it as a 13 bit signed number
+                        if v & 0x1000 != 0 {
+                            self.matrix.center_y = (0xE000 | (v & 0x1FFF)) as i16;
+                        } else {
+                            self.matrix.center_y = (v & 0x1FFF) as i16;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
                 self.multi_latch = value;
-                self.multi_res = self.factor_a as i32 * self.factor_b as i32;
+                self.refresh_multi_res();
             }
-            0x211C => {
-                self.factor_b = value as i8;
-                self.multi_res = self.factor_a as i32 * self.factor_b as i32;
-            }
-
             0x2121 => {
                 self.cgram_addr = value as usize;
                 self.cgram_latch = None;
@@ -428,6 +461,11 @@ impl Ppu {
             }
         }
     }
+    /// Refresh the multiplication result value
+    fn refresh_multi_res(&mut self) {
+        // Only the lower byte of B is used for the multiplication
+        self.multi_res = (self.matrix.a as i16) as i32 * (self.matrix.b & 0xFF) as i32;
+    }
     fn write_vram(&mut self, addr: usize, value: u8) {
         self.vram[addr] = value;
         // Update cache
@@ -512,6 +550,33 @@ impl Ppu {
         (x, y): (usize, usize),
         bpp: usize,
     ) -> ([BackgroundPixel; 8], usize) {
+        if self.bg_mode == 7 {
+            let (x, y) = (
+                x + self.backgrounds[0].h_off as usize,
+                y + self.backgrounds[0].v_off as usize,
+            );
+            if x >= 1024 || y >= 1024 {
+                return ([Some((0xFF00, true)); 8], 0);
+            }
+            // Get the index of hte tile we need to draw
+            let tilemap_index = (x / 8) + 128 * (y / 8);
+            // Tilemap bytes are only in the low bytes
+            let tile_index = self.vram[2 * tilemap_index];
+            // Get the index of the tile data
+            // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
+            let tile_addr = 8 * 8 * tile_index as usize;
+            // Tile data is in the high byte
+            let pixel_index = (x % 8) + 8 * (y % 8);
+            let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
+            return (
+                [if palette_byte == 0 {
+                    None
+                } else {
+                    Some((self.cgram[palette_byte as usize], true))
+                }; 8],
+                0,
+            );
+        }
         let b = &self.backgrounds[bg_index];
         // Get the tilemaps to render, relative to the current tilemap address
         // So thi is basically an offset to add to the tilemap address
@@ -741,39 +806,75 @@ impl Ppu {
                     } else {
                         false
                     };
-                    // Structured (background_number, bpp)
-                    let backgrounds: &[(usize, usize)] = match self.bg_mode {
-                        0 => &[(0, 2), (1, 2), (2, 2), (3, 2)],
-                        1 => &[(0, 4), (1, 4), (2, 2)],
-                        3 => &[(0, 8), (1, 4)],
-                        5 => &[(0, 4), (1, 2)],
-                        _ => todo!("Background mode {} not implemented", self.bg_mode),
-                    };
-                    for (i, bpp) in backgrounds.iter() {
-                        if self.backgrounds[*i].pixel_buffer.is_empty() {
-                            self.extend_background_byte_buffer(*i, (x, y), *bpp);
-                        }
-                    }
-                    let bg_pixels: [BackgroundPixel; 4] = core::array::from_fn(|i| {
-                        // Should be impossible to there to be no pixels right now
-                        let b = &mut self.backgrounds[i];
-                        if b.main_screen_enable || b.sub_screen_enable {
-                            // Get next pixel in the buffer
-                            let v = b.pixel_buffer.pop_front().unwrap();
-                            // Use/update mosaic latch if enabled
-                            if b.mosaic {
-                                let p = &mut b.mosaic_values[x / self.mosaic_size];
-                                if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0 {
-                                    *p = v;
-                                }
-                                *p
-                            } else {
-                                v
-                            }
+                    let bg_pixels = {
+                        if self.bg_mode == 7 {
+                            let a = [
+                                (x as i16).wrapping_sub(self.matrix.center_x) as f32,
+                                (y as i16).wrapping_sub(self.matrix.center_y) as f32,
+                                1.0,
+                            ];
+                            let mat = [
+                                [
+                                    convert_8p8(self.matrix.a),
+                                    convert_8p8(self.matrix.b),
+                                    self.matrix.center_x as f32,
+                                ],
+                                [
+                                    convert_8p8(self.matrix.c),
+                                    convert_8p8(self.matrix.d),
+                                    self.matrix.center_y as f32,
+                                ],
+                                [0.0, 0.0, 1.0],
+                            ];
+                            let res: [f32; 3] = core::array::from_fn(|i| {
+                                a.iter().enumerate().map(|(j, v)| mat[i][j] * *v).sum()
+                            });
+                            let [x, y, _] = res;
+                            let (pixel_slices, index) = self.get_background_slice(
+                                0,
+                                (x.floor() as usize, y.floor() as usize),
+                                8,
+                            );
+                            let x: [BackgroundPixel; 4] = [pixel_slices[index]; 4];
+                            x
                         } else {
-                            None
+                            // Structured (background_number, bpp)
+                            let backgrounds: &[(usize, usize)] = match self.bg_mode {
+                                0 => &[(0, 2), (1, 2), (2, 2), (3, 2)],
+                                1 => &[(0, 4), (1, 4), (2, 2)],
+                                3 => &[(0, 8), (1, 4)],
+                                5 => &[(0, 4), (1, 2)],
+                                7 => unreachable!("Mode 7 should be custom handled"),
+                                _ => todo!("Background mode {} not implemented", self.bg_mode),
+                            };
+                            for (i, bpp) in backgrounds.iter() {
+                                if self.backgrounds[*i].pixel_buffer.is_empty() {
+                                    self.extend_background_byte_buffer(*i, (x, y), *bpp);
+                                }
+                            }
+                            let bg_pixels: [BackgroundPixel; 4] = core::array::from_fn(|i| {
+                                // Should be impossible to there to be no pixels right now
+                                let b = &mut self.backgrounds[i];
+                                if b.main_screen_enable || b.sub_screen_enable {
+                                    // Get next pixel in the buffer
+                                    let v = b.pixel_buffer.pop_front().unwrap();
+                                    // Use/update mosaic latch if enabled
+                                    if b.mosaic {
+                                        let p = &mut b.mosaic_values[x / self.mosaic_size];
+                                        if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0 {
+                                            *p = v;
+                                        }
+                                        *p
+                                    } else {
+                                        v
+                                    }
+                                } else {
+                                    None
+                                }
+                            });
+                            bg_pixels
                         }
-                    });
+                    };
                     // Get the pixel from a background layer with a given priority, or None if the background is transparent
                     macro_rules! bg_value {
                         ($index: expr, $priority: expr) => {{
@@ -885,6 +986,17 @@ impl Ppu {
                             bg!(0, false),
                             spr!(0),
                             bg!(1, false),
+                        ],
+                        7 => &[
+                            spr!(3),
+                            spr!(2),
+                            bg!(1, true),
+                            spr!(1),
+                            // BG 0 is draw regardless of prio
+                            bg!(0, true),
+                            bg!(0, false),
+                            spr!(0),
+                            bg!(2, false),
                         ],
                         _ => todo!("Background mode {} not implemented", self.bg_mode),
                     };
