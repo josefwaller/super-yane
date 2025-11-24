@@ -14,5 +14,6 @@ __pycache__
 *.swp
 **/**.DS_Store
 **/**.log
+**/**.sy.bin
 **/profile.json
 samples.wav

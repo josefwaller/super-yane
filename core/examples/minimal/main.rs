@@ -38,17 +38,29 @@ fn main() {
 
     window.raise();
 
-    let cartridge_contents = match args().nth(1) {
-        Some(s) => fs::read(&s).expect(format!("Unable to read file '{}': ", s).as_str()),
-        None => panic!("No .SFC file provided"),
+    let mut console = match args().nth(1) {
+        Some(s) => {
+            let contents = fs::read(&s).expect(format!("Unable to read file '{}': ", s).as_str());
+            if s.ends_with("sy.bin") {
+                println!("Loading savestate");
+                let mut c: Console = serde_brief::from_slice(&contents).unwrap();
+                c.ppu_mut().reset_vram_cache();
+                println!("Done loading!");
+                c
+            } else {
+                println!("Loading ROM");
+                Console::with_cartridge(&contents)
+            }
+        }
+        None => panic!("No file provided"),
     };
-    let mut console = Console::with_cartridge(&cartridge_contents);
     let mut event_pump = context
         .event_pump()
         .expect("Unable to initialize EventPump");
     let mut last_time = Instant::now();
     let mut actual_time = Duration::ZERO;
     let mut is_paused = false;
+    let start_clocks = *console.total_master_clocks();
     'main_loop: loop {
         for e in event_pump.poll_iter() {
             match e {
@@ -56,6 +68,11 @@ fn main() {
                 Event::KeyDown { keycode, .. } => {
                     if keycode == Some(Keycode::P) {
                         is_paused = !is_paused;
+                    } else if keycode == Some(Keycode::T) {
+                        // Save savestate
+                        let data: Vec<u8> = serde_brief::to_vec(&console).unwrap();
+                        let file_name = "./savestate.sy.bin";
+                        std::fs::write(file_name, data).unwrap();
                     }
                 }
                 _ => {}
@@ -119,7 +136,7 @@ fn main() {
         window_surface.finish().expect("Error while rendering: ");
         // Wait
         let emu_time = Duration::from_micros(
-            1_000_000 * *console.total_master_clocks() / MASTER_CLOCK_SPEED_HZ,
+            1_000_000 * (console.total_master_clocks() - start_clocks) / MASTER_CLOCK_SPEED_HZ,
         );
         let now_time = Instant::now();
         if !is_paused {

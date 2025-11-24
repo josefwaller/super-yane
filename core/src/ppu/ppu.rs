@@ -495,6 +495,14 @@ impl Ppu {
         self.vram_cache_2bpp[addr / 2] =
             core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01));
     }
+    pub fn reset_vram_cache(&mut self) {
+        self.vram.chunks(2).enumerate().for_each(|(i, v)| {
+            let (low, high) = (v[0], v[1]);
+            self.vram_cache_2bpp[i] = core::array::from_fn(|j| {
+                ((low >> (7 - j)) & 0x01) + 2 * ((high >> (7 - j)) & 0x01)
+            });
+        })
+    }
     fn inc_vram_addr(&mut self) {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % 0x8000;
     }

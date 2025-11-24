@@ -17,3 +17,4 @@ serde-big-array = "0.5.1"
 [dev-dependencies]
 insta = "1.43.1"
 sdl3 = "0.14.36"
+serde-brief = { version = "0.2.0", features = ["alloc"] }
