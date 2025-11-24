@@ -579,10 +579,6 @@ impl Ppu {
         bpp: usize,
     ) -> ([BackgroundPixel; 8], usize) {
         if self.bg_mode == 7 {
-            let (x, y) = (
-                x + self.backgrounds[0].h_off as usize,
-                y + self.backgrounds[0].v_off as usize,
-            );
             if x >= 1024 || y >= 1024 {
                 return ([Some((0xFF00, true)); 8], 0);
             }
@@ -837,8 +833,10 @@ impl Ppu {
                     let bg_pixels = {
                         if self.bg_mode == 7 {
                             let a = [
-                                (x as i16).wrapping_sub(self.matrix.center_x) as f32,
-                                (y as i16).wrapping_sub(self.matrix.center_y) as f32,
+                                x as f32 - self.matrix.center_x as f32
+                                    + self.backgrounds[0].h_off as f32,
+                                y as f32 - self.matrix.center_y as f32
+                                    + self.backgrounds[0].v_off as f32,
                                 1.0,
                             ];
                             let mat = [
