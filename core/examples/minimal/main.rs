@@ -11,7 +11,7 @@ use std::{
 use log::debug;
 use sdl3::{
     event::Event,
-    keyboard::{KeyboardState, Scancode},
+    keyboard::{KeyboardState, Keycode, Scancode},
     pixels::{PixelFormat, PixelFormatEnum},
     rect::Rect,
     render::{ScaleMode, SurfaceCanvas},
@@ -46,12 +46,18 @@ fn main() {
     let mut event_pump = context
         .event_pump()
         .expect("Unable to initialize EventPump");
-    let start_time = Instant::now();
+    let mut last_time = Instant::now();
+    let mut actual_time = Duration::ZERO;
     let mut is_paused = false;
     'main_loop: loop {
         for e in event_pump.poll_iter() {
             match e {
                 Event::Quit { .. } => break 'main_loop,
+                Event::KeyDown { keycode, .. } => {
+                    if keycode == Some(Keycode::P) {
+                        is_paused = !is_paused;
+                    }
+                }
                 _ => {}
             }
         }
@@ -73,11 +79,13 @@ fn main() {
         };
         console.input_ports_mut()[0] = controller;
         // Advance console
-        while !console.ppu().is_in_vblank() {
-            console.advance_instructions(1);
-        }
-        while console.ppu().is_in_vblank() {
-            console.advance_instructions(1);
+        if !is_paused {
+            while !console.ppu().is_in_vblank() {
+                console.advance_instructions(1);
+            }
+            while console.ppu().is_in_vblank() {
+                console.advance_instructions(1);
+            }
         }
         // Gather pixel data
         let mut pixel_data: [[u8; 4]; 256 * 240] = console
@@ -110,11 +118,16 @@ fn main() {
         // Refresh
         window_surface.finish().expect("Error while rendering: ");
         // Wait
-        let total_cycles = Duration::from_micros(
+        let emu_time = Duration::from_micros(
             1_000_000 * *console.total_master_clocks() / MASTER_CLOCK_SPEED_HZ,
         );
-        if total_cycles > Instant::now() - start_time {
-            std::thread::sleep(total_cycles - (Instant::now() - start_time));
+        let now_time = Instant::now();
+        if !is_paused {
+            actual_time += now_time - last_time;
+        }
+        last_time = now_time;
+        if emu_time > actual_time {
+            std::thread::sleep(emu_time - actual_time);
         }
     }
 }
