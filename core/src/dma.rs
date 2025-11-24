@@ -1,4 +1,6 @@
-#[derive(Copy, Clone, Default, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub enum AddressAdjustMode {
     #[default]
     Increment,
@@ -6,7 +8,7 @@ pub enum AddressAdjustMode {
     Fixed,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub transfer_pattern: Vec<u32>,
     pub adjust_mode: AddressAdjustMode,

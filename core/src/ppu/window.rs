@@ -1,4 +1,6 @@
-#[derive(Default, Debug, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Window {
     pub left: usize,
     pub right: usize,
@@ -6,7 +8,7 @@ pub struct Window {
     pub invert_color: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum WindowRegion {
     Nowhere,
     Outside,

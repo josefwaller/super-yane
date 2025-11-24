@@ -1,4 +1,6 @@
 use log::*;
+use serde::{Deserialize, Serialize};
+use serde_big_array::Array;
 use wdc65816::{HasAddressBus, Processor};
 
 use crate::{
@@ -13,7 +15,7 @@ pub const APU_CLOCK_SPEED_HZ: u64 = 3_072_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
 pub enum TimerMode {
     #[default]
     Disabled,
@@ -36,9 +38,9 @@ impl From<u8> for TimerMode {
 }
 
 // Contains everything except the processor(s)
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ExternalArchitecture {
-    pub ram: Box<[u8; WRAM_SIZE]>,
+    pub ram: Box<Array<u8, WRAM_SIZE>>,
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
     pub cartridge: Cartridge,
@@ -348,7 +350,7 @@ impl HasAddressBus for ExternalArchitecture {
 }
 
 /// The entire S.N.E.S. Console
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Console {
     /// The CPU is the driving force of the console.
     /// It advances the rest of the console through read and write methods in rest.
@@ -372,7 +374,7 @@ macro_rules! rest_field {
 }
 impl Console {
     rest_field! {ppu, Ppu}
-    rest_field! {ram, Box<[u8; WRAM_SIZE]>}
+    rest_field! {ram, Box<Array<u8, WRAM_SIZE>>}
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
     rest_field! {total_master_clocks, u64}
@@ -400,7 +402,7 @@ impl Console {
             cpu: Cpu::default(),
             apu: Apu::default(),
             rest: ExternalArchitecture {
-                ram: Box::new([0; WRAM_SIZE]),
+                ram: Box::new(Array([0; WRAM_SIZE])),
                 cpu_to_apu_reg: [0; 4],
                 apu_to_cpu_reg: [0; 4],
                 cartridge: Cartridge::from_data(cartridge_data),

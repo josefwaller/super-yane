@@ -11,6 +11,8 @@ use crate::{
 
 use crate::utils::{bit, color_to_rgb_bytes};
 use log::*;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
@@ -19,7 +21,7 @@ fn convert_8p8(value: u16) -> f32 {
     (value as i16 as f32) / 0x100 as f32
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize)]
 pub struct Matrix {
     a: u16,
     b: u16,
@@ -29,7 +31,7 @@ pub struct Matrix {
     center_y: i16,
 }
 
-#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
+#[derive(PartialEq, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
     HighReadLowWrite = 0,
@@ -37,7 +39,19 @@ pub enum VramIncMode {
     LowReadHighWrite = 1,
 }
 
-#[derive(Clone)]
+fn default_2bpp_cache() -> Box<[[u8; 8]; 0x10000 / 2]> {
+    Box::new([[0; 8]; 0x10000 / 2])
+}
+
+fn default_oam_buffer() -> [[Option<u16>; 0x100]; 4] {
+    [[None; 0x100]; 4]
+}
+
+fn default_screen_buffer() -> [u16; 256 * 240] {
+    [0; 256 * 240]
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Ppu {
     /// VBlank flag
     pub vblank: bool,
@@ -57,16 +71,20 @@ pub struct Ppu {
     pub vram_increment_mode: VramIncMode,
     pub vram_addr: usize,
     pub vram_remap: u32,
+    #[serde(with = "BigArray")]
     pub vram: [u8; 0x10000],
     // Cache of VRAM decoded in 2BPP format
     // Hopefully speeds things up a bit
+    #[serde(skip, default = "default_2bpp_cache")]
     vram_cache_2bpp: Box<[[u8; 8]; 0x10000 / 2]>,
     vram_latch_low: u8,
     vram_latch_high: u8,
+    #[serde(with = "BigArray")]
     pub cgram: [u16; 0x100],
     pub cgram_addr: usize,
     cgram_latch: Option<u8>,
     /// Screen buffer
+    #[serde(skip, default = "default_screen_buffer")]
     pub screen_buffer: [u16; 256 * 240],
     /// This is not hte dot, should rename
     pub dot: usize,
@@ -76,9 +94,11 @@ pub struct Ppu {
     pub oam_name_addr: usize,
     pub oam_name_select: usize,
     pub oam_latch: u8,
+    #[serde(with = "BigArray")]
     pub oam_sprites: [Sprite; 0x80],
     /// Buffers of sprite pixels for the current scanline.
     /// One for every sprite layer, ordered by priority
+    #[serde(skip, default = "default_oam_buffer")]
     oam_buffers: [[Option<u16>; 0x100]; 4],
     pub color_blend_mode: ColorBlendMode,
     pub color_math_enable_backdrop: bool,

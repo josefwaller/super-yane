@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use log::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct StatusRegister {
     /// Carry flag
     pub c: bool,

@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::utils::{color_to_rgb, rgb_to_color};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ColorBlendMode {
     Add,
     Subtract,
@@ -38,7 +40,7 @@ impl ColorBlendMode {
         rgb_to_color(c)
     }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ColorMathSource {
     Fixed,
     Subscreen,

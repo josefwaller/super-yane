@@ -2,10 +2,10 @@ use crate::opcodes::*;
 use crate::status_register::StatusRegister;
 use crate::u24::u24;
 use log::*;
+use serde::{Deserialize, Serialize};
 
 use std::default::Default;
 use std::fmt::Debug;
-use std::mem;
 
 pub trait HasAddressBus {
     /// Read a single byte from memory
@@ -16,7 +16,7 @@ pub trait HasAddressBus {
     fn io(&mut self);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Processor {
     /// Program Counter
     pub pc: u16,

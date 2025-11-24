@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum WindowMaskLogic {
     Or,
     And,
@@ -34,7 +37,7 @@ impl WindowMaskLogic {
 
 pub type BackgroundPixel = Option<(u16, bool)>; // (color, priority)
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Background {
     // 0 = 8x8, 1 = 16x16
     pub tile_size: u32,
@@ -57,6 +60,7 @@ pub struct Background {
     pub color_math_enable: bool,
     /// Colors of the top-left pixel for each mosaic block.
     /// Not all of these values will be used
+    #[serde(with = "BigArray")]
     pub mosaic_values: [BackgroundPixel; 256],
 }
 impl Default for Background {

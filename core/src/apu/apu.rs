@@ -2,6 +2,8 @@ use std::collections::VecDeque;
 
 use crate::{apu::Dsp, utils::bit};
 use log::{debug, error};
+use serde::{Deserialize, Serialize};
+use serde_big_array::Array;
 use spc700::{HasAddressBus, IPL, Processor as Spc700Processor};
 
 use derivative::Derivative;
@@ -11,7 +13,7 @@ pub const APU_RAM_SIZE: usize = 0x10000;
 /// Generate a new sample every 64 APU clocks (32 SPC700 clocks)
 pub const CLOCKS_PER_SAMPLE: usize = 96;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct ApuTimer {
     // Set by program
     pub timer_target: u8,
@@ -21,18 +23,18 @@ pub struct ApuTimer {
     pub counter: u8,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Apu {
     pub core: Spc700Processor,
     rest: ApuMemory,
 }
 
 // Internal struct used to advance the APU core
-#[derive(Clone, Derivative)]
+#[derive(Clone, Derivative, Serialize, Deserialize)]
 #[derivative(Default)]
 struct ApuMemory {
-    #[derivative(Default(value = "Box::new([0; APU_RAM_SIZE])"))]
-    pub ram: Box<[u8; APU_RAM_SIZE]>,
+    #[derivative(Default(value = "Box::new(Array([0; APU_RAM_SIZE]))"))]
+    pub ram: Box<Array<u8, APU_RAM_SIZE>>,
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
     pub timers: [ApuTimer; 3],

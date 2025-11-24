@@ -1,8 +1,9 @@
 use crate::console::ExternalArchitecture;
 use log::*;
+use serde::{Deserialize, Serialize};
 use wdc65816::{HasAddressBus, Processor as WdcProcessor};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Serialize, Deserialize)]
 pub struct Cpu {
     pub(crate) core: WdcProcessor,
 }

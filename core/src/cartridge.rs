@@ -1,13 +1,14 @@
 use log::debug;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 enum MemoryMap {
     LoRom,
     HiRom,
     ExHiRom,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Cartridge {
     memory_map: MemoryMap,
     data: Vec<u8>,

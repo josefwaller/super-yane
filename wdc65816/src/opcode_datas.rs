@@ -1,8 +1,10 @@
-use std::{cmp::Ordering, fmt::Display, ops::Add};
+use std::{cmp::Ordering, fmt::Display};
+
+use serde::{Deserialize, Serialize};
 
 use crate::opcodes::*;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AddressMode {
     Immediate,
     Implied,

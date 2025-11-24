@@ -1,4 +1,6 @@
-#[derive(Default, Debug, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Sprite {
     pub x: usize,
     pub y: usize,

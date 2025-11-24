@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use log::debug;
+use serde::{Deserialize, Serialize};
 
 pub const ENVELOPE_MAX_VALUE: u16 = 0x7FF;
 
@@ -15,7 +16,7 @@ pub const PERIOD_OFFSET_TABLE: [usize; 32] = [
     536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0,
 ];
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub enum GainMode {
     #[default]
     Fixed,
@@ -38,7 +39,7 @@ impl From<u8> for GainMode {
     }
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Serialize, Deserialize)]
 pub enum AdsrStage {
     #[default]
     Attack,
@@ -47,7 +48,7 @@ pub enum AdsrStage {
     Release,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Voice {
     pub enabled: bool,
     /// Volume, first left, then right

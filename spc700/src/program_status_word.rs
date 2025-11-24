@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Display};
 
-#[derive(Default, Copy, Clone, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ProgramStatusWord {
     pub n: bool,
     pub v: bool,

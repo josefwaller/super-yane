@@ -1,8 +1,10 @@
 use std::fmt::{Debug, Display};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{ProgramStatusWord, opcodes::*};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Processor {
     pub a: u8,
     pub x: u8,

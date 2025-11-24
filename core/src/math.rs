@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 // Struct for the SNES multiplication and division registers
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize)]
 pub struct Math {
     // Multiplication values
     m_a: u8,

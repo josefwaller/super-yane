@@ -7,6 +7,7 @@ use crate::{
 };
 use derivative::Derivative;
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, ops::Shr};
 
 const GAUSS_TABLE: [i16; 0x200] = [
@@ -53,7 +54,7 @@ const GAUSS_TABLE: [i16; 0x200] = [
 ];
 
 /// The DSP
-#[derive(Clone, Derivative)]
+#[derive(Clone, Derivative, Serialize, Deserialize)]
 #[derivative(Default)]
 pub struct Dsp {
     /// The sound channels
