@@ -3,9 +3,6 @@ name = "app"
 version = "0.1.0"
 edition = "2024"
 
-[profile.dev]
-opt-level = 1
-
 [dependencies]
 sdl2 = "0.37.0"
 super-yane = { path = "../core" }
@@ -17,3 +14,4 @@ iced = { version = "0.13.1", features = ["image", "canvas"] }
 itertools = "0.14.0"
 rfd = "0.15.3"
 wavers = "1.5.1"
+derive-new = "0.7.0"

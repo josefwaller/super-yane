@@ -1,12 +1,21 @@
-use std::fs::File;
+use std::{
+    fs::File,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use iced::{Font, Settings};
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
+use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
 
 mod application;
+mod emu_state;
 mod widgets;
 use application::Application;
+use emu_state::EmuState;
 
 fn main() {
     let config = ConfigBuilder::new()

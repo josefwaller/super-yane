@@ -1,5 +1,10 @@
 use std::{
-    collections::VecDeque, fmt::Display, path::Path, string::FromUtf16Error, time::{Duration, Instant}
+    collections::VecDeque,
+    fmt::Display,
+    path::Path,
+    string::FromUtf16Error,
+    thread::{self, sleep},
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -12,7 +17,7 @@ use iced::{
     Event::{self, Keyboard},
     Font,
     Length::{self, FillPortion},
-    Padding, Renderer, Subscription, Theme,
+    Padding, Renderer, Subscription, Task, Theme,
     alignment::Horizontal,
     color, event,
     futures::channel,
@@ -25,7 +30,6 @@ use iced::{
             Physical::Code as KeyCode,
         },
     },
-    Task,
     widget::{
         Column, Container, Row, Scrollable, Slider, TextInput, button, canvas, checkbox, column,
         container, horizontal_space,
@@ -50,7 +54,9 @@ use super_yane::{Background, Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 use wavers::{Samples, write};
 use wdc65816::{format_address_mode, opcode_data};
 
+use crate::EmuState;
 use crate::widgets::ram::ram;
+use std::sync::{Arc, Mutex};
 
 pub const VOLUME: f32 = 5.0;
 
@@ -278,7 +284,7 @@ pub enum Message {
     ToggleLogCpu(bool),
     ToggleLogApu(bool),
     Record(bool),
-    WindowClose()
+    WindowClose(),
 }
 
 pub struct Application {
@@ -307,6 +313,7 @@ pub struct Application {
     emu_time: Duration,
     last_frame_time: Instant,
     channel: AudioQueue<f32>,
+    state: Arc<Mutex<EmuState>>,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -328,8 +335,33 @@ impl Default for Application {
             )
             .unwrap();
         debug!("Channel spec is {:?}", channel.spec());
+        let state = Arc::new(Mutex::new(EmuState::new(
+            Some(Console::with_cartridge(include_bytes!(
+                "../roms/HelloWorld.sfc"
+            ))),
+            0,
+        )));
+        let thread_state = Arc::clone(&state);
+
+        thread::spawn(move || {
+            loop {
+                let mut lock = thread_state.lock().unwrap();
+                let total_cycles = lock.total_cycles;
+                match lock.emu.as_mut() {
+                    None => {}
+                    Some(e) => {
+                        while *e.total_master_clocks() < total_cycles {
+                            e.advance_instructions(1);
+                        }
+                    }
+                }
+            }
+        });
+
+        let console = state.lock().unwrap().emu.clone().unwrap().clone();
+
         Application {
-            console: default_console.clone(),
+            console,
             ram_offset: 0,
             is_paused: true,
             breakpoint_opcodes: vec![],
@@ -354,6 +386,7 @@ impl Default for Application {
             emu_time: Duration::from_micros(0),
             last_frame_time: Instant::now(),
             channel,
+            state,
         }
     }
 }
@@ -368,14 +401,7 @@ impl Application {
         self.is_paused = true;
     }
     fn is_in_breakpoint(&mut self) -> bool {
-        if self.console.in_vblank() && self.vblank_breakpoint {
-            return true;
-        }
-        let op = self.console.opcode();
-        if self.breakpoint_opcodes.iter().find(|o| **o == op).is_some() {
-            return true;
-        }
-        return false;
+        false
     }
     fn advance(&mut self) {
         if self.is_in_breakpoint() {
@@ -429,34 +455,6 @@ impl Application {
         if self.is_in_breakpoint() {
             self.on_breakpoint();
         }
-        let samples: Vec<f32> = self
-            .console
-            .apu_mut()
-            .sample_queue()
-            .into_iter()
-            .map(|s| VOLUME * s)
-            .collect();
-        if self.record {
-            self.samples.extend_from_slice(samples.as_slice());
-        }
-        if self.channel.size() == 0 {
-            // error!("Empty queue");
-        }
-        if self.channel.size() > 20_000 {
-            self.channel.clear();
-        }
-
-        if samples
-            .iter()
-            .find(|x| **x > VOLUME || **x < -VOLUME)
-            .is_some()
-        {
-            error!("INVALID SAMPLE");
-        } else {
-            self.channel
-                .queue_audio(samples.as_slice())
-                .expect("Unable to enqueue audio");
-        }
     }
     fn on_key_change(&mut self, key: Key, value: bool) {
         let key_value: Option<(String, bool)> = match key {
@@ -470,7 +468,15 @@ impl Application {
             }
             _ => None,
         };
-        let c = self.console.input_ports()[0];
+        // let c = self.console.input_ports()[0];
+        let c = self
+            .state
+            .lock()
+            .unwrap()
+            .emu
+            .as_ref()
+            .unwrap()
+            .input_ports()[0];
         match c {
             InputPort::Empty => {}
             InputPort::StandardController {
@@ -498,9 +504,18 @@ impl Application {
                         " " => b = val,
                         "r" => start = val,
                         "f" => select = val,
+                        "b" => a = val,
+                        "q" => l = val,
+                        "e" => r = val,
                         _ => {}
                     };
-                    self.console.input_ports_mut()[0] = InputPort::StandardController {
+                    self.state
+                        .lock()
+                        .unwrap()
+                        .emu
+                        .as_mut()
+                        .unwrap()
+                        .input_ports_mut()[0] = InputPort::StandardController {
                         a,
                         b,
                         x,
@@ -531,13 +546,7 @@ impl Application {
                 window::Event::CloseRequested => {
                     debug!("Closing application");
                     let samples = Samples::new(self.samples.clone().into_boxed_slice());
-                    write(
-                        Path::new("./samples.wav"),
-                        &samples,
-                        32_000,
-                        1,
-                    )
-                    .unwrap();
+                    write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
                     return window::get_latest().and_then(|id| window::close(id));
                 }
                 _ => {}
@@ -547,23 +556,57 @@ impl Application {
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::WindowClose() => {
-            }
+            Message::WindowClose() => {}
             Message::OnEvent(e) => {
                 return self.handle_input(e);
-            },
+            }
             Message::NewFrame() => {
                 let ft = Instant::now();
                 if !self.is_paused {
                     self.emu_time += ft - self.last_frame_time;
                 }
-                while (1_000_000_000.0 * *self.console.total_master_clocks() as f64
-                    / MASTER_CLOCK_SPEED_HZ as f64)
-                    < self.emu_time.as_nanos() as f64
-                {
-                    self.advance();
-                }
+                self.console = self.state.lock().unwrap().emu.clone().unwrap();
+                self.state.lock().unwrap().total_cycles =
+                    (MASTER_CLOCK_SPEED_HZ as f64 * self.emu_time.as_secs_f64()).floor() as u64;
+                self.screen_data = self
+                    .console
+                    .ppu()
+                    .screen_data_rgb()
+                    .map(|[r, g, b]| [r, g, b, 0xFF]);
                 self.last_frame_time = ft;
+                let samples: Vec<f32> = self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .emu
+                    .as_mut()
+                    .unwrap()
+                    .apu_mut()
+                    .sample_queue()
+                    .into_iter()
+                    .map(|s| VOLUME * s)
+                    .collect();
+                if self.record {
+                    self.samples.extend_from_slice(samples.as_slice());
+                }
+                if self.channel.size() == 0 {
+                    // error!("Empty queue");
+                }
+                if self.channel.size() > 20_000 {
+                    self.channel.clear();
+                }
+
+                if samples
+                    .iter()
+                    .find(|x| **x > VOLUME || **x < -VOLUME)
+                    .is_some()
+                {
+                    error!("INVALID SAMPLE");
+                } else {
+                    self.channel
+                        .queue_audio(samples.as_slice())
+                        .expect("Unable to enqueue audio");
+                }
             }
             Message::AdvanceBreakpoint => {
                 self.is_paused = false;
@@ -577,7 +620,7 @@ impl Application {
             }
             Message::PreviousInstruction => {
                 if self.previous_states.len() > 0 {
-                    self.console = self.previous_states.pop_back().unwrap();
+                    // self.console = self.previous_states.pop_back().unwrap();
                     self.previous_console_lag -= 1;
                     self.is_paused = true;
                 }
@@ -600,9 +643,7 @@ impl Application {
             Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
             Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
             Message::Reset => {
-                self.console.reset();
-                self.previous_console = Box::new(self.console.clone());
-                self.previous_console_lag = 0;
+                self.state.lock().unwrap().emu.as_mut().unwrap().reset();
                 self.previous_states.clear();
             }
             Message::SetOpcodeSearch(s) => self.opcode_search = s,
@@ -615,13 +656,17 @@ impl Application {
                 Some(p) => {
                     let bytes = std::fs::read(&p)
                         .expect(format!("Unable to read file '{:?}': ", p).as_str());
-                    self.console = Console::with_cartridge(&bytes);
-                    self.previous_console = Box::new(self.console.clone());
-                    self.previous_console_lag = 0;
-                    self.previous_states.clear();
-                    self.total_instructions = 0;
-                    self.previous_apu_snapshots.clear();
-                    self.previous_instruction_snapshots.clear();
+                    *self.state.lock().unwrap() = {
+                        let console = Console::with_cartridge(&bytes);
+                        EmuState::new(Some(console), 0)
+                    };
+                    self.emu_time = Duration::ZERO;
+                    //     self.previous_console = Box::new(self.console.clone());
+                    //     self.previous_console_lag = 0;
+                    //     self.previous_states.clear();
+                    //     self.total_instructions = 0;
+                    //     self.previous_apu_snapshots.clear();
+                    //     self.previous_instruction_snapshots.clear();
                     self.is_paused = true;
                 }
                 None => {}
@@ -651,9 +696,9 @@ impl Application {
                 .spacing(0)
                 .width(Length::Shrink),
                 container(column![
-                    canvas(Screen { 
+                    canvas(Screen {
                         frame_data: self.screen_data.as_flattened(),
-                        })
+                    })
                     .height(Length::Fill)
                     .width(Length::Fill),
                     row![
@@ -670,8 +715,8 @@ impl Application {
                     ],
                     row![text(format!(
                         "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",
-                        self.console.total_master_clocks(),
-                        self.console.total_apu_clocks(),
+                        self.console.total_master_clocks().clone(),
+                        self.console.total_apu_clocks().clone(),
                         self.total_instructions
                     ))]
                 ])
@@ -794,7 +839,7 @@ impl Application {
     }
 
     fn cpu_data(&self) -> impl Into<Element<Message>> {
-        let cpu = self.console.cpu();
+        let cpu = self.console.cpu().clone();
         let values = text_table(
             [
                 ("C", cpu.c(), 4),
