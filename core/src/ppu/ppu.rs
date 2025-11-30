@@ -359,9 +359,7 @@ impl Ppu {
                     self.inc_vram_addr();
                 }
             }
-            0x211A => {
-                info!("Write to settings {:02X}", value);
-            }
+            0x211A => {}
             0x211B..=0x2120 => {
                 let v = ((value as u16) << 8) | self.multi_latch as u16;
                 match addr & 0xFF {

@@ -2,45 +2,25 @@ use std::{
     collections::VecDeque,
     fmt::Display,
     path::Path,
-    string::FromUtf16Error,
-    thread::{self, sleep},
+    thread::{self},
     time::{Duration, Instant},
 };
 
-use crate::{
-    cell,
-    widgets::{screen::Screen, text_table},
-};
+use crate::widgets::{background_table, screen::Screen, text_table, vertical_table};
 use iced::{
-    Alignment::{self, Center},
+    Alignment::Center,
     Color, Element,
     Event::{self, Keyboard},
-    Font,
-    Length::{self, FillPortion},
-    Padding, Renderer, Subscription, Task, Theme,
-    alignment::Horizontal,
-    color, event,
-    futures::channel,
+    Length, Padding, Subscription, Task, Theme, color, event,
     keyboard::{
         Event::{KeyPressed, KeyReleased},
         Key,
-        key::{
-            Code,
-            Key::{Character, Named},
-            Physical::Code as KeyCode,
-        },
+        key::Key::{Character, Named},
     },
     widget::{
-        Column, Container, Row, Scrollable, Slider, TextInput, button, canvas, checkbox, column,
-        container, horizontal_space,
-        image::{FilterMethod, Handle, Image},
-        keyed_column, pick_list, row, scrollable,
-        scrollable::RelativeOffset,
-        slider,
-        text::IntoFragment,
-        text_input, vertical_space,
+        Column, button, canvas, checkbox, column, container, pick_list, row, scrollable, text_input,
     },
-    window::{self, Id},
+    window,
 };
 use itertools::Itertools;
 use log::*;
@@ -49,142 +29,19 @@ use iced::widget::text;
 
 use rfd::FileDialog;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
-use spc700::{AddressMode, OpcodeData as Spc700OpcodeData, format_address_modes};
-use super_yane::{Background, Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use spc700::{OpcodeData as Spc700OpcodeData, format_address_modes};
+use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 use wavers::{Samples, write};
 use wdc65816::{format_address_mode, opcode_data};
 
-use crate::EmuState;
-use crate::widgets::ram::ram;
+use crate::utils::utils::{hex_fmt, table_row};
+use crate::{
+    EmuState, apu_snapshot::ApuSnapshot, instruction_snapshot::InstructionSnapshot,
+    widgets::ram::ram,
+};
 use std::sync::{Arc, Mutex};
 
 pub const VOLUME: f32 = 5.0;
-
-macro_rules! hex_fmt {
-    () => {
-        "0x{:04X}"
-    };
-}
-
-macro_rules! table_row {
-    ($label: expr, $field: expr, $format_str: expr) => {
-        ($label, text(format!($format_str, $field)).into())
-    };
-    ($label: expr, $field: ident) => {
-        ppu_val!($label, $field, "{}")
-    };
-}
-
-struct InstructionSnapshot {
-    cpu: wdc65816::Processor,
-    opcode: u8,
-    operands: [u8; 3],
-}
-
-impl InstructionSnapshot {
-    fn from(console: &Console) -> Self {
-        InstructionSnapshot {
-            cpu: console.cpu().clone(),
-            opcode: console.opcode(),
-            operands: core::array::from_fn(|i| console.read_byte_cpu(console.pc() + 1 + i)),
-        }
-    }
-}
-impl Display for InstructionSnapshot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let data = opcode_data(
-            self.opcode,
-            self.cpu.p.a_is_16bit(),
-            self.cpu.p.xy_is_16bit(),
-        );
-        write!(
-            f,
-            "{:15} OP={:02X} {:?} (bytes={:02X?}))",
-            format!(
-                "{} {}",
-                data.name,
-                format_address_mode(data.addr_mode, &self.operands, data.bytes)
-            ),
-            self.opcode,
-            self.cpu,
-            [
-                self.opcode,
-                self.operands[0],
-                self.operands[1],
-                self.operands[2]
-            ]
-        )
-    }
-}
-struct ApuSnapshot {
-    cpu: spc700::Processor,
-    opcode: u8,
-    operands: [u8; 3],
-}
-
-impl ApuSnapshot {
-    fn from(console: &Console) -> Self {
-        let apu = console.apu().core;
-        ApuSnapshot {
-            cpu: apu.clone(),
-            opcode: console.apu().read_ram(apu.pc as usize),
-            operands: core::array::from_fn(|i| {
-                console
-                    .apu()
-                    .read_ram(apu.pc.wrapping_add(1 + i as u16) as usize)
-            }),
-        }
-    }
-}
-
-impl Display for ApuSnapshot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let data = Spc700OpcodeData::from_opcode(self.opcode);
-        write!(
-            f,
-            "{:20} OP={:02X} {} (bytes={:02X?})",
-            format!(
-                "{} {}",
-                data.name,
-                format_address_modes(&data.addr_modes, &self.operands)
-            ),
-            self.opcode,
-            self.cpu,
-            self.operands
-        )
-    }
-}
-
-pub fn background_table(background: &Background) -> impl Into<Element<'_, Message>> {
-    let b = background;
-    let rows = vec![
-        ("Main screen enabled", b.main_screen_enable.into()),
-        ("Sub screen enabled", b.sub_screen_enable.into()),
-        ("Tile size", b.tile_size),
-        ("Mosaic", b.mosaic.into()),
-        ("Tilemap Address (Byte)", 2 * b.tilemap_addr as u32),
-        ("Tilemap Address (Word)", b.tilemap_addr as u32),
-        ("CHR Address", b.chr_addr as u32),
-        ("H offset", b.h_off),
-        ("V offset", b.v_off),
-        ("# H Tilemaps", b.num_horz_tilemaps),
-        ("# V Tilemaps", b.num_vert_tilemaps),
-        ("Windows enabled main", b.windows_enabled_main.into()),
-        ("Windows enabled sub", b.windows_enabled_sub.into()),
-    ];
-    text_table(
-        rows.into_iter()
-            .map(|(s, v)| {
-                [
-                    (s.to_string(), Some(COLORS[1])),
-                    (format!("{:02X}", v), None),
-                ]
-            })
-            .flatten(),
-        2,
-    )
-}
-
 pub fn with_indent<'a, Message: 'a>(
     e: impl Into<Element<'a, Message>>,
 ) -> impl Into<Element<'a, Message>> {
@@ -198,28 +55,6 @@ pub const COLORS: [Color; 5] = [
     color!(0xc2af91),
     color!(0xf06262),
 ];
-pub fn vertical_table<'a>(
-    values: Vec<(impl Into<String>, Element<'a, Message>)>,
-    header_width: f32,
-    depth: usize,
-) -> Element<'a, Message> {
-    use iced::widget::keyed::Column;
-    Column::with_children(values.into_iter().enumerate().map(|(i, (header, value))| {
-        (
-            i,
-            row![
-                text(header.into())
-                    .width(Length::Fixed(header_width))
-                    .color(COLORS[depth]),
-                value
-            ]
-            .spacing(10)
-            .into(),
-        )
-    }))
-    // .width(Length::Fill)
-    .into()
-}
 
 #[derive(Debug, Clone, PartialEq)]
 enum RamDisplay {
@@ -343,20 +178,23 @@ impl Default for Application {
         )));
         let thread_state = Arc::clone(&state);
 
-        thread::spawn(move || {
-            loop {
-                let mut lock = thread_state.lock().unwrap();
-                let total_cycles = lock.total_cycles;
-                match lock.emu.as_mut() {
-                    None => {}
-                    Some(e) => {
-                        while *e.total_master_clocks() < total_cycles {
-                            e.advance_instructions(1);
+        thread::Builder::new()
+            .name("Super Y.A.N.E. helper".to_string())
+            .spawn(move || {
+                loop {
+                    let mut lock = thread_state.lock().unwrap();
+                    let total_cycles = lock.total_cycles;
+                    match lock.emu.as_mut() {
+                        None => {}
+                        Some(e) => {
+                            while *e.total_master_clocks() < total_cycles {
+                                e.advance_instructions(1);
+                            }
                         }
                     }
                 }
-            }
-        });
+            })
+            .expect("Unable to spawn thread");
 
         let console = state.lock().unwrap().emu.clone().unwrap().clone();
 

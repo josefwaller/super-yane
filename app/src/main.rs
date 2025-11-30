@@ -12,7 +12,11 @@ use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
 use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
 
 mod application;
+mod apu_snapshot;
 mod emu_state;
+mod instruction_snapshot;
+#[macro_use]
+mod utils;
 mod widgets;
 use application::Application;
 use emu_state::EmuState;
