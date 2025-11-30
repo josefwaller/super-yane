@@ -2,6 +2,7 @@ use std::{
     collections::VecDeque,
     fmt::Display,
     path::Path,
+    sync::mpsc::{self, Receiver, Sender},
     thread::{self},
     time::{Duration, Instant},
 };
@@ -39,6 +40,7 @@ use crate::{
     EmuState, apu_snapshot::ApuSnapshot, instruction_snapshot::InstructionSnapshot,
     widgets::ram::ram,
 };
+use derive_new::new;
 use std::sync::{Arc, Mutex};
 
 pub const VOLUME: f32 = 5.0;
@@ -75,6 +77,19 @@ impl Display for RamDisplay {
             }
         )
     }
+}
+
+enum AdvanceBy {
+    MasterCycles(u64),
+}
+
+/// The payload send to the emulation thread telling it to update the emulator
+#[derive(new)]
+struct UpdateEmuPayload {
+    /// How much to advance the emulator by
+    advance_by: AdvanceBy,
+    /// The current input
+    input: [InputPort; 2],
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -149,6 +164,10 @@ pub struct Application {
     last_frame_time: Instant,
     channel: AudioQueue<f32>,
     state: Arc<Mutex<EmuState>>,
+    sender: Sender<UpdateEmuPayload>,
+    console_receiver: Receiver<Console>,
+    frame_receiver: Receiver<[[u8; 3]; 256 * 240]>,
+    controller_states: [InputPort; 2],
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -176,20 +195,39 @@ impl Default for Application {
             ))),
             0,
         )));
-        let thread_state = Arc::clone(&state);
+
+        // Send data to the emulation thread telling it to update the emulator
+        let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
+        // Send the console back to the main thread after emulating
+        let (console_sender, console_receiver) = mpsc::channel::<Console>();
+        // Send new frame data every time a new frame is generated
+        let (frame_sender, frame_receiver) = mpsc::channel::<[[u8; 3]; 256 * 240]>();
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
             .spawn(move || {
+                use AdvanceBy::*;
+                let mut console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
                 loop {
-                    let mut lock = thread_state.lock().unwrap();
-                    let total_cycles = lock.total_cycles;
-                    match lock.emu.as_mut() {
-                        None => {}
-                        Some(e) => {
-                            while *e.total_master_clocks() < total_cycles {
-                                e.advance_instructions(1);
+                    let payload = receiver.recv().unwrap();
+                    console.input_ports_mut()[0] = payload.input[0];
+                    match payload.advance_by {
+                        MasterCycles(n) => {
+                            let goal_cycles = console.total_master_clocks() + n;
+                            while *console.total_master_clocks() < goal_cycles {
+                                let vblank = console.in_vblank();
+                                console.advance_instructions(1);
+                                if !vblank && console.in_vblank() {
+                                    frame_sender
+                                        .send(console.ppu().screen_data_rgb())
+                                        .expect("Unable to send frame data");
+                                }
                             }
+                            console_sender
+                                .send(console.clone())
+                                .expect("Unable to send console to main thread");
+                            // Todo tidy: Just clear the queue
+                            let _ = console.apu_mut().sample_queue();
                         }
                     }
                 }
@@ -197,6 +235,8 @@ impl Default for Application {
             .expect("Unable to spawn thread");
 
         let console = state.lock().unwrap().emu.clone().unwrap().clone();
+        // Todo remove
+        channel.resume();
 
         Application {
             console,
@@ -225,6 +265,10 @@ impl Default for Application {
             last_frame_time: Instant::now(),
             channel,
             state,
+            sender,
+            console_receiver,
+            frame_receiver,
+            controller_states: [InputPort::default_standard_controller(); 2],
         }
     }
 }
@@ -306,15 +350,7 @@ impl Application {
             }
             _ => None,
         };
-        // let c = self.console.input_ports()[0];
-        let c = self
-            .state
-            .lock()
-            .unwrap()
-            .emu
-            .as_ref()
-            .unwrap()
-            .input_ports()[0];
+        let c = self.controller_states[0];
         match c {
             InputPort::Empty => {}
             InputPort::StandardController {
@@ -347,13 +383,7 @@ impl Application {
                         "e" => r = val,
                         _ => {}
                     };
-                    self.state
-                        .lock()
-                        .unwrap()
-                        .emu
-                        .as_mut()
-                        .unwrap()
-                        .input_ports_mut()[0] = InputPort::StandardController {
+                    self.controller_states[0] = InputPort::StandardController {
                         a,
                         b,
                         x,
@@ -403,34 +433,47 @@ impl Application {
                 if !self.is_paused {
                     self.emu_time += ft - self.last_frame_time;
                 }
-                self.console = self.state.lock().unwrap().emu.clone().unwrap();
+                let cycles = ((ft - self.last_frame_time).as_micros() as f64 / 1_000_000.0
+                    * MASTER_CLOCK_SPEED_HZ as f64)
+                    .floor() as u64;
+                self.last_frame_time = ft;
+                match self.console_receiver.try_recv() {
+                    Ok(c) => self.console = c,
+                    Err(_) => {}
+                }
+                match self.frame_receiver.try_recv() {
+                    Ok(f) => {
+                        self.screen_data =
+                            core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2], 0xFF])
+                    }
+                    Err(_) => {}
+                }
+                self.sender
+                    .send(UpdateEmuPayload::new(
+                        AdvanceBy::MasterCycles(cycles),
+                        self.controller_states.clone(),
+                    ))
+                    .expect("Unable to send to console thread");
                 self.state.lock().unwrap().total_cycles =
                     (MASTER_CLOCK_SPEED_HZ as f64 * self.emu_time.as_secs_f64()).floor() as u64;
-                self.screen_data = self
-                    .console
-                    .ppu()
-                    .screen_data_rgb()
-                    .map(|[r, g, b]| [r, g, b, 0xFF]);
-                self.last_frame_time = ft;
                 let samples: Vec<f32> = self
-                    .state
-                    .lock()
-                    .unwrap()
-                    .emu
-                    .as_mut()
-                    .unwrap()
+                    .console
                     .apu_mut()
                     .sample_queue()
                     .into_iter()
                     .map(|s| VOLUME * s)
                     .collect();
+                // if samples.len() > 10 {
+                //     info!("Got {} samples ({:?})", samples.len(), &samples[..10]);
+                // }
                 if self.record {
                     self.samples.extend_from_slice(samples.as_slice());
                 }
                 if self.channel.size() == 0 {
-                    // error!("Empty queue");
+                    error!("Empty queue");
                 }
-                if self.channel.size() > 20_000 {
+                if self.channel.size() > 32_000 {
+                    error!("Channel too big");
                     self.channel.clear();
                 }
 
