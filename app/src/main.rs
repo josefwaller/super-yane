@@ -17,6 +17,7 @@ mod emu_state;
 mod instruction_snapshot;
 #[macro_use]
 mod utils;
+mod engine;
 mod widgets;
 use application::Application;
 use emu_state::EmuState;
