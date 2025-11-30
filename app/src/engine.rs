@@ -1,5 +1,7 @@
 use derive_new::new;
+use log::*;
 use std::{
+    collections::VecDeque,
     sync::mpsc::{self, Receiver, Sender},
     thread::{self},
     time::Duration,
@@ -21,16 +23,25 @@ pub struct UpdateEmuPayload {
     input: [InputPort; 2],
 }
 
+/// The payload sent every frame from the emulator thread containing output information
+#[derive(new)]
+pub struct StreamPayload {
+    screen_data: [[u8; 3]; 256 * 240],
+    samples: VecDeque<f32>,
+}
+
 /// The underlying engine of the emulator application
 /// Runs the application on a separate thread and sends data back and forth
 pub struct Engine {
     console: Console,
     sender: Sender<UpdateEmuPayload>,
     console_receiver: Receiver<Console>,
-    frame_receiver: Receiver<[[u8; 3]; 256 * 240]>,
+    stream_receiver: Receiver<StreamPayload>,
     pub input_ports: [InputPort; 2],
     /// The RGB data from the previous fully rendered frame
     pub prev_frame_data: [[u8; 4]; 256 * 240],
+    /// Audio sample queue
+    samples: VecDeque<f32>,
 }
 impl Engine {
     pub fn new() -> Engine {
@@ -39,7 +50,7 @@ impl Engine {
         // Send the console back to the main thread after emulating
         let (console_sender, console_receiver) = mpsc::channel::<Console>();
         // Send new frame data every time a new frame is generated
-        let (frame_sender, frame_receiver) = mpsc::channel::<[[u8; 3]; 256 * 240]>();
+        let (stream_sender, stream_receiver) = mpsc::channel::<StreamPayload>();
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
@@ -56,16 +67,17 @@ impl Engine {
                                 let vblank = console.in_vblank();
                                 console.advance_instructions(1);
                                 if !vblank && console.in_vblank() {
-                                    frame_sender
-                                        .send(console.ppu().screen_data_rgb())
+                                    stream_sender
+                                        .send(StreamPayload::new(
+                                            console.ppu().screen_data_rgb(),
+                                            console.apu_mut().sample_queue(),
+                                        ))
                                         .expect("Unable to send frame data");
                                 }
                             }
                             console_sender
                                 .send(console.clone())
                                 .expect("Unable to send console to main thread");
-                            // Todo tidy: Just clear the queue
-                            let _ = console.apu_mut().sample_queue();
                         }
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
@@ -81,10 +93,11 @@ impl Engine {
         Engine {
             console: Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc")),
             sender,
-            frame_receiver,
+            stream_receiver,
             console_receiver,
             input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 4]; 256 * 240],
+            samples: VecDeque::new(),
         }
     }
 
@@ -125,12 +138,24 @@ impl Engine {
             Err(_) => {}
         }
         // Update screen data
-        match self.frame_receiver.try_recv() {
-            Ok(f) => {
-                self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2], 0xFF])
+        match self.stream_receiver.try_recv() {
+            Ok(StreamPayload {
+                screen_data: f,
+                samples,
+            }) => {
+                self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2], 0xFF]);
+                self.samples.extend(samples);
             }
             Err(_) => {}
         }
+    }
+
+    /// Retrieve the audio samples generated so far from the internal buffer
+    /// and clear the buffer
+    pub fn swap_samples(&mut self) -> VecDeque<f32> {
+        let mut s = VecDeque::new();
+        std::mem::swap(&mut self.samples, &mut s);
+        s
     }
 
     pub fn console(&self) -> &Console {

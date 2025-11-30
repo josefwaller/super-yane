@@ -372,9 +372,8 @@ impl Application {
                 self.engine.on_frame();
                 self.console = self.engine.console().clone();
                 let samples: Vec<f32> = self
-                    .console
-                    .apu_mut()
-                    .sample_queue()
+                    .engine
+                    .swap_samples()
                     .into_iter()
                     .map(|s| VOLUME * s)
                     .collect();
