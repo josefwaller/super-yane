@@ -39,6 +39,13 @@ pub enum VramIncMode {
     LowReadHighWrite = 1,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Mode7Fill {
+    Transparent = 0,
+    Character = 1,
+}
+
 fn default_2bpp_cache() -> Box<[[u8; 8]; 0x10000 / 2]> {
     Box::new([[0; 8]; 0x10000 / 2])
 }
@@ -115,6 +122,20 @@ pub struct Ppu {
     // The matrix values (a, b, c, and d), some of which (a, b) are also used for the
     // multiplication result
     pub matrix: Matrix,
+    /// Mode 7 horizontal offset
+    pub m7_h_off: usize,
+    /// Mode 7 vertical offset
+    pub m7_v_off: usize,
+    /// Mode 7 latch
+    pub m7_latch: u8,
+    /// Mode 7 tilemap repeat
+    pub m7_repeat: bool,
+    /// Mode 7 tilemap fill (if not repeating)
+    pub m7_fill: Mode7Fill,
+    /// Mode 7 flip horizontal
+    pub m7_flip_h: bool,
+    /// Mode 7 flip vertical
+    pub m7_flip_v: bool,
     /// Multiplication latch
     pub multi_latch: u8,
     /// Multiplication result
@@ -170,6 +191,13 @@ impl Default for Ppu {
             direct_color: false,
             overscan: false,
             matrix: Matrix::default(),
+            m7_h_off: 0,
+            m7_v_off: 0,
+            m7_latch: 0,
+            m7_fill: Mode7Fill::Transparent,
+            m7_repeat: false,
+            m7_flip_v: false,
+            m7_flip_h: false,
             multi_latch: 0,
             multi_res: 0,
             mosaic_v_latch: 0,
@@ -305,6 +333,16 @@ impl Ppu {
                 self.backgrounds[3].chr_addr = (value as usize & 0xF0) << (12 - 4);
             }
             0x210D..=0x2114 => {
+                // Update mode 7 offsets
+                if addr == 0x210D {
+                    self.m7_h_off =
+                        ((value as u16 * 0x100) + self.m7_latch as u16) as usize & 0x7FFF;
+                    self.m7_latch = value;
+                } else if addr == 0x210E {
+                    self.m7_v_off =
+                        ((value as u16 * 0x100) + self.m7_latch as u16) as usize & 0x7FFF;
+                    self.m7_latch = value;
+                }
                 let n = (addr - 0x210D) / 2;
                 if addr % 2 == 1 {
                     // Horizontal offset
@@ -359,7 +397,16 @@ impl Ppu {
                     self.inc_vram_addr();
                 }
             }
-            0x211A => {}
+            0x211A => {
+                self.m7_repeat = value & 0x80 == 0;
+                self.m7_fill = match value & 0x40 {
+                    0x40 => Mode7Fill::Character,
+                    0 => Mode7Fill::Transparent,
+                    _ => unreachable!(),
+                };
+                self.m7_flip_h = bit(value, 0);
+                self.m7_flip_v = bit(value, 1);
+            }
             0x211B..=0x2120 => {
                 let v = ((value as u16) << 8) | self.multi_latch as u16;
                 match addr & 0xFF {
@@ -577,27 +624,36 @@ impl Ppu {
         bpp: usize,
     ) -> ([BackgroundPixel; 8], usize) {
         if self.bg_mode == 7 {
-            if x >= 1024 || y >= 1024 {
-                return ([Some((0xFF00, true)); 8], 0);
-            }
-            // Get the index of hte tile we need to draw
-            let tilemap_index = (x / 8) + 128 * (y / 8);
-            // Tilemap bytes are only in the low bytes
-            let tile_index = self.vram[2 * tilemap_index];
-            // Get the index of the tile data
-            // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
-            let tile_addr = 8 * 8 * tile_index as usize;
-            // Tile data is in the high byte
-            let pixel_index = (x % 8) + 8 * (y % 8);
-            let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
-            return (
-                [if palette_byte == 0 {
-                    None
-                } else {
-                    Some((self.cgram[palette_byte as usize], true))
-                }; 8],
-                0,
-            );
+            let pixel = if self.m7_repeat {
+                Some((x % 1024, y % 1024))
+            } else if self.m7_fill == Mode7Fill::Character {
+                Some((x % 8, y % 8))
+            } else {
+                None
+            };
+            return match pixel {
+                None => ([None; 8], 0),
+                Some((x, y)) => {
+                    // Get the index of hte tile we need to draw
+                    let tilemap_index = (x / 8) + 128 * (y / 8);
+                    // Tilemap bytes are only in the low bytes
+                    let tile_index = self.vram[2 * tilemap_index];
+                    // Get the index of the tile data
+                    // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
+                    let tile_addr = 8 * 8 * tile_index as usize;
+                    // Tile data is in the high byte
+                    let pixel_index = (x % 8) + 8 * (y % 8);
+                    let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
+                    return (
+                        [if palette_byte == 0 {
+                            None
+                        } else {
+                            Some((self.cgram[palette_byte as usize], true))
+                        }; 8],
+                        0,
+                    );
+                }
+            };
         }
         let b = &self.backgrounds[bg_index];
         // Get the tilemaps to render, relative to the current tilemap address
@@ -831,10 +887,8 @@ impl Ppu {
                     let bg_pixels = {
                         if self.bg_mode == 7 {
                             let a = [
-                                x as f32 - self.matrix.center_x as f32
-                                    + self.backgrounds[0].h_off as f32,
-                                y as f32 - self.matrix.center_y as f32
-                                    + self.backgrounds[0].v_off as f32,
+                                x as f32 - self.matrix.center_x as f32 + self.m7_h_off as f32,
+                                y as f32 - self.matrix.center_y as f32 + self.m7_v_off as f32,
                                 1.0,
                             ];
                             let mat = [
