@@ -123,9 +123,9 @@ pub struct Ppu {
     // multiplication result
     pub matrix: Matrix,
     /// Mode 7 horizontal offset
-    pub m7_h_off: usize,
+    pub m7_h_off: i16,
     /// Mode 7 vertical offset
-    pub m7_v_off: usize,
+    pub m7_v_off: i16,
     /// Mode 7 latch
     pub m7_latch: u8,
     /// Mode 7 tilemap repeat
@@ -334,13 +334,17 @@ impl Ppu {
             }
             0x210D..=0x2114 => {
                 // Update mode 7 offsets
+                let v = if value & 0x10 == 0 {
+                    ((value as u16 * 0x100) + self.m7_latch as u16) as i16 & 0x1FFF
+                } else {
+                    (0xE000 | ((value as u16 * 0x100) + self.m7_latch as u16) as u16 & 0x1FFF)
+                        as i16
+                };
                 if addr == 0x210D {
-                    self.m7_h_off =
-                        ((value as u16 * 0x100) + self.m7_latch as u16) as usize & 0x7FFF;
+                    self.m7_h_off = v;
                     self.m7_latch = value;
                 } else if addr == 0x210E {
-                    self.m7_v_off =
-                        ((value as u16 * 0x100) + self.m7_latch as u16) as usize & 0x7FFF;
+                    self.m7_v_off = v;
                     self.m7_latch = value;
                 }
                 let n = (addr - 0x210D) / 2;
@@ -634,10 +638,10 @@ impl Ppu {
             return match pixel {
                 None => ([None; 8], 0),
                 Some((x, y)) => {
-                    // Get the index of hte tile we need to draw
+                    // Get the index of the tile we need to draw
                     let tilemap_index = (x / 8) + 128 * (y / 8);
                     // Tilemap bytes are only in the low bytes
-                    let tile_index = self.vram[2 * tilemap_index];
+                    let tile_index = self.vram[(2 * tilemap_index) % self.vram.len() / 2];
                     // Get the index of the tile data
                     // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
                     let tile_addr = 8 * 8 * tile_index as usize;

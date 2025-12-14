@@ -78,6 +78,7 @@ pub struct Dsp {
     /// Index of the echo sample about to be read
     echo_index: usize,
     /// The generated samples
+    #[serde(skip)]
     pub(super) sample_queue: VecDeque<f32>,
 }
 
