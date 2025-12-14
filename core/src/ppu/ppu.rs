@@ -630,10 +630,13 @@ impl Ppu {
         if self.bg_mode == 7 {
             let pixel = if self.m7_repeat {
                 Some((x % 1024, y % 1024))
-            } else if self.m7_fill == Mode7Fill::Character {
-                Some((x % 8, y % 8))
+            } else if x < 1024 && y < 1024 {
+                Some((x, y))
             } else {
-                None
+                match self.m7_fill {
+                    Mode7Fill::Character => Some((x % 8, y % 8)),
+                    Mode7Fill::Transparent => None,
+                }
             };
             return match pixel {
                 None => ([None; 8], 0),
@@ -641,7 +644,7 @@ impl Ppu {
                     // Get the index of the tile we need to draw
                     let tilemap_index = (x / 8) + 128 * (y / 8);
                     // Tilemap bytes are only in the low bytes
-                    let tile_index = self.vram[(2 * tilemap_index) % self.vram.len() / 2];
+                    let tile_index = self.vram[2 * tilemap_index];
                     // Get the index of the tile data
                     // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
                     let tile_addr = 8 * 8 * tile_index as usize;
