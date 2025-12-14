@@ -12,6 +12,7 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 pub enum Command {
     MasterCycles(u64),
     LoadRom(Vec<u8>),
+    LoadSavestate(Console),
     Reset,
 }
 /// The payload send to the emulation thread telling it to update the emulator
@@ -82,6 +83,9 @@ impl Engine {
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
                         }
+                        LoadSavestate(c) => {
+                            console = c;
+                        }
                         Reset => {
                             console.reset();
                         }
@@ -108,6 +112,16 @@ impl Engine {
                 self.input_ports,
             ))
             .expect("Unable to send data to thread");
+    }
+    pub fn load_savestate(&mut self, bytes: &[u8]) {
+        let mut console: Console = serde_brief::from_slice(bytes).unwrap();
+        console.ppu_mut().reset_vram_cache();
+        self.sender
+            .send(UpdateEmuPayload::new(
+                Command::LoadSavestate(console),
+                self.input_ports,
+            ))
+            .expect("Unable to send data to thread")
     }
 
     /// Advance the console by a given duration

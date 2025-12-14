@@ -118,6 +118,8 @@ pub enum Message {
     SetRamDisplay(RamDisplay),
     SetInstDisplay(InstDisplay),
     LoadRom,
+    LoadSavestate,
+    CreateSavestate,
     Reset,
     ToggleLogCpu(bool),
     ToggleLogApu(bool),
@@ -381,7 +383,7 @@ impl Application {
                     self.samples.extend_from_slice(samples.as_slice());
                 }
                 if self.channel.size() == 0 {
-                    error!("Empty queue");
+                    // error!("Empty queue");
                 }
                 if self.channel.size() > 32_000 {
                     error!("Channel too big");
@@ -460,6 +462,27 @@ impl Application {
                 }
                 None => {}
             },
+            Message::LoadSavestate => match FileDialog::new()
+                .add_filter("Super YANE savestate files", &["sy.bin"])
+                .pick_file()
+            {
+                Some(p) => {
+                    let bytes =
+                        std::fs::read(&p).expect(format!("Unable to read file '{:?}'", p).as_str());
+                    self.engine.load_savestate(&bytes);
+                    self.is_paused = true;
+                    self.emu_time = Duration::from_micros(
+                        1_000_000 * self.engine.console().total_master_clocks()
+                            / MASTER_CLOCK_SPEED_HZ,
+                    );
+                }
+                None => {}
+            },
+            Message::CreateSavestate => {
+                let bytes = serde_brief::to_vec(&self.console).unwrap();
+                let filename = "./savestatenew.sy.bin";
+                std::fs::write(filename, bytes).unwrap();
+            }
             Message::SetRamDisplay(d) => {
                 self.ram_display = d;
                 self.ram_offset = 0;
@@ -491,16 +514,12 @@ impl Application {
                     .height(Length::Fill)
                     .width(Length::Fill),
                     row![
-                        button("OPEN").on_press(Message::LoadRom),
+                        button("OPEN ROM").on_press(Message::LoadRom),
+                        button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
+                        button("NEW SAVESTATE").on_press(Message::CreateSavestate),
                         button("RESET").on_press(Message::Reset),
-                        button("|<<").on_press(Message::PreviousBreakpoint),
-                        button("|<").on_press(Message::PreviousInstruction),
-                        button(if self.is_paused { " >" } else { "||" })
+                        button(if self.is_paused { "PLAY" } else { "PAUSE" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
-                        button(">|").on_press(Message::AdvanceInstructions(1)),
-                        button(">>|").on_press(Message::AdvanceBreakpoint),
-                        button(">>5,000").on_press(Message::AdvanceInstructions(5000)),
-                        button(">>50,000").on_press(Message::AdvanceInstructions(50000)),
                     ],
                     row![text(format!(
                         "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",
