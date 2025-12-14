@@ -553,7 +553,7 @@ impl Ppu {
         })
     }
     fn inc_vram_addr(&mut self) {
-        self.vram_addr = (self.vram_addr + self.vram_increment_amount) % 0x8000;
+        self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
     }
     fn refresh_vram_latch(&mut self) {
         self.vram_latch_low = self.read_vram_byte(self.vram_addr);
@@ -566,19 +566,19 @@ impl Ppu {
         let addr = match self.vram_remap {
             0 => self.vram_addr,
             1 => {
-                (self.vram_addr & 0xFF00) + (self.vram_addr >> 5)
-                    & 0x07 + (self.vram_addr << 3)
-                    & 0xF8
+                (self.vram_addr & 0xFF00)
+                    + ((self.vram_addr >> 5) & 0x07)
+                    + ((self.vram_addr << 3) & 0xF8)
             }
             2 => {
-                (self.vram_addr & 0xFE00) + (self.vram_addr >> 6)
-                    & 0x07 + (self.vram_addr << 4)
-                    & 0x01C0
+                (self.vram_addr & 0xFE00)
+                    + ((self.vram_addr >> 6) & 0x07)
+                    + ((self.vram_addr << 4) & 0x01F8)
             }
             3 => {
-                (self.vram_addr & 0xFC00) + (self.vram_addr >> 7)
-                    & 0x07 + (self.vram_addr << 5)
-                    & 0x0380
+                (self.vram_addr & 0xFC00)
+                    + ((self.vram_addr >> 7) & 0x07)
+                    + ((self.vram_addr << 5) & 0x03F8)
             }
             _ => unreachable!("Invalid VRAM REMAP value: {:X}", self.vram_remap),
         };
