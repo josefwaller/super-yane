@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::File,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -22,6 +23,28 @@ mod widgets;
 use application::Application;
 use emu_state::EmuState;
 
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
+
+fn initial_state() -> Application {
+    let mut a = Application::default();
+    match env::args().nth(1) {
+        Some(f) => match std::fs::read(&f) {
+            Ok(bytes) => {
+                debug!("Reading {}", f);
+                if f.ends_with(".sy.bin") {
+                    a.engine.load_savestate(&bytes);
+                } else {
+                    a.engine.load_rom(&bytes)
+                }
+            }
+            Err(e) => {
+                error!("Unable to read file {}: {:?}", f, e);
+            }
+        },
+        None => {}
+    };
+    a
+}
 fn main() {
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -40,11 +63,12 @@ fn main() {
     .unwrap();
     info!("Logger initialized");
 
-    iced::application("Super Y.A.N.E.", Application::update, Application::view)
+    iced::application(initial_state, Application::update, Application::view)
         .subscription(Application::subscription)
         .theme(Application::theme)
         .settings(Settings {
             id: None,
+            vsync: false,
             fonts: vec![],
             default_font: Font::MONOSPACE,
             default_text_size: 12.into(),

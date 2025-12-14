@@ -3,7 +3,7 @@ use std::fmt::UpperHex;
 use iced::{
     Color, Element, Length,
     widget::{
-        Row, Scrollable, column, container, horizontal_space,
+        Row, Scrollable, column, container,
         keyed::Column,
         row,
         scrollable::{Direction, Scrollbar},

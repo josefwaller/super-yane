@@ -124,7 +124,7 @@ pub enum Message {
     ToggleLogCpu(bool),
     ToggleLogApu(bool),
     Record(bool),
-    WindowClose(),
+    OnClose(window::Id),
 }
 
 pub struct Application {
@@ -152,7 +152,7 @@ pub struct Application {
     emu_time: Duration,
     last_frame_time: Instant,
     channel: AudioQueue<f32>,
-    engine: Engine,
+    pub engine: Engine,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -343,22 +343,17 @@ impl Application {
                 KeyReleased { key, .. } => self.on_key_change(key, false),
                 _ => {}
             };
-        } else if let event::Event::Window(window_event) = event {
-            match window_event {
-                window::Event::CloseRequested => {
-                    debug!("Closing application");
-                    let samples = Samples::new(self.samples.clone().into_boxed_slice());
-                    write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
-                    return window::get_latest().and_then(|id| window::close(id));
-                }
-                _ => {}
-            }
         }
         Task::none()
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::WindowClose() => {}
+            Message::OnClose(id) => {
+                debug!("Closing application");
+                let samples = Samples::new(self.samples.clone().into_boxed_slice());
+                write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
+                return window::latest().and_then(window::close);
+            }
             Message::OnEvent(e) => {
                 return self.handle_input(e);
             }
@@ -534,9 +529,12 @@ impl Application {
                 column![
                     container(self.instructions()).height(Length::Fill),
                     row![
-                        checkbox("Log CPU", self.log_cpu).on_toggle(Message::ToggleLogCpu),
-                        checkbox("Log APU", self.log_apu).on_toggle(Message::ToggleLogApu),
-                        checkbox("Record", self.record).on_toggle(Message::Record)
+                        text("Log CPU"),
+                        checkbox(self.log_cpu).on_toggle(Message::ToggleLogCpu),
+                        text("Log APU"),
+                        checkbox(self.log_apu).on_toggle(Message::ToggleLogApu),
+                        text("Record"),
+                        checkbox(self.record).on_toggle(Message::Record)
                     ]
                 ]
                 .width(Length::Shrink)
@@ -609,15 +607,12 @@ impl Application {
                     .iter()
                     .map(|op| {
                         let data = opcode_data(*op, false, false);
-                        checkbox(
-                            format!("{} {} ({:02X})", data.name, data.addr_mode, op),
-                            true,
-                        )
-                        .on_toggle(|_| Message::RemoveBreakpoint(*op))
-                        .into()
+                        checkbox(true)
+                            .on_toggle(|_| Message::RemoveBreakpoint(*op))
+                            .into()
                     })
                     .chain(
-                        [checkbox("VBlank", self.vblank_breakpoint)
+                        [checkbox(self.vblank_breakpoint)
                             .on_toggle(Message::ToggleVBlankBreakpoint)
                             .into()]
                         .into_iter()
@@ -633,12 +628,9 @@ impl Application {
                                     .contains(&self.opcode_search.to_lowercase()))
                             .sorted()
                             .map(|data| {
-                                checkbox(
-                                    format!("{} {} ({:02X})", data.name, data.addr_mode, data.code),
-                                    false,
-                                )
-                                .on_toggle(move |_| Message::AddBreakpoint(data.code))
-                                .into()
+                                checkbox(false)
+                                    .on_toggle(move |_| Message::AddBreakpoint(data.code))
+                                    .into()
                             })
                     )
             )))
@@ -897,6 +889,7 @@ impl Application {
         Subscription::batch([
             window::frames().map(|_| Message::NewFrame()),
             event::listen().map(Message::OnEvent),
+            window::close_requests().map(Message::OnClose),
         ])
     }
     pub fn theme(&self) -> Theme {
