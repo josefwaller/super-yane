@@ -877,17 +877,17 @@ impl Ppu {
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
                         self.windows[i].left <= x && x <= self.windows[i].right
                     });
+                    let color_vals: [bool; 2] =
+                        core::array::from_fn(|i| window_vals[i] ^ self.windows[i].invert_color);
                     let color_window_value = if self.windows[0].enabled_color {
                         if self.windows[1].enabled_color {
-                            self.color_window_logic.compute(
-                                window_vals[0] ^ self.windows[0].invert_color,
-                                window_vals[1] ^ self.windows[1].invert_color,
-                            )
+                            self.color_window_logic
+                                .compute(color_vals[0], color_vals[1])
                         } else {
-                            window_vals[0] ^ self.windows[0].invert_color
+                            color_vals[0]
                         }
                     } else if self.windows[1].enabled_color {
-                        window_vals[1] ^ self.windows[1].invert_color
+                        color_vals[1]
                     } else {
                         false
                     };
@@ -1100,18 +1100,19 @@ impl Ppu {
                     let subscreen_val = get_pixel!(2);
                     let mainscreen_val = get_pixel!(1);
                     // Can be none if if the color window makes the sub screen transparent
-                    let color_math_source = match self.color_math_src {
-                        ColorMathSource::Subscreen => {
-                            // Backdrop for the subscreen is the fixed color
-                            if self.color_window_sub_region.compute(color_window_value) {
-                                None
-                            } else {
-                                subscreen_val
-                                    .map_or(Some(self.fixed_color_value()), |ss| Some(ss.0))
+                    let color_math_source =
+                        if self.color_window_sub_region.compute(color_window_value) {
+                            None
+                        } else {
+                            match self.color_math_src {
+                                ColorMathSource::Subscreen => {
+                                    // Backdrop for the subscreen is the fixed color
+                                    subscreen_val
+                                        .map_or(Some(self.fixed_color_value()), |ss| Some(ss.0))
+                                }
+                                ColorMathSource::Fixed => Some(self.fixed_color_value()),
                             }
-                        }
-                        ColorMathSource::Fixed => Some(self.fixed_color_value()),
-                    };
+                        };
                     // Whether the window is masking the main layer
                     let hide_main = self.color_window_main_region.compute(color_window_value);
                     // Color math goes here

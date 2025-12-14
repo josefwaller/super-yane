@@ -698,7 +698,7 @@ impl Application {
                 table_row!($label, self.console.ppu().$field, $format_str)
             };
             ($label: expr, $field: ident) => {
-                ppu_val!($label, $field, "{}")
+                ppu_val!($label, $field, "{:?}")
             };
         }
         let values = vec![
@@ -723,6 +723,10 @@ impl Application {
                 self.console.ppu().vram_increment_mode,
                 "{:?}"
             ),
+            ppu_val!("Color math SRC", color_math_src),
+            ppu_val!("Fixed Color", fixed_color),
+            ppu_val!("Color Window Main", color_window_main_region),
+            ppu_val!("Color Window Sub", color_window_sub_region),
         ];
         column![
             text("PPU").color(COLORS[4]),
@@ -743,7 +747,9 @@ impl Application {
                         "Left: {:02X} | Right: {:02X}",
                         w.left, w.right
                     )))
-                    .into()
+                    .into(),
+                    text(format!("Color enabled: {}", w.enabled_color)),
+                    text(format!("Color inverted: {}", w.invert_color)),
                 ]
                 .into()
             }))
