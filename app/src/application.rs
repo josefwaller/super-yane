@@ -415,9 +415,7 @@ impl Application {
                 }
             }
             Message::AdvanceInstructions(num_instructions) => {
-                (0..num_instructions).for_each(|_| {
-                    self.advance();
-                });
+                self.engine.advance_instructions(num_instructions);
             }
             Message::ChangeVramPage(new_vram_page) => self.ram_offset = new_vram_page,
             Message::ChangePaused(p) => {
@@ -510,11 +508,12 @@ impl Application {
                     .width(Length::Fill),
                     row![
                         button("OPEN ROM").on_press(Message::LoadRom),
-                        button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
-                        button("NEW SAVESTATE").on_press(Message::CreateSavestate),
-                        button("RESET").on_press(Message::Reset),
                         button(if self.is_paused { "PLAY" } else { "PAUSE" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
+                        button("NEW SAVESTATE").on_press(Message::CreateSavestate),
+                        button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
+                        button("RESET").on_press(Message::Reset),
+                        button("ADVANCE 500").on_press(Message::AdvanceInstructions(500))
                     ],
                     row![text(format!(
                         "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",

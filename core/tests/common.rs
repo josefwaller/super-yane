@@ -8,7 +8,7 @@ macro_rules! rom_test {
         #[test]
         fn [<test_$name>] () {
             let mut c = Console::with_cartridge(include_bytes!($file));
-            (0..$num_frames).for_each(|_| {
+            (0..($num_frames)).for_each(|_| {
                 loop {
                     let v = c.ppu().is_in_vblank();
                     c.advance_instructions(1);

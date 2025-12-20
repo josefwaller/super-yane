@@ -11,6 +11,7 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 /// Command send to the emulation thread
 pub enum Command {
     MasterCycles(u64),
+    Instructions(u32),
     LoadRom(Vec<u8>),
     LoadSavestate(Console),
     Reset,
@@ -80,6 +81,12 @@ impl Engine {
                                 .send(console.clone())
                                 .expect("Unable to send console to main thread");
                         }
+                        Instructions(instructions) => {
+                            console.advance_instructions(instructions);
+                            console_sender
+                                .send(console.clone())
+                                .expect("Unable to send console back to main thread");
+                        }
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
                         }
@@ -131,6 +138,15 @@ impl Engine {
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::MasterCycles(cycles),
+                self.input_ports.clone(),
+            ))
+            .expect("Unable to send to console thread");
+    }
+    /// Advance the console by a number of instructions
+    pub fn advance_instructions(&mut self, instructions: u32) {
+        self.sender
+            .send(UpdateEmuPayload::new(
+                Command::Instructions(instructions),
                 self.input_ports.clone(),
             ))
             .expect("Unable to send to console thread");

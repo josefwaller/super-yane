@@ -260,7 +260,7 @@ impl Ppu {
         }
         match addr {
             0x2100 => {
-                self.forced_blanking = bit(value, 3);
+                self.forced_blanking = bit(value, 7);
                 self.brightness = (value & 0x07) as u32;
             }
             0x2101 => {
@@ -536,13 +536,16 @@ impl Ppu {
         self.multi_res = (self.matrix.a as i16) as i32 * (self.matrix.b & 0xFF) as i32;
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
-        self.vram[addr] = value;
-        // Update cache
-        let cache_addr = (addr / 2) * 2;
-        let low = self.vram[cache_addr % self.vram.len()];
-        let high = self.vram[(cache_addr + 1) % self.vram.len()];
-        self.vram_cache_2bpp[addr / 2] =
-            core::array::from_fn(|i| ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01));
+        if self.can_write_vram() {
+            self.vram[addr] = value;
+            // Update cache
+            let cache_addr = (addr / 2) * 2;
+            let low = self.vram[cache_addr % self.vram.len()];
+            let high = self.vram[(cache_addr + 1) % self.vram.len()];
+            self.vram_cache_2bpp[addr / 2] = core::array::from_fn(|i| {
+                ((low >> (7 - i)) & 0x01) + 2 * ((high >> (7 - i)) & 0x01)
+            });
+        }
     }
     pub fn reset_vram_cache(&mut self) {
         self.vram.chunks(2).enumerate().for_each(|(i, v)| {
@@ -556,8 +559,8 @@ impl Ppu {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
     }
     fn refresh_vram_latch(&mut self) {
-        self.vram_latch_low = self.read_vram_byte(self.vram_addr);
-        self.vram_latch_high = self.read_vram_byte(self.vram_addr + 1);
+        self.vram_latch_low = self.read_vram_byte(2 * self.vram_addr);
+        self.vram_latch_high = self.read_vram_byte(2 * self.vram_addr + 1);
     }
     fn read_vram_byte(&self, byte_addr: usize) -> u8 {
         self.vram[byte_addr % self.vram.len()]
@@ -573,12 +576,12 @@ impl Ppu {
             2 => {
                 (self.vram_addr & 0xFE00)
                     + ((self.vram_addr >> 6) & 0x07)
-                    + ((self.vram_addr << 4) & 0x01F8)
+                    + ((self.vram_addr << 3) & 0x01F8)
             }
             3 => {
                 (self.vram_addr & 0xFC00)
                     + ((self.vram_addr >> 7) & 0x07)
-                    + ((self.vram_addr << 5) & 0x03F8)
+                    + ((self.vram_addr << 3) & 0x03F8)
             }
             _ => unreachable!("Invalid VRAM REMAP value: {:X}", self.vram_remap),
         };
@@ -857,7 +860,8 @@ impl Ppu {
                 if y == 0 && x == 0 {
                     self.vblank = false;
                 }
-                if y == 241 && x == 0 {
+                let vblank_scanline = if self.overscan { 241 } else { 225 };
+                if y == vblank_scanline && x == 0 {
                     self.vblank = true;
                 }
                 if x == 0 {
@@ -1144,6 +1148,10 @@ impl Ppu {
                 }
             }
         })
+    }
+    pub fn can_write_vram(&self) -> bool {
+        // self.forced_blanking || self.is_in_vblank()
+        true
     }
     pub fn is_in_vblank(&self) -> bool {
         self.cursor_y() > if self.overscan { 240 } else { 225 }
