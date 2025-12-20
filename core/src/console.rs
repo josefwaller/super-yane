@@ -127,6 +127,20 @@ impl ExternalArchitecture {
                         }
                     }
                 }
+                0x4300..0x4400 => {
+                    let i = (addr & 0xF0) >> 4;
+                    let lsb = addr & 0x0F;
+                    let d = &self.dma_channels[i];
+                    let value = match lsb {
+                        2 => d.src_addr.to_le_bytes()[0],
+                        3 => d.src_addr.to_le_bytes()[1],
+                        4 => d.src_bank as u8,
+                        5 => d.byte_counter.to_le_bytes()[0],
+                        6 => d.byte_counter.to_le_bytes()[1],
+                        _ => todo!("Read {:04X}", addr),
+                    };
+                    (value, 6)
+                }
                 0x4220..0x8000 => (self.ppu.read_byte(a), 6),
                 0x8000..=0xFFFF => (self.cartridge.read_byte(addr), 8),
                 _ => (0, 6),
@@ -219,7 +233,7 @@ impl ExternalArchitecture {
                         self.fast_rom_enabled = value & 0x01 != 0;
                         6
                     }
-                    0x4300..0x43F8 => {
+                    0x4300..0x43FF => {
                         let lsb = a & 0x0F;
                         let r = (a & 0xF0) >> 4;
                         if r < 8 {

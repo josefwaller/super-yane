@@ -368,7 +368,7 @@ impl Ppu {
                     0 => 1,
                     1 => 32,
                     2 | 3 => 128,
-                    _ => unreachable!("Invalud VRAM increment amount value: {:X}", value),
+                    _ => unreachable!("Invalid VRAM increment amount value: {:X}", value),
                 };
                 self.vram_increment_mode = match bit(value, 7) {
                     false => VramIncMode::HighReadLowWrite,
@@ -525,9 +525,7 @@ impl Ppu {
                 self.overscan = bit(value, 2);
             }
             0x213B => debug!("Writing to CGRAM read"),
-            _ => {
-                // debug!("Write PPU addr={addr:04X} value={value:02X}");
-            }
+            _ => {}
         }
     }
     /// Refresh the multiplication result value
