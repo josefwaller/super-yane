@@ -126,7 +126,10 @@ impl Ord for OpcodeData {
     }
 }
 
-/// Get the data for a given opcode
+/// Get the data for a given opcode.
+/// `opcode` The opcode byte
+/// `a` `true` if A is 16 bits, `false` otherwise
+/// `xy` `true` if X/Y are 16 bits, `false` otherwise
 pub fn opcode_data(opcode: u8, a: bool, xy: bool) -> OpcodeData {
     match opcode {
         ADC_I => OpcodeData {

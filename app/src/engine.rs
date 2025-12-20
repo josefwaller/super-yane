@@ -7,6 +7,16 @@ use std::{
     time::Duration,
 };
 use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use wdc65816::{format_address_mode, opcode_data};
+
+use crate::instruction_snapshot::InstructionSnapshot;
+
+/// Misc settings for advancing the emulator
+#[derive(Default, Clone)]
+pub struct AdvanceSettings {
+    /// Whether to log the CPU state after every instruction
+    pub log_cpu: bool,
+}
 
 /// Command send to the emulation thread
 pub enum Command {
@@ -23,6 +33,8 @@ pub struct UpdateEmuPayload {
     advance_by: Command,
     /// The current input
     input: [InputPort; 2],
+    /// The settings
+    settings: AdvanceSettings,
 }
 
 /// The payload sent every frame from the emulator thread containing output information
@@ -67,6 +79,10 @@ impl Engine {
                             let goal_cycles = console.total_master_clocks() + n;
                             while *console.total_master_clocks() < goal_cycles {
                                 let vblank = console.in_vblank();
+                                if payload.settings.log_cpu {
+                                    let inst = InstructionSnapshot::from(&console);
+                                    debug!("{}", inst);
+                                }
                                 console.advance_instructions(1);
                                 if !vblank && console.in_vblank() {
                                     stream_sender
@@ -117,6 +133,7 @@ impl Engine {
             .send(UpdateEmuPayload::new(
                 Command::LoadRom(bytes.to_vec()),
                 self.input_ports,
+                AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread");
     }
@@ -127,27 +144,30 @@ impl Engine {
             .send(UpdateEmuPayload::new(
                 Command::LoadSavestate(console),
                 self.input_ports,
+                AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread")
     }
 
     /// Advance the console by a given duration
-    pub fn advance_dt(&mut self, dt: Duration) {
+    pub fn advance_dt(&mut self, dt: Duration, settings: AdvanceSettings) {
         let cycles =
             (dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64).floor() as u64;
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::MasterCycles(cycles),
                 self.input_ports.clone(),
+                settings,
             ))
             .expect("Unable to send to console thread");
     }
     /// Advance the console by a number of instructions
-    pub fn advance_instructions(&mut self, instructions: u32) {
+    pub fn advance_instructions(&mut self, instructions: u32, settings: AdvanceSettings) {
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::Instructions(instructions),
                 self.input_ports.clone(),
+                settings,
             ))
             .expect("Unable to send to console thread");
     }
@@ -157,6 +177,7 @@ impl Engine {
             .send(UpdateEmuPayload::new(
                 Command::Reset,
                 self.input_ports.clone(),
+                AdvanceSettings::default(),
             ))
             .expect("Unable to send payload");
     }

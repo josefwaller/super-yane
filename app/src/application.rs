@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    engine::Engine,
+    engine::{AdvanceSettings, Engine},
     widgets::{background_table, screen::Screen, text_table, vertical_table},
 };
 use iced::{
@@ -145,7 +145,6 @@ pub struct Application {
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
     previous_apu_snapshots: VecDeque<ApuSnapshot>,
     inst_display: InstDisplay,
-    log_cpu: bool,
     log_apu: bool,
     record: bool,
     samples: Vec<f32>,
@@ -153,6 +152,7 @@ pub struct Application {
     last_frame_time: Instant,
     channel: AudioQueue<f32>,
     pub engine: Engine,
+    settings: AdvanceSettings,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
@@ -202,7 +202,6 @@ impl Default for Application {
             previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             inst_display: InstDisplay::Cpu,
-            log_cpu: false,
             log_apu: false,
             record: false,
             samples: vec![],
@@ -210,6 +209,7 @@ impl Default for Application {
             last_frame_time: Instant::now(),
             channel,
             engine: Engine::new(),
+            settings: AdvanceSettings::default(),
         }
     }
 }
@@ -226,51 +226,6 @@ impl Application {
     }
     fn is_in_breakpoint(&mut self) -> bool {
         false
-    }
-    fn advance(&mut self) {
-        if self.is_in_breakpoint() {
-            self.previous_breakpoint_states
-                .push_back(self.console.clone());
-            if self.previous_breakpoint_states.len() > NUM_BREAKPOINT_STATES {
-                self.previous_breakpoint_states.pop_front();
-            }
-        }
-        self.console.advance_instructions_with_hooks(
-            1,
-            &mut |c| {
-                let snap = InstructionSnapshot::from(c);
-                if self.log_cpu {
-                    debug!("CPU_STATE {}", snap);
-                }
-                self.previous_instruction_snapshots.push_back(snap);
-                if self.previous_instruction_snapshots.len() > NUM_PREVIOUS_STATES {
-                    self.previous_instruction_snapshots.pop_front();
-                }
-            },
-            &mut |c| {
-                let snap = ApuSnapshot::from(c);
-                if self.log_apu {
-                    debug!(
-                        "APU_STATE {} PORTS APU2CPU={:02X?} CPU2APU={:02X?}",
-                        snap,
-                        c.apu_to_cpu_reg(),
-                        c.cpu_to_apu_reg()
-                    );
-                }
-                self.previous_apu_snapshots.push_back(snap);
-                if self.previous_apu_snapshots.len() > NUM_PREVIOUS_STATES {
-                    self.previous_apu_snapshots.pop_front();
-                }
-            },
-        );
-        self.total_instructions += 1;
-        self.previous_console_lag += 1;
-        while self.previous_console_lag > 500 {
-            self.previous_console_lag -= 1;
-        }
-        if self.is_in_breakpoint() {
-            self.on_breakpoint();
-        }
     }
     fn on_key_change(&mut self, key: Key, value: bool) {
         let key_value: Option<(String, bool)> = match key {
@@ -363,7 +318,8 @@ impl Application {
                     self.emu_time += ft - self.last_frame_time;
                 }
                 if !self.is_paused {
-                    self.engine.advance_dt(ft - self.last_frame_time);
+                    self.engine
+                        .advance_dt(ft - self.last_frame_time, self.settings.clone());
                 }
                 self.last_frame_time = ft;
                 self.engine.on_frame();
@@ -409,13 +365,13 @@ impl Application {
             }
             Message::PreviousInstruction => {
                 if self.previous_states.len() > 0 {
-                    // self.console = self.previous_states.pop_back().unwrap();
                     self.previous_console_lag -= 1;
                     self.is_paused = true;
                 }
             }
             Message::AdvanceInstructions(num_instructions) => {
-                self.engine.advance_instructions(num_instructions);
+                self.engine
+                    .advance_instructions(num_instructions, self.settings.clone());
             }
             Message::ChangeVramPage(new_vram_page) => self.ram_offset = new_vram_page,
             Message::ChangePaused(p) => {
@@ -482,7 +438,7 @@ impl Application {
             }
             Message::SetInstDisplay(d) => self.inst_display = d,
             Message::ToggleLogApu(v) => self.log_apu = v,
-            Message::ToggleLogCpu(v) => self.log_cpu = v,
+            Message::ToggleLogCpu(v) => self.settings.log_cpu = v,
             Message::Record(v) => {
                 self.record = v;
             }
@@ -529,7 +485,7 @@ impl Application {
                     container(self.instructions()).height(Length::Fill),
                     row![
                         text("Log CPU"),
-                        checkbox(self.log_cpu).on_toggle(Message::ToggleLogCpu),
+                        checkbox(self.settings.log_cpu).on_toggle(Message::ToggleLogCpu),
                         text("Log APU"),
                         checkbox(self.log_apu).on_toggle(Message::ToggleLogApu),
                         text("Record"),
