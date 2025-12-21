@@ -3,9 +3,10 @@ use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum WindowMaskLogic {
     Or,
+    #[default]
     And,
     Xor,
     Xnor,

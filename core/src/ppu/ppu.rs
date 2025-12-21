@@ -117,6 +117,8 @@ pub struct Ppu {
     pub color_window_sub_region: WindowRegion,
     pub windows: [Window; 2],
     pub color_window_logic: WindowMaskLogic,
+    #[serde(default)]
+    pub sprite_window_logic: WindowMaskLogic,
     pub direct_color: bool,
     pub overscan: bool,
     // The matrix values (a, b, c, and d), some of which (a, b) are also used for the
@@ -188,6 +190,7 @@ impl Default for Ppu {
             color_window_main_region: WindowRegion::Nowhere,
             color_window_sub_region: WindowRegion::Nowhere,
             color_window_logic: WindowMaskLogic::And,
+            sprite_window_logic: WindowMaskLogic::And,
             direct_color: false,
             overscan: false,
             matrix: Matrix::default(),
@@ -454,10 +457,14 @@ impl Ppu {
             0x2123 => window_settings!(0),
             0x2124 => window_settings!(2),
             0x2125 => {
-                self.windows[0].invert_color = bit(value, 4);
-                self.windows[0].enabled_color = bit(value, 5);
-                self.windows[1].invert_color = bit(value, 6);
-                self.windows[1].enabled_color = bit(value, 7);
+                (0..2).for_each(|i| {
+                    self.windows[i].invert_sprite = bit(value, 2 * i);
+                    self.windows[i].enabled_sprite = bit(value, 2 * i + 1);
+                });
+                (0..2).for_each(|i| {
+                    self.windows[i].invert_color = bit(value, 4 + 2 * i);
+                    self.windows[i].enabled_color = bit(value, 4 + 2 * i + 1);
+                });
             }
             0x2126 => self.windows[0].left = value as usize,
             0x2127 => self.windows[0].right = value as usize,
@@ -470,6 +477,7 @@ impl Ppu {
             }
             0x212B => {
                 self.color_window_logic = WindowMaskLogic::from(value >> 2);
+                self.sprite_window_logic = WindowMaskLogic::from(value);
             }
             0x212C => {
                 (0..4).for_each(|i| {
@@ -1010,11 +1018,29 @@ impl Ppu {
                             )
                         };
                     }
+                    // Calculate sprite window values
+                    let sprite_windows: [bool; 2] = core::array::from_fn(|i| {
+                        if self.windows[i].enabled_sprite {
+                            self.windows[i].invert_sprite ^ window_vals[i]
+                        } else {
+                            false
+                        }
+                    });
+                    // Calculate the actual resulting sprite window vaue
+                    let sw = if sprite_windows[0] {
+                        if sprite_windows[1] { false } else { true }
+                    } else {
+                        sprite_windows[1]
+                    };
                     // Get the pixel from a sprite layer with a given priority, or None
                     macro_rules! spr {
                         ($index: expr) => {
                             (
-                                self.oam_buffers[$index][x],
+                                if sw {
+                                    None
+                                } else {
+                                    self.oam_buffers[$index][x]
+                                },
                                 self.obj_main_enable,
                                 self.obj_subscreen_enable,
                                 // Todo: check if sprite is using palette 4-7

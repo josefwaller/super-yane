@@ -6,6 +6,12 @@ pub struct Window {
     pub right: usize,
     pub enabled_color: bool,
     pub invert_color: bool,
+    /// Window enabled for sprites/OAM
+    #[serde(default)]
+    pub enabled_sprite: bool,
+    /// Window inverted for sprites/OAM
+    #[serde(default)]
+    pub invert_sprite: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
