@@ -19,8 +19,8 @@ impl Cpu {
                 // Get addresses to read to/from
                 let src = d.full_src_addr();
                 let dest = d.dest_addr
-                    + d.transfer_pattern
-                        [d.num_bytes_transferred as usize % d.transfer_pattern.len()]
+                    + d.transfer_pattern()
+                        [d.num_bytes_transferred as usize % d.transfer_pattern().len()]
                         as usize;
                 // Transfer
                 let v = memory.read(src);

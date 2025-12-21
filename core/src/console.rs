@@ -130,11 +130,11 @@ impl ExternalArchitecture {
                 0x4300..0x4400 => {
                     let i = (addr & 0xF0) >> 4;
                     let lsb = addr & 0x0F;
-                    if lsb < self.dma_channels.len() {
+                    if i < self.dma_channels.len() {
                         let d = &self.dma_channels[i];
                         let value = match lsb {
                             0 => {
-                                d.transfer_pattern.len() as u8
+                                d.transfer_pattern_index as u8
                                     | (u8::from(d.adjust_mode) << 3)
                                     | (u8::from(d.indirect) << 6)
                                     | (u8::from(d.direction) << 7)
@@ -272,15 +272,7 @@ impl ExternalArchitecture {
                             // DMA register
                             match lsb {
                                 0 => {
-                                    d.transfer_pattern = match value & 0x07 {
-                                        0 => vec![0],
-                                        1 => vec![0, 1],
-                                        2 | 6 => vec![0; 2],
-                                        3 | 7 => vec![0, 0, 1, 1],
-                                        4 => vec![0, 1, 2, 3],
-                                        5 => vec![0, 1, 0, 1],
-                                        _ => panic!("Should be impossible {:X}", (value & 0x07)),
-                                    };
+                                    d.transfer_pattern_index = (value & 0x07) as usize;
                                     d.adjust_mode = match value & 0x18 {
                                         0x00 => DmaAddressAdjustMode::Increment,
                                         0x10 => DmaAddressAdjustMode::Decrement,
@@ -564,8 +556,9 @@ impl Console {
                                             d.current_hdma_table_addr = table_addr.wrapping_add(3);
                                         } else {
                                             d.src_addr = table_addr.wrapping_add(1);
-                                            d.current_hdma_table_addr = table_addr
-                                                .wrapping_add(1 + d.transfer_pattern.len() as u16);
+                                            d.current_hdma_table_addr = table_addr.wrapping_add(
+                                                1 + d.transfer_pattern().len() as u16,
+                                            );
                                         }
                                         // Trigger DMA
                                         d.is_executing = true;

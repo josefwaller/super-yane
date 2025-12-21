@@ -19,9 +19,21 @@ impl From<AddressAdjustMode> for u8 {
     }
 }
 
+const TRANSFER_PATTERS: &[&[u8]] = &[
+    &[0],
+    &[0, 1],
+    &[0, 0],
+    &[0, 0, 1, 1],
+    &[0, 1, 2, 3],
+    &[0, 1, 0, 1],
+    &[0, 0],
+    &[0, 0, 1, 1],
+];
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Channel {
-    pub transfer_pattern: Vec<u32>,
+    #[serde(default)]
+    pub transfer_pattern_index: usize,
     pub adjust_mode: AddressAdjustMode,
     pub indirect: bool,
     pub direction: bool,
@@ -57,7 +69,7 @@ pub struct Channel {
 impl Default for Channel {
     fn default() -> Self {
         Channel {
-            transfer_pattern: vec![0],
+            transfer_pattern_index: 0,
             adjust_mode: AddressAdjustMode::Increment,
             indirect: false,
             direction: false,
@@ -78,6 +90,9 @@ impl Default for Channel {
     }
 }
 impl Channel {
+    pub fn transfer_pattern(&self) -> &[u8] {
+        TRANSFER_PATTERS[self.transfer_pattern_index]
+    }
     pub fn hdma_table_addr(&self) -> usize {
         self.src_bank as usize * 0x10000 + self.current_hdma_table_addr as usize
     }
@@ -98,7 +113,7 @@ impl Channel {
     }
     pub fn get_num_bytes(&self) -> u16 {
         if self.is_hdma() {
-            self.transfer_pattern.len() as u16
+            self.transfer_pattern().len() as u16
         } else {
             self.byte_counter
         }

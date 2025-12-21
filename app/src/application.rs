@@ -761,7 +761,7 @@ impl Application {
                         text(i.to_string()),
                         vertical_table(
                             vec![
-                                table_row!("Transfer Pattern", d.transfer_pattern, "{:?}"),
+                                table_row!("Transfer Pattern", d.transfer_pattern(), "{:?}"),
                                 table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
                                 table_row!("Indirect", d.indirect, "{}"),
                                 table_row!("Direction", d.direction, "{:?}"),
