@@ -133,12 +133,39 @@ impl ExternalArchitecture {
                     if lsb < self.dma_channels.len() {
                         let d = &self.dma_channels[i];
                         let value = match lsb {
+                            0 => {
+                                d.transfer_pattern.len() as u8
+                                    | (u8::from(d.adjust_mode) << 3)
+                                    | (u8::from(d.indirect) << 6)
+                                    | (u8::from(d.direction) << 7)
+                            }
+                            1 => (d.dest_addr & 0xFF) as u8,
                             2 => d.src_addr.to_le_bytes()[0],
                             3 => d.src_addr.to_le_bytes()[1],
                             4 => d.src_bank as u8,
-                            5 => d.byte_counter.to_le_bytes()[0],
-                            6 => d.byte_counter.to_le_bytes()[1],
-                            _ => todo!("Read {:04X}", addr),
+                            5 => if d.is_hdma() {
+                                d.indirect_data_addr
+                            } else {
+                                d.byte_counter
+                            }
+                            .to_le_bytes()[0],
+                            6 => if d.is_hdma() {
+                                d.indirect_data_addr
+                            } else {
+                                d.byte_counter
+                            }
+                            .to_le_bytes()[1],
+                            7 => {
+                                if d.is_hdma() {
+                                    d.hdma_bank as u8
+                                } else {
+                                    0
+                                }
+                            }
+                            8 => d.current_hdma_table_addr.to_le_bytes()[0],
+                            9 => d.current_hdma_table_addr.to_le_bytes()[1],
+                            0xA => d.hdma_line_counter | (u8::from(d.hdma_repeat) << 7),
+                            _ => 0,
                         };
                         (value, 6)
                     } else {

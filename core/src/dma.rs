@@ -8,6 +8,17 @@ pub enum AddressAdjustMode {
     Fixed,
 }
 
+impl From<AddressAdjustMode> for u8 {
+    fn from(value: AddressAdjustMode) -> Self {
+        use AddressAdjustMode::*;
+        match value {
+            Increment => 0,
+            Decrement => 2,
+            Fixed => 1,
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub transfer_pattern: Vec<u32>,
