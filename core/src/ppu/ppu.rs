@@ -937,6 +937,8 @@ impl Ppu {
                             let backgrounds: &[(usize, usize)] = match self.bg_mode {
                                 0 => &[(0, 2), (1, 2), (2, 2), (3, 2)],
                                 1 => &[(0, 4), (1, 4), (2, 2)],
+                                // TBA: OPT
+                                2 => &[(0, 4), (1, 4)],
                                 3 => &[(0, 8), (1, 4)],
                                 5 => &[(0, 4), (1, 2)],
                                 7 => unreachable!("Mode 7 should be custom handled"),
@@ -1079,6 +1081,16 @@ impl Ppu {
                             if self.bg3_prio { EMPTY } else { bg!(2, true) },
                             spr!(0),
                             bg!(2, false),
+                        ],
+                        2 => &[
+                            spr!(3),
+                            bg!(0, true),
+                            spr!(2),
+                            bg!(1, true),
+                            spr!(1),
+                            bg!(0, false),
+                            spr!(0),
+                            bg!(1, false),
                         ],
                         3 => &[
                             spr!(3),
