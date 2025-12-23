@@ -78,7 +78,7 @@ fn byte_from_bits(bits: [bool; 8]) -> u8 {
 impl ExternalArchitecture {
     // Reads a byte without advancing anything
     // Returns the value, and how many master clocks were needed to access the memory
-    pub fn read_byte(&self, addr: usize) -> (u8, u32) {
+    pub fn read_byte(&mut self, addr: usize) -> (u8, u32) {
         if (0x7E0000..0x800000).contains(&addr) {
             (self.ram[addr - 0x7E0000], 8)
         } else if addr < 0x400000 {
@@ -86,14 +86,26 @@ impl ExternalArchitecture {
             match a {
                 0x0000..0x2000 => (self.ram[a], 6),
                 0x2000..0x2100 => (0, 6),
-                0x2100..0x2140 => (self.ppu.read_byte(a), 6),
+                0x2100..0x2140 => (self.ppu.read_byte(a, self.open_bus_value), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
-                0x4002..=0x4006 | 0x4214..=0x4217 => (self.math.read_byte(a), 6),
-                0x4212 => {
-                    let v = (u8::from(self.ppu.is_in_vblank()) << 7)
-                        | (u8::from(self.ppu.is_in_hblank()) << 6);
+                0x4002..0x4007 => (self.open_bus_value, 6),
+                0x4210 => {
+                    let v = u8::from(self.ppu.vblank) << 7;
+                    self.ppu.vblank = false;
+                    return (v | (self.open_bus_value & 0x70), 6);
+                }
+                0x4211 => {
+                    let v = (u8::from(self.timer_flag) << 7) | (self.open_bus_value & 0x7F);
+                    self.timer_flag = false;
                     (v, 6)
                 }
+                0x4212 => {
+                    let v = (u8::from(self.ppu.is_in_vblank()) << 7)
+                        | (u8::from(self.ppu.is_in_hblank()) << 6)
+                        | (self.open_bus_value & 0x3E);
+                    (v, 6)
+                }
+                0x4214..0x4218 => (self.math.read_byte(a), 6),
                 0x4218..0x4220 => {
                     // Read controller data
                     let i = (a / 2) % 2;
@@ -165,14 +177,20 @@ impl ExternalArchitecture {
                             8 => d.current_hdma_table_addr.to_le_bytes()[0],
                             9 => d.current_hdma_table_addr.to_le_bytes()[1],
                             0xA => d.hdma_line_counter | (u8::from(d.hdma_repeat) << 7),
-                            _ => 0,
+                            _ => {
+                                debug!("Unknown read {:04X}", addr);
+                                self.open_bus_value
+                            }
                         };
                         (value, 6)
                     } else {
                         (0, 6)
                     }
                 }
-                0x4220..0x8000 => (self.ppu.read_byte(a), 6),
+                0x6000..0x8000 => {
+                    // Expansion
+                    (0, 6)
+                }
                 0x8000..=0xFFFF => (self.cartridge.read_byte(addr), 8),
                 _ => (0, 6),
             }
@@ -218,6 +236,7 @@ impl ExternalArchitecture {
                         6
                     }
                     0x4200 => {
+                        debug!("WRITE 4200 {:02X}", value);
                         self.nmi_enabled = (value & 0x80) != 0;
                         self.timer_mode = TimerMode::from(value >> 4);
                         6
@@ -358,27 +377,10 @@ impl HasAddressBus for ExternalArchitecture {
         self.advance(6);
     }
     fn read(&mut self, address: usize) -> u8 {
-        // Todo find a better solution
-        // really need todo
-        // exteremely need todo, this is horrendous
-        if address & 0x800000 < 0x400000
-            && (address & 0xFFFF == 0x2139
-                || address & 0xFFFF == 0x4210
-                || address & 0xFFFF == 0x4211)
-        {
-            if address & 0xFFFF == 0x4211 {
-                let v = u8::from(self.timer_flag) << 7;
-                self.timer_flag = false;
-                v
-            } else {
-                self.ppu.read_byte_mut(address, self.open_bus_value)
-            }
-        } else {
-            let (v, clks) = self.read_byte(address);
-            self.advance(clks);
-            self.open_bus_value = v;
-            v
-        }
+        let (v, clks) = self.read_byte(address);
+        self.advance(clks);
+        self.open_bus_value = v;
+        v
     }
     fn write(&mut self, address: usize, value: u8) {
         let clks = self.write_byte(address, value);
@@ -480,6 +482,7 @@ impl Console {
             if !vblank && self.ppu().is_in_vblank() {
                 // Trigger NMI
                 if self.rest.nmi_enabled {
+                    debug!("NMI");
                     self.cpu.on_nmi(&mut self.rest);
                 }
                 // Disable all HDMA channels
@@ -590,8 +593,9 @@ impl Console {
         });
     }
     /// Get the opcode that the console will execute on the next call to [`Console::advance_instructions``]
+    /// NOTE: The opcode must be from the cartridge ROM
     pub fn opcode(&self) -> u8 {
-        self.rest.read_byte(self.pc()).0
+        self.rest.cartridge.read_byte(self.pc())
     }
     /// Get the current program counter of the console
     pub fn pc(&self) -> usize {
@@ -607,7 +611,9 @@ impl Console {
         self.ppu().vblank
     }
     /// Read a byte in CPU space
+    /// NOTE: Only reads from the cartridge
+    /// TODO: Find a way to handle reading from everywhere without making self mutable
     pub fn read_byte_cpu(&self, address: usize) -> u8 {
-        self.rest.read_byte(address).0
+        self.rest.cartridge.read_byte(address)
     }
 }

@@ -209,14 +209,9 @@ impl Default for Ppu {
 }
 
 impl Ppu {
-    pub fn read_byte(&self, addr: usize) -> u8 {
+    pub fn read_byte(&mut self, addr: usize, open_bus: u8) -> u8 {
         match addr {
-            0x4210 => u8::from(self.vblank) << 7,
-            _ => 0,
-        }
-    }
-    pub fn read_byte_mut(&mut self, addr: usize, open_bus: u8) -> u8 {
-        match addr {
+            0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x2134],
             0x2139 => {
                 let val = self.vram_latch_low;
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
@@ -238,16 +233,12 @@ impl Ppu {
                     Some(_) => None,
                     None => Some(0),
                 };
-                0
+                open_bus
             }
-            0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x21234],
-            // Todo: This shouldn't be in PPU
-            0x4210 => {
-                let v = u8::from(self.vblank) << 7;
-                self.vblank = false;
-                return v | (open_bus & 0x70);
+            _ => {
+                debug!("Unknown read PPU register {:04X}", addr);
+                open_bus
             }
-            _ => 0,
         }
     }
     pub fn write_byte(&mut self, addr: usize, value: u8) {
@@ -314,6 +305,12 @@ impl Ppu {
                 });
                 self.bg3_prio = (value & 0x08) != 0;
                 self.bg_mode = (value & 0x07) as u32;
+                debug!(
+                    "BG MODE {:02X} {} ({:?})",
+                    value,
+                    self.bg_mode,
+                    self.dot_xy()
+                );
             }
             0x2106 => {
                 (0..4).for_each(|i| {
@@ -533,7 +530,7 @@ impl Ppu {
                 self.overscan = bit(value, 2);
             }
             0x213B => debug!("Writing to CGRAM read"),
-            _ => {}
+            _ => debug!("Unknown PPU register: {:04X} {:02X}", addr, value),
         }
     }
     /// Refresh the multiplication result value
@@ -855,19 +852,25 @@ impl Ppu {
         });
         self.oam_buffers = buffers;
     }
+    fn dot_xy(&self) -> (usize, usize) {
+        // Note the visual picture starts at dot 88
+        let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
+        let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
+        (x, y)
+    }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
             self.dot = (self.dot + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
             if self.dot % 4 == 0 {
-                // Note the visual picture starts at dot 88
-                let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
-                let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
+                let (x, y) = self.dot_xy();
                 // Todo: check if this timing is correct
                 if y == 0 && x == 0 {
+                    debug!("VBLANK END {}", self.bg_mode);
                     self.vblank = false;
                 }
                 let vblank_scanline = if self.overscan { 241 } else { 225 };
                 if y == vblank_scanline && x == 0 {
+                    debug!("VBLANK START");
                     self.vblank = true;
                 }
                 if x == 0 {
