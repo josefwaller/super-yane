@@ -212,6 +212,14 @@ impl Ppu {
     pub fn read_byte(&mut self, addr: usize, open_bus: u8) -> u8 {
         match addr {
             0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x2134],
+            0x2137 => {
+                warn!("Read to unimplemented H/V latch");
+                0
+            }
+            0x2138 => {
+                warn!("Read from OAMDATAREAD");
+                0
+            }
             0x2139 => {
                 let val = self.vram_latch_low;
                 if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
@@ -233,7 +241,24 @@ impl Ppu {
                     Some(_) => None,
                     None => Some(0),
                 };
+                warn!("Read from CGDATA READ");
                 open_bus
+            }
+            0x213C => {
+                warn!("Read from Horizontal Output");
+                0
+            }
+            0x213D => {
+                warn!("Read from Vertical Output");
+                0
+            }
+            0x213E => {
+                warn!("Read from PPU STAT 1");
+                0
+            }
+            0x213F => {
+                warn!("Read from PPU STAT 2");
+                0
             }
             _ => {
                 debug!("Unknown read PPU register {:04X}", addr);
@@ -255,7 +280,7 @@ impl Ppu {
         match addr {
             0x2100 => {
                 self.forced_blanking = bit(value, 7);
-                self.brightness = (value & 0x07) as u32;
+                self.brightness = (value & 0x0F) as u32;
             }
             0x2101 => {
                 self.oam_name_addr = (value as usize & 0x03) << 13;
@@ -281,7 +306,10 @@ impl Ppu {
             0x2102 => {
                 self.oam_addr = (self.oam_addr & 0x200) | (2 * value as usize);
             }
-            0x2103 => self.oam_addr = (self.oam_addr & 0x0FF) | 0x200 * (value as usize & 0x01),
+            0x2103 => {
+                self.oam_addr = (self.oam_addr & 0x1FF) | (0x200 * (value as usize & 0x01));
+                // TODO: OAM Priority bit
+            }
             0x2104 => {
                 if self.oam_addr % 2 == 0 {
                     self.oam_latch = value;
@@ -373,7 +401,6 @@ impl Ppu {
                 self.vram_increment_mode = match bit(value, 7) {
                     false => VramIncMode::HighReadLowWrite,
                     true => VramIncMode::LowReadHighWrite,
-                    _ => unreachable!("Should never happen"),
                 };
                 self.vram_remap = (value >> 2) as u32 & 0x03;
             }
@@ -488,6 +515,7 @@ impl Ppu {
                 });
                 self.obj_subscreen_enable = bit(value, 4);
             }
+            // TODO: OAM sprite window enabled/disabled for main screen/subscreen
             0x212E => self
                 .backgrounds
                 .iter_mut()
@@ -528,8 +556,8 @@ impl Ppu {
             // Todo
             0x2133 => {
                 self.overscan = bit(value, 2);
+                warn!("Write to PPU SETINI {:02X}", value);
             }
-            0x213B => debug!("Writing to CGRAM read"),
             _ => debug!("Unknown PPU register: {:04X} {:02X}", addr, value),
         }
     }
@@ -562,8 +590,9 @@ impl Ppu {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
     }
     fn refresh_vram_latch(&mut self) {
-        self.vram_latch_low = self.read_vram_byte(2 * self.vram_addr);
-        self.vram_latch_high = self.read_vram_byte(2 * self.vram_addr + 1);
+        let vram_addr = self.remapped_vram_addr();
+        self.vram_latch_low = self.read_vram_byte(2 * vram_addr);
+        self.vram_latch_high = self.read_vram_byte(2 * vram_addr + 1);
     }
     fn read_vram_byte(&self, byte_addr: usize) -> u8 {
         self.vram[byte_addr % self.vram.len()]

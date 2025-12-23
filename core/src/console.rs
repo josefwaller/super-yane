@@ -76,18 +76,20 @@ fn byte_from_bits(bits: [bool; 8]) -> u8 {
         .sum()
 }
 impl ExternalArchitecture {
-    // Reads a byte without advancing anything
-    // Returns the value, and how many master clocks were needed to access the memory
     pub fn read_byte(&mut self, addr: usize) -> (u8, u32) {
         if (0x7E0000..0x800000).contains(&addr) {
             (self.ram[addr - 0x7E0000], 8)
-        } else if addr < 0x400000 {
+        } else if (addr % 0x80_0000) < 0x40_0000 {
             let a = addr & 0xFFFF;
             match a {
                 0x0000..0x2000 => (self.ram[a], 6),
                 0x2000..0x2100 => (0, 6),
                 0x2100..0x2140 => (self.ppu.read_byte(a, self.open_bus_value), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
+                0x2180 => {
+                    warn!("Read from SWRAM");
+                    (0, 6)
+                }
                 0x4002..0x4007 => (self.open_bus_value, 6),
                 0x4210 => {
                     let v = u8::from(self.ppu.vblank) << 7;
@@ -104,6 +106,10 @@ impl ExternalArchitecture {
                         | (u8::from(self.ppu.is_in_hblank()) << 6)
                         | (self.open_bus_value & 0x3E);
                     (v, 6)
+                }
+                0x4213 => {
+                    warn!("Read from RDIO");
+                    (0, 6)
                 }
                 0x4214..0x4218 => (self.math.read_byte(a), 6),
                 0x4218..0x4220 => {
@@ -140,8 +146,8 @@ impl ExternalArchitecture {
                     }
                 }
                 0x4300..0x4400 => {
-                    let i = (addr & 0xF0) >> 4;
-                    let lsb = addr & 0x0F;
+                    let i = (a & 0xF0) >> 4;
+                    let lsb = a & 0x0F;
                     if i < self.dma_channels.len() {
                         let d = &self.dma_channels[i];
                         let value = match lsb {
@@ -197,7 +203,7 @@ impl ExternalArchitecture {
         } else {
             (
                 self.cartridge.read_byte(addr),
-                if addr > 0x800000 && self.fast_rom_enabled {
+                if addr > 0x80_0000 && self.fast_rom_enabled {
                     6
                 } else {
                     8
@@ -213,9 +219,9 @@ impl ExternalArchitecture {
             self.ram[addr - 0x7E0000] = value;
             8
         } else {
-            let a = addr % (0x800000);
+            let a = addr % 0x80_0000;
             // Check for non-rom area
-            if a < 0x400000 && a & 0xFFFF < 0x8000 {
+            if a < 0x40_0000 && a & 0xFFFF < 0x8000 {
                 let a = a % 0x8000;
                 match a {
                     (0..0x2000) => {
@@ -359,7 +365,7 @@ impl ExternalArchitecture {
                     }
                 }
             } else {
-                if addr >= 0x800000 && self.fast_rom_enabled {
+                if addr >= 0x80_00_00 && self.fast_rom_enabled {
                     6
                 } else {
                     8
