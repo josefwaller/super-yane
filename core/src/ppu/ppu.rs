@@ -145,6 +145,14 @@ pub struct Ppu {
     /// Vertical count of the current mosaic block.
     /// Basically a countdown (or count up) until when to recompute the mosaic latches
     mosaic_v_latch: usize,
+    /// Interlace field, should be toggled every frame
+    pub interlace_field: bool,
+    /// Last latched horizontal dot position
+    pub h_latch: usize,
+    /// Last lateched vertical dot position
+    pub v_latch: usize,
+    /// Latch to determine whether to return the high or low value from dot positions
+    pub ophct_latch: bool,
 }
 
 impl Default for Ppu {
@@ -204,6 +212,10 @@ impl Default for Ppu {
             multi_latch: 0,
             multi_res: 0,
             mosaic_v_latch: 0,
+            interlace_field: false,
+            h_latch: 0,
+            v_latch: 0,
+            ophct_latch: false,
         }
     }
 }
@@ -213,8 +225,11 @@ impl Ppu {
         match addr {
             0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x2134],
             0x2137 => {
-                warn!("Read to unimplemented H/V latch");
-                0
+                let (x, y) = self.dot_xy();
+                // Update latches
+                self.h_latch = x;
+                self.v_latch = y;
+                open_bus
             }
             0x2138 => {
                 warn!("Read from OAMDATAREAD");
@@ -245,12 +260,24 @@ impl Ppu {
                 open_bus
             }
             0x213C => {
-                warn!("Read from Horizontal Output");
-                0
+                let vals = (self.h_latch as u16).to_le_bytes();
+                let v = if self.ophct_latch {
+                    (vals[1] & 0x01) | (open_bus & 0xFE)
+                } else {
+                    vals[0]
+                };
+                self.ophct_latch = !self.ophct_latch;
+                v
             }
             0x213D => {
-                warn!("Read from Vertical Output");
-                0
+                let vals = (self.v_latch as u16).to_le_bytes();
+                let v = if self.ophct_latch {
+                    (vals[1] & 0x01) | (open_bus & 0xFE)
+                } else {
+                    vals[0]
+                };
+                self.ophct_latch = !self.ophct_latch;
+                v
             }
             0x213E => {
                 warn!("Read from PPU STAT 1");
@@ -258,7 +285,10 @@ impl Ppu {
             }
             0x213F => {
                 warn!("Read from PPU STAT 2");
-                0
+                self.ophct_latch = false;
+                self.h_latch = 0;
+                self.v_latch = 0;
+                u8::from(self.interlace_field) << 7
             }
             _ => {
                 debug!("Unknown read PPU register {:04X}", addr);
@@ -896,6 +926,7 @@ impl Ppu {
                 if y == 0 && x == 0 {
                     debug!("VBLANK END {}", self.bg_mode);
                     self.vblank = false;
+                    self.interlace_field = !self.interlace_field;
                 }
                 let vblank_scanline = if self.overscan { 241 } else { 225 };
                 if y == vblank_scanline && x == 0 {
@@ -1229,12 +1260,12 @@ impl Ppu {
     }
     /// X coordinate of the cursor
     pub fn cursor_x(&self) -> usize {
-        (self.dot / 4) % PIXELS_PER_SCANLINE
+        self.dot_xy().0
     }
     /// Y coordinate of the cursor.
     /// Equivalent to the scanline number
     pub fn cursor_y(&self) -> usize {
-        (self.dot / 4) / PIXELS_PER_SCANLINE
+        self.dot_xy().1
     }
     fn fixed_color_value(&self) -> u16 {
         rgb_to_color(self.fixed_color)

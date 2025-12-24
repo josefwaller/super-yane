@@ -84,7 +84,7 @@ impl Engine {
                                     debug!("{}", inst);
                                 }
                                 console.advance_instructions(1);
-                                if !vblank && console.in_vblank() {
+                                if vblank && !console.in_vblank() {
                                     stream_sender
                                         .send(StreamPayload::new(
                                             console.ppu().screen_data_rgb(),

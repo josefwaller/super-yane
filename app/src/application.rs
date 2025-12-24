@@ -761,6 +761,7 @@ impl Application {
                         text(i.to_string()),
                         vertical_table(
                             vec![
+                                table_row!("Is HDMA", d.is_hdma(), "{}"),
                                 table_row!("Transfer Pattern", d.transfer_pattern(), "{:?}"),
                                 table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
                                 table_row!("Indirect", d.indirect, "{}"),
@@ -771,7 +772,9 @@ impl Application {
                                     d.src_bank as usize * 0x10000 + d.src_addr as usize,
                                     "{:06X}"
                                 ),
-                                table_row!("Bytes Remaining", d.byte_counter, "{:04X}")
+                                table_row!("Bytes Remaining", d.byte_counter, "{:04X}"),
+                                table_row!("Indirect data address", d.indirect_data_addr, "{:04X}"),
+                                table_row!("HDMA Table addr", d.hdma_table_addr, "{:04X}")
                             ],
                             150.0,
                             0,

@@ -62,8 +62,6 @@ pub struct ExternalArchitecture {
     pub h_timer: u16,
     /// IRQ timer V target
     pub v_timer: u16,
-    /// Whether we have triggered an IRQ this frame
-    triggered_irq_this_frame: bool,
     /// Timer flag
     pub timer_flag: bool,
 }
@@ -198,7 +196,10 @@ impl ExternalArchitecture {
                     (0, 6)
                 }
                 0x8000..=0xFFFF => (self.cartridge.read_byte(addr), 8),
-                _ => (0, 6),
+                _ => {
+                    warn!("Read unknown value {:04X}", addr);
+                    (0, 6)
+                }
             }
         } else {
             (
@@ -242,7 +243,6 @@ impl ExternalArchitecture {
                         6
                     }
                     0x4200 => {
-                        debug!("WRITE 4200 {:02X}", value);
                         self.nmi_enabled = (value & 0x80) != 0;
                         self.timer_mode = TimerMode::from(value >> 4);
                         6
@@ -256,6 +256,7 @@ impl ExternalArchitecture {
                         6
                     }
                     0x4209 => {
+                        let v = self.v_timer;
                         self.v_timer = (self.v_timer & 0x0100) | value as u16;
                         6
                     }
@@ -354,13 +355,15 @@ impl ExternalArchitecture {
                                         d.hdma_repeat = true
                                     }
                                 },
-                                _ => {}
+                                _ => {
+                                    warn!("Write to unknown DMA register {:04X} {:02X}", a, value);
+                                }
                             }
                         }
                         6
                     }
                     _ => {
-                        debug!("Write to unknown register addr={addr:04X} value={value:02X}");
+                        warn!("Write to unknown register addr={addr:04X} value={value:02X}");
                         6
                     }
                 }
@@ -463,7 +466,6 @@ impl Console {
                 timer_mode: TimerMode::default(),
                 h_timer: 0,
                 v_timer: 0,
-                triggered_irq_this_frame: false,
                 timer_flag: false,
             },
         };
@@ -484,6 +486,8 @@ impl Console {
             let vblank = self.ppu().is_in_vblank();
             let hblank = self.ppu().is_in_hblank() && !vblank;
             before_cpu_step(&self);
+            // Get PPU X/Y position before advancing
+            let (dx, dy) = (self.ppu().cursor_x(), self.ppu().cursor_y());
             self.cpu.step(&mut self.rest);
             if !vblank && self.ppu().is_in_vblank() {
                 // Trigger NMI
@@ -497,24 +501,21 @@ impl Console {
                     d.hdma_line_counter = 0;
                 });
             }
-            if !self.rest.triggered_irq_this_frame {
-                let h = self.ppu().cursor_x() >= self.rest.h_timer as usize;
-                let v = self.ppu().cursor_y() >= self.rest.v_timer as usize;
-                let trigger_irq = match self.rest.timer_mode {
-                    TimerMode::Disabled => false,
-                    TimerMode::Horizontal => h,
-                    TimerMode::Vertical => v,
-                    TimerMode::HorizontalVertical => h && v,
-                };
-                if trigger_irq {
-                    self.cpu.on_irq(&mut self.rest);
-                    self.rest.triggered_irq_this_frame = true;
-                    self.rest.timer_flag = true;
-                }
+            let h = self.ppu().cursor_x() >= self.rest.h_timer as usize
+                && (dx < self.rest.h_timer as usize || self.ppu().cursor_y() > dy);
+            let v = self.ppu().cursor_y() == self.rest.v_timer as usize;
+            let trigger_irq = match self.rest.timer_mode {
+                TimerMode::Disabled => false,
+                TimerMode::Horizontal => h,
+                TimerMode::Vertical => v && dx > self.ppu().cursor_x(),
+                TimerMode::HorizontalVertical => h && v,
+            };
+            if trigger_irq {
+                self.cpu.on_irq(&mut self.rest);
+                self.rest.timer_flag = true;
             }
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
             if vblank && !self.ppu().is_in_vblank() {
-                self.rest.triggered_irq_this_frame = false;
                 (0..self.rest.dma_channels.len()).for_each(|i| {
                     macro_rules! d {
                         () => {
