@@ -32,7 +32,7 @@ use iced::widget::text;
 use rfd::FileDialog;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use spc700::{OpcodeData as Spc700OpcodeData, format_address_modes};
-use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8};
 use wavers::{Samples, write};
 use wdc65816::{format_address_mode, opcode_data};
 
@@ -656,6 +656,14 @@ impl Application {
                 ppu_val!($label, $field, "{:?}")
             };
         }
+        macro_rules! mat_val {
+            ($field: ident) => {
+                text(format!(
+                    "{:7.2}",
+                    convert_8p8(self.console.ppu().matrix.$field)
+                ))
+            };
+        }
         let values = vec![
             ppu_val!("VBlank", vblank),
             ppu_val!("Forced VBlanking", forced_blanking),
@@ -682,6 +690,21 @@ impl Application {
             ppu_val!("Fixed Color", fixed_color),
             ppu_val!("Color Window Main", color_window_main_region),
             ppu_val!("Color Window Sub", color_window_sub_region),
+            (
+                "M7 Matrix",
+                row![
+                    column![mat_val!(a), mat_val!(c)],
+                    column![mat_val!(b), mat_val!(d)]
+                ]
+                .padding(3)
+                .into(),
+            ),
+            ppu_val!("M7 H off", m7_h_off, "{}"),
+            ppu_val!("M7 V off", m7_v_off, "{}"),
+            ppu_val!("M7 Repeat", m7_repeat),
+            ppu_val!("M7 Fill", m7_fill, "{:?}"),
+            ppu_val!("M7 Flip H", m7_flip_h),
+            ppu_val!("M7 Flip V", m7_flip_v),
         ];
         column![
             text("PPU").color(COLORS[4]),

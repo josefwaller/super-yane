@@ -17,18 +17,18 @@ use serde_big_array::BigArray;
 pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
 
-fn convert_8p8(value: u16) -> f32 {
+pub fn convert_8p8(value: u16) -> f32 {
     (value as i16 as f32) / 0x100 as f32
 }
 
 #[derive(Copy, Clone, Default, Serialize, Deserialize)]
 pub struct Matrix {
-    a: u16,
-    b: u16,
-    c: u16,
-    d: u16,
-    center_x: i16,
-    center_y: i16,
+    pub a: u16,
+    pub b: u16,
+    pub c: u16,
+    pub d: u16,
+    pub center_x: i16,
+    pub center_y: i16,
 }
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -40,7 +40,7 @@ pub enum VramIncMode {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum Mode7Fill {
     Transparent = 0,
     Character = 1,
