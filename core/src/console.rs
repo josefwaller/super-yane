@@ -75,8 +75,8 @@ fn byte_from_bits(bits: [bool; 8]) -> u8 {
 }
 impl ExternalArchitecture {
     pub fn read_byte(&mut self, addr: usize) -> (u8, u32) {
-        if (0x7E0000..0x800000).contains(&addr) {
-            (self.ram[addr - 0x7E0000], 8)
+        if (0x7E_0000..0x80_0000).contains(&addr) {
+            (self.ram[addr - 0x7E_0000], 8)
         } else if (addr % 0x80_0000) < 0x40_0000 {
             let a = addr & 0xFFFF;
             match a {
@@ -173,7 +173,7 @@ impl ExternalArchitecture {
                             .to_le_bytes()[1],
                             7 => {
                                 if d.is_hdma() {
-                                    d.hdma_bank as u8
+                                    d.indirect_bank as u8
                                 } else {
                                     0
                                 }
@@ -314,27 +314,46 @@ impl ExternalArchitecture {
                                     // Address low byte
                                     d.src_addr = (d.src_addr & 0xFF00) | value as u16;
                                     d.hdma_table_addr = d.src_addr;
+                                    debug!("WRITE HDMA TABLE {} {:04X}", r, d.hdma_table_addr);
                                 }
                                 3 => {
                                     // Address high byte
                                     d.src_addr = (d.src_addr & 0x00FF) | (value as u16 * 0x100);
                                     d.hdma_table_addr = d.src_addr;
+                                    debug!("WRITE HDMA TABLE {} {:04X}", r, d.hdma_table_addr);
                                 }
                                 4 => {
                                     // Address bank
                                     d.src_bank = value;
+                                    d.hdma_table_bank = value;
+                                    debug!("WRITE HDMA TABLE BANK {} {:02X}", r, d.hdma_table_bank);
                                 }
                                 5 => {
                                     // Byte counter low byte
                                     d.byte_counter = (d.byte_counter & 0xFF00) | value as u16;
+                                    d.indirect_data_addr = d.byte_counter;
+                                    if r == 4 {
+                                        debug!(
+                                            "WRITE INDIRECT DATA {} {:02X}",
+                                            r, d.indirect_data_addr
+                                        );
+                                    }
                                 }
                                 6 => {
                                     // Byte counter high byte
                                     d.byte_counter =
                                         (d.byte_counter & 0x00FF) | (value as u16 * 0x100);
+                                    d.indirect_data_addr = d.byte_counter;
+                                    if r == 4 {
+                                        debug!(
+                                            "WRITE INDIRECT DATA {} {:02X}",
+                                            r, d.indirect_data_addr
+                                        );
+                                    }
                                 }
                                 7 => {
-                                    d.hdma_bank = value;
+                                    d.indirect_bank = value;
+                                    debug!("WRITE INDIRECT BANK {} {:02X}", r, d.indirect_bank);
                                 }
                                 8 => {
                                     d.current_hdma_table_addr =
@@ -492,7 +511,6 @@ impl Console {
             if !vblank && self.ppu().is_in_vblank() {
                 // Trigger NMI
                 if self.rest.nmi_enabled {
-                    debug!("NMI");
                     self.cpu.on_nmi(&mut self.rest);
                 }
                 // Disable all HDMA channels
@@ -528,6 +546,7 @@ impl Console {
                     d!().current_hdma_table_addr = d!().hdma_table_addr;
                 });
             }
+            // I we just entered HBlank outside of VBlank
             if !vblank && !hblank && self.ppu().is_in_hblank() {
                 // Trigger HDMAs
                 (0..self.rest.dma_channels.len()).for_each(|i| {
@@ -536,9 +555,17 @@ impl Console {
                         match d.hdma_line_counter {
                             0 => {
                                 // Read next byte
-                                match self.rest.read_byte(d.hdma_table_addr()).0 {
+                                match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
                                     0 => d.hdma_enable = false,
                                     lc => {
+                                        if i == 4 {
+                                        debug!(
+                                            "Read LC from {:04X} for {}, {:02X}",
+                                            d.current_hdma_table_addr(0),
+                                            i,
+                                            lc
+                                        );
+                                        }
                                         // Get line counter
                                         match lc {
                                             0 => unreachable!(),
@@ -551,27 +578,44 @@ impl Console {
                                                 d.hdma_line_counter = lc - 0x80;
                                             }
                                         }
-                                        // Copy values
-                                        let table_addr = d.current_hdma_table_addr;
-                                        // Set up DMA values
+                                        // Get data address
                                         if d.indirect {
-                                            d.indirect_data_addr = u16::from_le_bytes([
-                                                self.rest
-                                                    .read_byte(table_addr.wrapping_add(1) as usize)
-                                                    .0,
-                                                self.rest
-                                                    .read_byte(table_addr.wrapping_add(2) as usize)
-                                                    .0,
-                                            ]);
-                                            d.current_hdma_table_addr = table_addr.wrapping_add(3);
-                                        } else {
-                                            d.src_addr = table_addr.wrapping_add(1);
-                                            d.current_hdma_table_addr = table_addr.wrapping_add(
-                                                1 + d.transfer_pattern().len() as u16,
+                                            d.indirect_data_addr =
+                                                u16::from_le_bytes([
+                                                    self.rest
+                                                        .read_byte(
+                                                            d.current_hdma_table_addr(1) as usize
+                                                        )
+                                                        .0,
+                                                    self.rest
+                                                        .read_byte(
+                                                            d.current_hdma_table_addr(2) as usize
+                                                        )
+                                                        .0,
+                                                ]);
+                                            if i == 4 {
+                                            debug!("Loaded indirect addr from {:04X} {:04X}",
+                                                d.current_hdma_table_addr(1),
+                                                d.indirect_data_addr
                                             );
+                                            }
+                                        } else {
+                                            d.src_addr = d.current_hdma_table_addr(1) as u16;
                                         }
+                                        d.inc_table_addr();
                                         // Trigger DMA
                                         d.is_executing = true;
+                                        if i == 4 {
+                                        debug!(
+                                            "Start HDMA {} i={} r={} src={:06X} dest={:04X} table={:06X}",
+                                            i,
+                                            d.indirect,
+                                            d.hdma_repeat,
+                                            d.full_src_addr(),
+                                            d.dest_addr,
+                                            d.current_hdma_table_addr(0)
+                                        );
+                                        }
                                         d.num_bytes_transferred = 0;
                                         // Since we just went over a scanline here, dec line counter
                                         d.hdma_line_counter -= 1;
@@ -583,6 +627,18 @@ impl Console {
                                 if d.hdma_repeat {
                                     d.is_executing = true;
                                     d.num_bytes_transferred = 0;
+                                    if i == 4 {
+                                    debug!(
+                                        "Restart HDMA {} i={} r={} src={:06X} dest={:04X} pat={:?} table={:06X}",
+                                        i,
+                                        d.indirect,
+                                        d.hdma_repeat,
+                                        d.full_src_addr(),
+                                        d.dest_addr,
+                                        d.transfer_pattern(),
+                                        d.current_hdma_table_addr(0)
+                                    );
+                                    }
                                 }
                             }
                         }

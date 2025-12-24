@@ -25,6 +25,17 @@ impl Cpu {
                 // Transfer
                 let v = memory.read(src);
                 memory.write(dest, v);
+                if i == 4 {
+                    debug!(
+                        "Copy {} {:02X} from {:04X} to {:04X} ({:?}) lc={}",
+                        i,
+                        v,
+                        src,
+                        dest,
+                        (memory.ppu.cursor_x(), memory.ppu.cursor_y()),
+                        d.hdma_line_counter
+                    );
+                }
                 // Increment source address
                 d.inc_src_addr();
                 // Decrement byte counter

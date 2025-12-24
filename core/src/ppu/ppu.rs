@@ -18,7 +18,7 @@ pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
 
 pub fn convert_8p8(value: u16) -> f32 {
-    (value as i16 as f32) / 0x100 as f32
+    ((value as i16 >> 8) as f32) + (value & 0xFF) as i8 as f32 / 0x100 as f32
 }
 
 #[derive(Copy, Clone, Default, Serialize, Deserialize)]
@@ -683,6 +683,40 @@ impl Ppu {
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
         self.vram_cache_2bpp[(addr / 2) % self.vram_cache_2bpp.len()]
     }
+    fn get_m7_background_slice(&self, x: f32, y: f32) -> BackgroundPixel {
+        let pixel = if x >= 0.0 && x < 1024.0 && y >= 0.0 && y < 1024.0 {
+            Some((x, y))
+        } else if self.m7_repeat {
+            Some((x.rem_euclid(1024.0), y.rem_euclid(1024.0)))
+        } else {
+            match self.m7_fill {
+                Mode7Fill::Character => Some((x.rem_euclid(8.0), y.rem_euclid(8.0))),
+                Mode7Fill::Transparent => None,
+            }
+        };
+        // At this point (x,y) should both be positive values between 0-1024
+        return match pixel {
+            None => None,
+            Some((x, y)) => {
+                let (x, y) = (x.floor() as usize, y.floor() as usize);
+                // Get the index of the tile we need to draw
+                let tilemap_index = (x / 8) + 128 * (y / 8);
+                // Tilemap bytes are only in the low bytes
+                let tile_index = self.vram[2 * tilemap_index];
+                // Get the index of the tile data
+                // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
+                let tile_addr = 8 * 8 * tile_index as usize;
+                // Tile data is in the high byte
+                let pixel_index = (x % 8) + 8 * (y % 8);
+                let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
+                return if palette_byte == 0 {
+                    None
+                } else {
+                    Some((self.cgram[palette_byte as usize & 0x7F], true))
+                };
+            }
+        };
+    }
     /// Get a slice of 8 background pixels that contains the given coordinates.
     /// Also return the X offset that the given coordinate is at in the slice.
     /// i.e. if x=13 y=0, then return the second slice in the background with offset 5
@@ -692,41 +726,6 @@ impl Ppu {
         (x, y): (usize, usize),
         bpp: usize,
     ) -> ([BackgroundPixel; 8], usize) {
-        if self.bg_mode == 7 {
-            let pixel = if self.m7_repeat {
-                Some((x % 1024, y % 1024))
-            } else if x < 1024 && y < 1024 {
-                Some((x, y))
-            } else {
-                match self.m7_fill {
-                    Mode7Fill::Character => Some((x % 8, y % 8)),
-                    Mode7Fill::Transparent => None,
-                }
-            };
-            return match pixel {
-                None => ([None; 8], 0),
-                Some((x, y)) => {
-                    // Get the index of the tile we need to draw
-                    let tilemap_index = (x / 8) + 128 * (y / 8);
-                    // Tilemap bytes are only in the low bytes
-                    let tile_index = self.vram[2 * tilemap_index];
-                    // Get the index of the tile data
-                    // 8bpp (1 byte per pixel) * 8x8 tiles * tile_index
-                    let tile_addr = 8 * 8 * tile_index as usize;
-                    // Tile data is in the high byte
-                    let pixel_index = (x % 8) + 8 * (y % 8);
-                    let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
-                    return (
-                        [if palette_byte == 0 {
-                            None
-                        } else {
-                            Some((self.cgram[palette_byte as usize], true))
-                        }; 8],
-                        0,
-                    );
-                }
-            };
-        }
         let b = &self.backgrounds[bg_index];
         // Get the tilemaps to render, relative to the current tilemap address
         // So thi is basically an offset to add to the tilemap address
@@ -914,7 +913,7 @@ impl Ppu {
     fn dot_xy(&self) -> (usize, usize) {
         // Note the visual picture starts at dot 88
         let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
-        let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
+        let y = (self.dot / 4).wrapping_sub(22) / PIXELS_PER_SCANLINE;
         (x, y)
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
@@ -988,12 +987,8 @@ impl Ppu {
                                 a.iter().enumerate().map(|(j, v)| mat[i][j] * *v).sum()
                             });
                             let [x, y, _] = res;
-                            let (pixel_slices, index) = self.get_background_slice(
-                                0,
-                                (x.floor() as usize, y.floor() as usize),
-                                8,
-                            );
-                            let x: [BackgroundPixel; 4] = [pixel_slices[index]; 4];
+                            let slice = self.get_m7_background_slice(x, y);
+                            let x: [BackgroundPixel; 4] = [slice; 4];
                             x
                         } else {
                             // Structured (background_number, bpp)

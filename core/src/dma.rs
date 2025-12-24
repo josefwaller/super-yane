@@ -53,11 +53,13 @@ pub struct Channel {
     pub hdma_line_counter: u8,
     /// Bank of the indirect HDMA data.
     /// If using an indirect HDMA table, this is the bank of the data's address.
-    pub hdma_bank: u8,
+    pub indirect_bank: u8,
+    /// Current address of the indirect data, if used
+    pub indirect_data_addr: u16,
     /// Address of the HDMA table
     pub hdma_table_addr: u16,
-    /// Address of the indirect data, if used
-    pub indirect_data_addr: u16,
+    /// Bank of the HDMA table
+    pub hdma_table_bank: u8,
     /// Current address of the HDMA table
     /// This should always point to the next table entry to be read.
     /// At the end of VBlank it is initialized to [`Channel::hdma_table_addr`]
@@ -80,7 +82,8 @@ impl Default for Channel {
             num_bytes_transferred: 0,
             is_executing: false,
             hdma_line_counter: 0,
-            hdma_bank: 0,
+            indirect_bank: 0,
+            hdma_table_bank: 0,
             hdma_table_addr: 0,
             current_hdma_table_addr: 0,
             indirect_data_addr: 0,
@@ -93,20 +96,29 @@ impl Channel {
     pub fn transfer_pattern(&self) -> &[u8] {
         TRANSFER_PATTERS[self.transfer_pattern_index]
     }
-    pub fn hdma_table_addr(&self) -> usize {
-        self.src_bank as usize * 0x10000 + self.current_hdma_table_addr as usize
+    pub fn current_hdma_table_addr(&self, offset: u16) -> usize {
+        self.hdma_table_bank as usize * 0x1_0000
+            + self.current_hdma_table_addr.wrapping_add(offset) as usize
+    }
+    pub fn inc_table_addr(&mut self) {
+        self.current_hdma_table_addr += if self.indirect {
+            3
+        } else {
+            1 + self.transfer_pattern().len() as u16
+        };
     }
     pub fn full_src_addr(&self) -> usize {
-        self.src_bank as usize * 0x10000
+        return if self.indirect {
+            self.indirect_bank
+        } else {
+            self.src_bank
+        } as usize
+            * 0x10000
             + if self.indirect {
-                self.indirect_data_addr as usize
+                self.indirect_data_addr
             } else {
-                self.src_addr as usize
-            }
-    }
-    pub fn hdma_indirect_table_addr(&self) -> usize {
-        // Byte counter registers are also used for HDMA table address
-        self.hdma_bank as usize * 0x10000 + self.byte_counter as usize
+                self.src_addr
+            } as usize;
     }
     pub fn is_hdma(&self) -> bool {
         self.hdma_enable
@@ -118,6 +130,7 @@ impl Channel {
             self.byte_counter
         }
     }
+    /// Increment the source by 1 byte every time a byte is DMAed
     pub fn inc_src_addr(&mut self) {
         if self.indirect {
             self.indirect_data_addr = self.indirect_data_addr.wrapping_add(1);

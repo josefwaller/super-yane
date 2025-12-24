@@ -664,7 +664,21 @@ impl Application {
                 ))
             };
         }
+        macro_rules! mat_val_raw {
+            ($field: ident) => {
+                text(format!("{:04X}", self.console.ppu().matrix.$field))
+            };
+        }
         let values = vec![
+            (
+                "Dot",
+                text(format!(
+                    "{}, {}",
+                    self.console.ppu().cursor_x(),
+                    self.console.ppu().cursor_y()
+                ))
+                .into(),
+            ),
             ppu_val!("VBlank", vblank),
             ppu_val!("Forced VBlanking", forced_blanking),
             ppu_val!("Brightness", brightness, hex_fmt!()),
@@ -695,6 +709,15 @@ impl Application {
                 row![
                     column![mat_val!(a), mat_val!(c)],
                     column![mat_val!(b), mat_val!(d)]
+                ]
+                .padding(3)
+                .into(),
+            ),
+            (
+                "M7 Matrix Raw",
+                row![
+                    column![mat_val_raw!(a), mat_val_raw!(c)].spacing(1),
+                    column![mat_val_raw!(b), mat_val_raw!(d)].spacing(1)
                 ]
                 .padding(3)
                 .into(),
