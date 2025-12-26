@@ -18,7 +18,8 @@ pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
 
 pub fn convert_8p8(value: u16) -> f32 {
-    ((value as i16 >> 8) as f32) + (value & 0xFF) as i8 as f32 / 0x100 as f32
+    // ((value as i16 >> 8) as f32) + (value & 0xFF) as i8 as f32 / 0x100 as f32
+    (value as i16 as f32) / 0x100 as f32
 }
 
 #[derive(Copy, Clone, Default, Serialize, Deserialize)]
