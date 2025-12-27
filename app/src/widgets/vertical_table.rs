@@ -1,9 +1,10 @@
-use crate::application::{COLORS, Message};
+use crate::program::{COLORS, Message};
 use iced::{
     Element, Length,
     widget::{row, text},
 };
 
+/// TODO: Remove
 pub fn vertical_table<'a>(
     values: Vec<(impl Into<String>, Element<'a, Message>)>,
     header_width: f32,

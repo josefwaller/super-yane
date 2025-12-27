@@ -11,8 +11,9 @@ use iced::{
     },
 };
 
-use crate::application::Message;
+use crate::program::Message;
 
+/// TODO: Generalize to not require Element
 pub fn ram<T: UpperHex + Copy>(
     ram: &[T],
     offset: usize,

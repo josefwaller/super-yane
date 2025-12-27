@@ -146,7 +146,7 @@ pub enum Message {
     OnClose(window::Id),
 }
 
-pub struct Application {
+pub struct Program {
     console: Console,
     ram_offset: usize,
     is_paused: bool,
@@ -173,7 +173,7 @@ pub struct Application {
 const NUM_BREAKPOINT_STATES: usize = 20;
 const NUM_PREVIOUS_STATES: usize = 200;
 
-impl Default for Application {
+impl Default for Program {
     fn default() -> Self {
         let default_console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
         let sdl = sdl2::init().expect("Unable to init SDL");
@@ -199,7 +199,7 @@ impl Default for Application {
         // Todo remove
         channel.resume();
 
-        Application {
+        Program {
             console,
             ram_offset: 0,
             is_paused: true,
@@ -223,7 +223,7 @@ impl Default for Application {
     }
 }
 
-impl Application {
+impl Program {
     fn pause(&mut self) {
         self.is_paused = true;
         self.channel.pause();

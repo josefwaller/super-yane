@@ -1,4 +1,4 @@
-use crate::application::{COLORS, Message};
+use crate::program::{COLORS, Message};
 use iced::Element;
 use super_yane::Background;
 

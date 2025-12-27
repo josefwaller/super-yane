@@ -12,22 +12,22 @@ use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
 use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
 
-mod application;
 mod apu_snapshot;
 mod emu_state;
 mod instruction_snapshot;
+mod program;
 #[macro_use]
 mod utils;
 mod engine;
 mod widgets;
-use application::Application;
 use emu_state::EmuState;
+use program::Program;
 mod table;
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
-fn initial_state() -> Application {
-    let mut a = Application::default();
+fn initial_state() -> Program {
+    let mut a = Program::default();
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
             Ok(bytes) => {
@@ -64,9 +64,9 @@ fn main() {
     .unwrap();
     info!("Logger initialized");
 
-    iced::application(initial_state, Application::update, Application::view)
-        .subscription(Application::subscription)
-        .theme(Application::theme)
+    iced::application(initial_state, Program::update, Program::view)
+        .subscription(Program::subscription)
+        .theme(Program::theme)
         .settings(Settings {
             id: None,
             vsync: false,
