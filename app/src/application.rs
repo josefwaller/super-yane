@@ -27,7 +27,6 @@ use iced::{
     },
     window,
 };
-use itertools::Itertools;
 use log::*;
 
 use iced::widget::text;
@@ -131,15 +130,6 @@ impl Display for InfoDisplay {
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
-    AdvanceBreakpoint,
-    AddBreakpoint(u8),
-    RemoveBreakpoint(u8),
-    ToggleVBlankBreakpoint(bool),
-    SetOpcodeSearch(String),
-    ToggleFutureStates(bool),
-    /// Go back 1 state
-    PreviousInstruction,
-    PreviousBreakpoint,
     OnEvent(Event),
     ChangeVramPage(usize),
     ChangePaused(bool),
@@ -160,15 +150,6 @@ pub struct Application {
     console: Console,
     ram_offset: usize,
     is_paused: bool,
-    breakpoint_opcodes: Vec<u8>,
-    previous_breakpoint_states: VecDeque<Console>,
-    previous_console: Box<Console>,
-    previous_console_lag: u32,
-    previous_states: VecDeque<Console>,
-    opcode_search: String,
-    vblank_breakpoint: bool,
-    ignore_breakpoints: bool,
-    emulate_future_states: bool,
     ram_display: RamDisplay,
     /// When showing VRAM as an image, how many BPP to show for the image
     vram_bpp: usize,
@@ -222,19 +203,10 @@ impl Default for Application {
             console,
             ram_offset: 0,
             is_paused: true,
-            breakpoint_opcodes: vec![],
-            previous_breakpoint_states: VecDeque::with_capacity(NUM_BREAKPOINT_STATES),
-            opcode_search: String::new(),
-            vblank_breakpoint: false,
-            ignore_breakpoints: false,
-            emulate_future_states: false,
             ram_display: RamDisplay::WorkRam,
             vram_bpp: 2,
             vram_rgba_data: vec![0xFF, 8 * 8],
             total_instructions: 0,
-            previous_console: Box::new(default_console.clone()),
-            previous_console_lag: 0,
-            previous_states: VecDeque::with_capacity(500),
             previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             inst_display: InstDisplay::Cpu,
@@ -252,11 +224,6 @@ impl Default for Application {
 }
 
 impl Application {
-    fn on_breakpoint(&mut self) {
-        if !self.ignore_breakpoints {
-            self.pause();
-        }
-    }
     fn pause(&mut self) {
         self.is_paused = true;
         self.channel.pause();
@@ -391,22 +358,6 @@ impl Application {
                         .expect("Unable to enqueue audio");
                 }
             }
-            Message::AdvanceBreakpoint => {
-                self.is_paused = false;
-                self.ignore_breakpoints = false;
-            }
-            Message::PreviousBreakpoint => {
-                //     if !self.previous_breakpoint_states.is_empty() {
-                //         self.console = self.previous_breakpoint_states.pop_back().unwrap();
-                //         self.is_paused = true;
-                //     }
-            }
-            Message::PreviousInstruction => {
-                if self.previous_states.len() > 0 {
-                    self.previous_console_lag -= 1;
-                    self.is_paused = true;
-                }
-            }
             Message::AdvanceInstructions(num_instructions) => {
                 self.engine
                     .advance_instructions(num_instructions, self.settings.clone());
@@ -417,19 +368,12 @@ impl Application {
                     self.pause();
                 } else {
                     self.is_paused = false;
-                    self.ignore_breakpoints = true;
                     self.channel.resume();
                 }
             }
-            Message::AddBreakpoint(b) => self.breakpoint_opcodes.push(b),
-            Message::RemoveBreakpoint(b) => self.breakpoint_opcodes.retain(|o| *o != b),
             Message::Reset => {
                 self.engine.reset();
-                self.previous_states.clear();
             }
-            Message::SetOpcodeSearch(s) => self.opcode_search = s,
-            Message::ToggleVBlankBreakpoint(v) => self.vblank_breakpoint = v,
-            Message::ToggleFutureStates(v) => self.emulate_future_states = v,
             Message::LoadRom => match FileDialog::new()
                 .add_filter("Super FamiCon files", &["sfc"])
                 .pick_file()
@@ -633,47 +577,6 @@ impl Application {
     fn update_vram_cache(&mut self) {
         self.vram_rgba_data = vec![0xFF; VRAM_IMAGE_WIDTH as usize * VRAM_IMAGE_HEIGHT as usize * 4]
     }
-    fn breakpoints(&self) -> impl Into<Element<Message>> {
-        column![
-            Element::<Message>::from(
-                text_input("Filter", &self.opcode_search).on_input(Message::SetOpcodeSearch)
-            ),
-            scrollable(Element::<Message>::from(Column::with_children(
-                self.breakpoint_opcodes
-                    .iter()
-                    .map(|op| {
-                        let data = opcode_data(*op, false, false);
-                        checkbox(true)
-                            .on_toggle(|_| Message::RemoveBreakpoint(*op))
-                            .into()
-                    })
-                    .chain(
-                        [checkbox(self.vblank_breakpoint)
-                            .on_toggle(Message::ToggleVBlankBreakpoint)
-                            .into()]
-                        .into_iter()
-                    )
-                    .chain(
-                        (0..=255)
-                            .filter(|op| !self.breakpoint_opcodes.contains(op))
-                            .map(|op| opcode_data(op, false, false))
-                            .filter(|data| self.opcode_search.is_empty()
-                                || data
-                                    .name
-                                    .to_lowercase()
-                                    .contains(&self.opcode_search.to_lowercase()))
-                            .sorted()
-                            .map(|data| {
-                                checkbox(false)
-                                    .on_toggle(move |_| Message::AddBreakpoint(data.code))
-                                    .into()
-                            })
-                    )
-            )))
-            .width(Length::Fill)
-        ]
-    }
-
     fn cpu_data(&self) -> impl Into<Element<Message>> {
         let cpu = self.console.cpu().clone();
         let values = text_table(
