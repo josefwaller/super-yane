@@ -54,6 +54,9 @@ pub fn with_indent<'a, Message: 'a>(
 
 const VRAM_IMAGE_WIDTH: usize = 8 * 32;
 const VRAM_IMAGE_HEIGHT: usize = 8 * 8;
+const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
+const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
+const TILES_PER_PAGE: usize = NUM_TILES_X * NUM_TILES_Y;
 
 pub const COLORS: [Color; 5] = [
     color!(0x98c2d4),
@@ -327,14 +330,19 @@ impl Program {
             }
             Message::SetRamPage(ram_page) => {
                 const BYTES_PER_PAGE: usize = 0x20 * 8;
-                self.ram_page = ram_page.min(
-                    match self.ram_display {
-                        RamDisplay::WorkRam => self.engine.console().ram().len(),
-                        RamDisplay::VideoRamHex => self.engine.console().ppu().vram.len(),
-                        RamDisplay::ColorRam => self.engine.console().ppu().cgram.len() * 2,
-                        RamDisplay::VideoRamTiles => 0,
-                    } / BYTES_PER_PAGE,
-                );
+                let bytes_per_tile = 8 * self.vram_bpp;
+                self.ram_page = ram_page.min(match self.ram_display {
+                    RamDisplay::WorkRam => self.engine.console().ram().len() / BYTES_PER_PAGE,
+                    RamDisplay::VideoRamHex => {
+                        self.engine.console().ppu().vram.len() / BYTES_PER_PAGE
+                    }
+                    RamDisplay::ColorRam => {
+                        self.engine.console().ppu().cgram.len() * 2 / BYTES_PER_PAGE
+                    }
+                    RamDisplay::VideoRamTiles => {
+                        self.engine.console().ppu().vram.len() / bytes_per_tile / TILES_PER_PAGE
+                    }
+                });
             }
             Message::ChangePaused(p) => {
                 if p {
@@ -357,12 +365,6 @@ impl Program {
                     self.engine.load_rom(&bytes);
                     self.is_paused = true;
                     self.emu_time = Duration::ZERO;
-                    //     self.previous_console = Box::new(self.engine.console().clone());
-                    //     self.previous_console_lag = 0;
-                    //     self.previous_states.clear();
-                    //     self.total_instructions = 0;
-                    //     self.previous_apu_snapshots.clear();
-                    //     self.previous_instruction_snapshots.clear();
                 }
                 None => {}
             },
@@ -392,6 +394,8 @@ impl Program {
                 self.ram_page = 0;
             }
             Message::SetVramBpp(bpp) => {
+                let factor = self.vram_bpp as f32 / bpp as f32;
+                self.ram_page = (self.ram_page as f32 * factor).floor() as usize;
                 self.vram_bpp = bpp;
             }
             Message::SetInstDisplay(d) => self.inst_display = d,
@@ -562,8 +566,6 @@ impl Program {
         ])
     }
     fn update_vram_cache(&mut self) {
-        const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
-        const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
         let num_slices = match self.vram_bpp {
             2 => 1,
             4 => 2,
@@ -574,7 +576,7 @@ impl Program {
         let slice_step = 8 * num_slices;
         (0..NUM_TILES_X).for_each(|tile_x| {
             (0..NUM_TILES_Y).for_each(|tile_y| {
-                let tile_index = tile_x + NUM_TILES_X * tile_y;
+                let tile_index = TILES_PER_PAGE * self.ram_page + tile_x + NUM_TILES_X * tile_y;
                 (0..8).for_each(|fine_y| {
                     let slice = (0..num_slices)
                         .map(|i| {
