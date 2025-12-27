@@ -11,7 +11,7 @@ use crate::{
     widgets::{background_table, screen::Screen, text_table, vertical_table},
 };
 use iced::{
-    Alignment::Center,
+    Alignment::{self, Center},
     Color, Element,
     Event::{self, Keyboard},
     Length, Padding, Subscription, Task, Theme, color, event,
@@ -50,6 +50,15 @@ pub fn with_indent<'a, Message: 'a>(
     e: impl Into<Element<'a, Message>>,
 ) -> impl Into<Element<'a, Message>> {
     container(e.into()).padding(Padding::new(0.0).left(30))
+}
+
+fn num_palettes(bpp: usize) -> usize {
+    match bpp {
+        2 => 64,
+        4 => 16,
+        8 => 1,
+        _ => unreachable!("Invalid BPP {}", bpp),
+    }
 }
 
 const VRAM_IMAGE_WIDTH: usize = 8 * 32;
@@ -137,6 +146,8 @@ pub enum Message {
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
     SetVramBpp(usize),
+    SetVramPalette(usize),
+    SetVramDirectColor(bool),
     SetInstDisplay(InstDisplay),
     SetInfoDisplay(InfoDisplay),
     LoadRom,
@@ -161,6 +172,12 @@ pub struct Program {
     /// When showing VRAM as an image, how many BPP to show for the image
     #[new(value = "2")]
     vram_bpp: usize,
+    /// When showing VRAM as an image, what palette to use
+    #[new(value = "0")]
+    vram_palette: usize,
+    /// When showing VRAM as an image, whether to use direct color
+    #[new(value = "false")]
+    vram_direct_color: bool,
     /// Cached VRAM RGBA data for rendering
     #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT]")]
     vram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT],
@@ -397,7 +414,12 @@ impl Program {
                 let factor = self.vram_bpp as f32 / bpp as f32;
                 self.ram_page = (self.ram_page as f32 * factor).floor() as usize;
                 self.vram_bpp = bpp;
+                if self.vram_palette >= num_palettes(bpp) {
+                    self.vram_palette = 0;
+                }
             }
+            Message::SetVramPalette(palette) => self.vram_palette = palette,
+            Message::SetVramDirectColor(dc) => self.vram_direct_color = dc,
             Message::SetInstDisplay(d) => self.inst_display = d,
             Message::ToggleLogApu(v) => self.log_apu = v,
             Message::ToggleLogCpu(v) => self.settings.log_cpu = v,
@@ -504,8 +526,22 @@ impl Program {
         .into()
     }
     fn ram_view(&self) -> impl Into<Element<Message>> {
-        let element: Element<Message> = if self.ram_display == RamDisplay::VideoRamTiles {
-            pick_list([2, 4, 8], Some(self.vram_bpp.clone()), Message::SetVramBpp).into()
+        let tile_elements: Element<Message> = if self.ram_display == RamDisplay::VideoRamTiles {
+            let n = num_palettes(self.vram_bpp);
+            row![
+                text("BPP:"),
+                pick_list([2, 4, 8], Some(self.vram_bpp.clone()), Message::SetVramBpp),
+                text("Palette:"),
+                pick_list(
+                    (0..n).collect::<Vec<usize>>(),
+                    Some(self.vram_palette),
+                    Message::SetVramPalette
+                ),
+                text("Use Direct Color:"),
+                checkbox(self.vram_direct_color).on_toggle(Message::SetVramDirectColor)
+            ]
+            .align_y(Alignment::Center)
+            .into()
         } else {
             horizontal().into()
         };
@@ -523,7 +559,7 @@ impl Program {
                 ),
                 button("Prev Page").on_press(Message::SetRamPage(self.ram_page.saturating_sub(1))),
                 button("Next Page").on_press(Message::SetRamPage(self.ram_page + 1)),
-                element
+                tile_elements
             ]
             .into(),
             match self.ram_display {
@@ -589,12 +625,11 @@ impl Program {
                         .fold([0; 8], |acc, (j, e)| {
                             core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
                         });
-                    let direct_color = false;
                     (0..8).for_each(|i| {
                         self.vram_rgba_data[8 * tile_x
                             + 8 * VRAM_IMAGE_WIDTH * tile_y
                             + VRAM_IMAGE_WIDTH * fine_y
-                            + i] = if direct_color {
+                            + i] = if self.vram_direct_color {
                             [
                                 (slice[i] & 0x03) << 5,
                                 (slice[i] & 0x38) << 2,
@@ -602,10 +637,17 @@ impl Program {
                                 0xFF,
                             ]
                         } else {
-                            let c = color_to_rgb_bytes(
-                                self.engine.console().ppu().cgram[slice[i] as usize],
-                            );
-                            [c[0], c[1], c[2], 0xFF]
+                            if i == 0 {
+                                [0x00; 4]
+                            } else {
+                                let colors_per_palette = 2usize.pow(self.vram_bpp as u32);
+                                let c = color_to_rgb_bytes(
+                                    self.engine.console().ppu().cgram[colors_per_palette
+                                        * self.vram_palette
+                                        + slice[i] as usize],
+                                );
+                                [c[0], c[1], c[2], 0xFF]
+                            }
                         };
                     })
                 })
