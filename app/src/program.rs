@@ -130,7 +130,7 @@ pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
     OnEvent(Event),
-    ChangeRamPage(usize),
+    SetRamPage(usize),
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
     SetVramBpp(usize),
@@ -325,7 +325,17 @@ impl Program {
                 self.engine
                     .advance_instructions(num_instructions, self.settings.clone());
             }
-            Message::ChangeRamPage(ram_page) => self.ram_page = ram_page,
+            Message::SetRamPage(ram_page) => {
+                const BYTES_PER_PAGE: usize = 0x20 * 8;
+                self.ram_page = ram_page.min(
+                    match self.ram_display {
+                        RamDisplay::WorkRam => self.engine.console().ram().len(),
+                        RamDisplay::VideoRamHex => self.engine.console().ppu().vram.len(),
+                        RamDisplay::ColorRam => self.engine.console().ppu().cgram.len() * 2,
+                        RamDisplay::VideoRamTiles => 0,
+                    } / BYTES_PER_PAGE,
+                );
+            }
             Message::ChangePaused(p) => {
                 if p {
                     self.pause();
@@ -507,13 +517,15 @@ impl Program {
                     Some(self.ram_display.clone()),
                     Message::SetRamDisplay,
                 ),
+                button("Prev Page").on_press(Message::SetRamPage(self.ram_page.saturating_sub(1))),
+                button("Next Page").on_press(Message::SetRamPage(self.ram_page + 1)),
                 element
             ]
             .into(),
             match self.ram_display {
                 RamDisplay::ColorRam => ram(
                     &self.engine.console().ppu().cgram,
-                    0,
+                    self.ram_page,
                     COLORS[1],
                     Color::WHITE,
                     color!(0xAAAAAA),
@@ -522,7 +534,7 @@ impl Program {
                 .into(),
                 RamDisplay::WorkRam => ram(
                     &self.engine.console().ram().as_slice(),
-                    0,
+                    self.ram_page,
                     COLORS[2],
                     Color::WHITE,
                     color!(0xAAAAAA),
@@ -531,7 +543,7 @@ impl Program {
                 .into(),
                 RamDisplay::VideoRamHex => ram(
                     &self.engine.console().ppu().vram,
-                    0,
+                    self.ram_page,
                     COLORS[3],
                     Color::WHITE,
                     color!(0xAAAAAA),
