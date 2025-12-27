@@ -17,8 +17,6 @@ mod widgets;
 use program::Program;
 mod table;
 
-const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
-
 fn initial_state() -> Program {
     let sdl = sdl2::init().expect("Unable to init SDL");
     let audio = sdl.audio().unwrap();
@@ -33,7 +31,7 @@ fn initial_state() -> Program {
         )
         .unwrap();
     info!("Channel spec is {:?}", channel.spec());
-    let mut a = Program::new(Console::with_cartridge(DEFAULT_CARTRIDGE), channel);
+    let mut a = Program::new(channel);
     // If an environment variable was passed, load that instead
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {

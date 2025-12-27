@@ -20,11 +20,7 @@ use iced::{
         Key,
         key::Key::{Character, Named},
     },
-    widget::{
-        Column, Image, button, canvas, checkbox, column, container,
-        image::{FilterMethod, Handle},
-        pick_list, row, scrollable, text_input,
-    },
+    widget::{Column, button, canvas, checkbox, column, container, pick_list, row, scrollable},
     window,
 };
 use log::*;
@@ -32,7 +28,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use sdl2::audio::{AudioQueue, AudioSpecDesired};
+use sdl2::audio::AudioQueue;
 use spc700::{OpcodeData as Spc700OpcodeData, format_address_modes};
 use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8};
 use wavers::{Samples, write};
@@ -146,7 +142,6 @@ pub enum Message {
 
 #[derive(new)]
 pub struct Program {
-    console: Console,
     #[new(value = "0")]
     ram_offset: usize,
     #[new(value = "true")]
@@ -186,17 +181,13 @@ pub struct Program {
     settings: AdvanceSettings,
 }
 
-const NUM_BREAKPOINT_STATES: usize = 20;
-const NUM_PREVIOUS_STATES: usize = 200;
-
 impl Program {
+    /// Pauses the emulation
     fn pause(&mut self) {
         self.is_paused = true;
         self.channel.pause();
     }
-    fn is_in_breakpoint(&mut self) -> bool {
-        false
-    }
+    /// Handles key input
     fn on_key_change(&mut self, key: Key, value: bool) {
         let key_value: Option<(String, bool)> = match key {
             Character(c) => Some((c.to_string(), value)),
@@ -293,7 +284,6 @@ impl Program {
                 }
                 self.last_frame_time = ft;
                 self.engine.on_frame();
-                self.console = self.engine.console().clone();
                 self.update_vram_cache();
                 let samples: Vec<f32> = self
                     .engine
@@ -350,7 +340,7 @@ impl Program {
                     self.engine.load_rom(&bytes);
                     self.is_paused = true;
                     self.emu_time = Duration::ZERO;
-                    //     self.previous_console = Box::new(self.console.clone());
+                    //     self.previous_console = Box::new(self.engine.console().clone());
                     //     self.previous_console_lag = 0;
                     //     self.previous_states.clear();
                     //     self.total_instructions = 0;
@@ -376,7 +366,7 @@ impl Program {
                 None => {}
             },
             Message::CreateSavestate => {
-                let bytes = serde_brief::to_vec(&self.console).unwrap();
+                let bytes = serde_brief::to_vec(&self.engine.console()).unwrap();
                 let filename = "./savestatenew.sy.bin";
                 std::fs::write(filename, bytes).unwrap();
             }
@@ -406,7 +396,8 @@ impl Program {
             InfoDisplay::Oam => {
                 return table::<5usize, Message>(
                     [" #", "( x, y)", "X", "Tile", "Name"],
-                    self.console
+                    self.engine
+                        .console()
                         .ppu()
                         .oam_sprites
                         .iter()
@@ -456,8 +447,8 @@ impl Program {
                     ],
                     row![text(format!(
                         "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",
-                        self.console.total_master_clocks().clone(),
-                        self.console.total_apu_clocks().clone(),
+                        self.engine.console().total_master_clocks().clone(),
+                        self.engine.console().total_apu_clocks().clone(),
                         self.total_instructions
                     ))]
                 ])
@@ -503,7 +494,7 @@ impl Program {
             .into(),
             match self.ram_display {
                 RamDisplay::ColorRam => ram(
-                    &self.console.ppu().cgram,
+                    &self.engine.console().ppu().cgram,
                     self.ram_offset,
                     COLORS[1],
                     Color::WHITE,
@@ -512,7 +503,7 @@ impl Program {
                 )
                 .into(),
                 RamDisplay::WorkRam => ram(
-                    &self.console.ram().as_slice(),
+                    &self.engine.console().ram().as_slice(),
                     self.ram_offset,
                     COLORS[2],
                     Color::WHITE,
@@ -521,7 +512,7 @@ impl Program {
                 )
                 .into(),
                 RamDisplay::VideoRamHex => ram(
-                    &self.console.ppu().vram,
+                    &self.engine.console().ppu().vram,
                     self.ram_offset,
                     COLORS[3],
                     Color::WHITE,
@@ -544,7 +535,7 @@ impl Program {
         self.vram_rgba_data = vec![0xFF; VRAM_IMAGE_WIDTH as usize * VRAM_IMAGE_HEIGHT as usize * 4]
     }
     fn cpu_data(&self) -> impl Into<Element<Message>> {
-        let cpu = self.console.cpu().clone();
+        let cpu = self.engine.console().cpu().clone();
         let values = text_table(
             [
                 ("C", cpu.c(), 4),
@@ -600,7 +591,7 @@ impl Program {
     fn ppu_data(&self) -> impl Into<Element<'_, Message>> {
         macro_rules! ppu_val {
             ($label: expr, $field: ident, $format_str: expr) => {
-                table_row!($label, self.console.ppu().$field, $format_str)
+                table_row!($label, self.engine.console().ppu().$field, $format_str)
             };
             ($label: expr, $field: ident) => {
                 ppu_val!($label, $field, "{:?}")
@@ -610,13 +601,13 @@ impl Program {
             ($field: ident) => {
                 text(format!(
                     "{:7.2}",
-                    convert_8p8(self.console.ppu().matrix.$field)
+                    convert_8p8(self.engine.console().ppu().matrix.$field)
                 ))
             };
         }
         macro_rules! mat_val_raw {
             ($field: ident) => {
-                text(format!("{:04X}", self.console.ppu().matrix.$field))
+                text(format!("{:04X}", self.engine.console().ppu().matrix.$field))
             };
         }
         let values = vec![
@@ -624,8 +615,8 @@ impl Program {
                 "Dot",
                 text(format!(
                     "{}, {}",
-                    self.console.ppu().cursor_x(),
-                    self.console.ppu().cursor_y()
+                    self.engine.console().ppu().cursor_x(),
+                    self.engine.console().ppu().cursor_y()
                 ))
                 .into(),
             ),
@@ -637,17 +628,17 @@ impl Program {
             ppu_val!("BG3 Priority", bg3_prio),
             table_row!(
                 "VRAM address (byte)",
-                self.console.ppu().vram_addr,
+                self.engine.console().ppu().vram_addr,
                 "{:06X}"
             ),
             table_row!(
                 "VRAM address (word)",
-                2 * self.console.ppu().vram_addr,
+                2 * self.engine.console().ppu().vram_addr,
                 "{:06X}"
             ),
             table_row!(
                 "VRAM INC mode",
-                self.console.ppu().vram_increment_mode,
+                self.engine.console().ppu().vram_increment_mode,
                 "{:?}"
             ),
             ppu_val!("Color math SRC", color_math_src),
@@ -682,32 +673,40 @@ impl Program {
         column![
             text("PPU").color(COLORS[4]),
             vertical_table(values, 150.0, 0),
-            Column::with_children(self.console.ppu().backgrounds.iter().enumerate().map(
-                |(i, b)| {
+            Column::with_children(
+                self.engine
+                    .console()
+                    .ppu()
+                    .backgrounds
+                    .iter()
+                    .enumerate()
+                    .map(|(i, b)| {
+                        column![
+                            text(format!("Background {}", i)).color(COLORS[0]),
+                            with_indent(background_table(b)).into()
+                        ]
+                        .into()
+                    })
+            ),
+            Column::with_children(self.engine.console().ppu().windows.iter().enumerate().map(
+                |(i, w)| {
                     column![
-                        text(format!("Background {}", i)).color(COLORS[0]),
-                        with_indent(background_table(b)).into()
+                        text(format!("Window {}", i)).color(COLORS[0]),
+                        with_indent(text(format!(
+                            "Left: {:02X} | Right: {:02X}",
+                            w.left, w.right
+                        )))
+                        .into(),
+                        text(format!("Color enabled: {}", w.enabled_color)),
+                        text(format!("Color inverted: {}", w.invert_color)),
                     ]
                     .into()
                 }
-            )),
-            Column::with_children(self.console.ppu().windows.iter().enumerate().map(|(i, w)| {
-                column![
-                    text(format!("Window {}", i)).color(COLORS[0]),
-                    with_indent(text(format!(
-                        "Left: {:02X} | Right: {:02X}",
-                        w.left, w.right
-                    )))
-                    .into(),
-                    text(format!("Color enabled: {}", w.enabled_color)),
-                    text(format!("Color inverted: {}", w.invert_color)),
-                ]
-                .into()
-            }))
+            ))
         ]
     }
     fn apu_data(&self) -> impl Into<Element<'_, Message>> {
-        let apu = self.console.apu().core;
+        let apu = self.engine.console().apu().core;
         let values = text_table(
             [
                 ("PC", apu.pc, 4),
@@ -733,8 +732,14 @@ impl Program {
                 .chain((0..4).into_iter().map(|i| {
                     [
                         (format!("{:02X}", 0xF4 + i).to_string(), Some(COLORS[1])),
-                        (format!("{:02X}", self.console.cpu_to_apu_reg()[i]), None),
-                        (format!("{:02X}", self.console.apu_to_cpu_reg()[i]), None),
+                        (
+                            format!("{:02X}", self.engine.console().cpu_to_apu_reg()[i]),
+                            None,
+                        ),
+                        (
+                            format!("{:02X}", self.engine.console().apu_to_cpu_reg()[i]),
+                            None,
+                        ),
                     ]
                 }))
                 .flatten(),
@@ -747,38 +752,34 @@ impl Program {
         ]
     }
     fn dma_data(&self) -> Column<'_, Message> {
-        Column::with_children(
-            self.console
-                .dma_channels()
-                .iter()
-                .enumerate()
-                .map(|(i, d)| {
-                    row![
-                        text(i.to_string()),
-                        vertical_table(
-                            vec![
-                                table_row!("Is HDMA", d.is_hdma(), "{}"),
-                                table_row!("Transfer Pattern", d.transfer_pattern(), "{:?}"),
-                                table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
-                                table_row!("Indirect", d.indirect, "{}"),
-                                table_row!("Direction", d.direction, "{:?}"),
-                                table_row!("Destination", d.dest_addr, "{:02X}"),
-                                table_row!(
-                                    "Source",
-                                    d.src_bank as usize * 0x10000 + d.src_addr as usize,
-                                    "{:06X}"
-                                ),
-                                table_row!("Bytes Remaining", d.byte_counter, "{:04X}"),
-                                table_row!("Indirect data address", d.indirect_data_addr, "{:04X}"),
-                                table_row!("HDMA Table addr", d.hdma_table_addr, "{:04X}")
-                            ],
-                            150.0,
-                            0,
-                        )
-                    ]
-                    .into()
-                }),
-        )
+        Column::with_children(self.engine.console().dma_channels().iter().enumerate().map(
+            |(i, d)| {
+                row![
+                    text(i.to_string()),
+                    vertical_table(
+                        vec![
+                            table_row!("Is HDMA", d.is_hdma(), "{}"),
+                            table_row!("Transfer Pattern", d.transfer_pattern(), "{:?}"),
+                            table_row!("Address Adjust Mode", d.adjust_mode, "{:?}"),
+                            table_row!("Indirect", d.indirect, "{}"),
+                            table_row!("Direction", d.direction, "{:?}"),
+                            table_row!("Destination", d.dest_addr, "{:02X}"),
+                            table_row!(
+                                "Source",
+                                d.src_bank as usize * 0x10000 + d.src_addr as usize,
+                                "{:06X}"
+                            ),
+                            table_row!("Bytes Remaining", d.byte_counter, "{:04X}"),
+                            table_row!("Indirect data address", d.indirect_data_addr, "{:04X}"),
+                            table_row!("HDMA Table addr", d.hdma_table_addr, "{:04X}")
+                        ],
+                        150.0,
+                        0,
+                    )
+                ]
+                .into()
+            },
+        ))
     }
     fn instructions(&self) -> impl Into<Element<Message>> {
         column![
@@ -791,7 +792,7 @@ impl Program {
                 InstDisplay::Apu => scrollable(Column::with_children(
                     self.previous_apu_snapshots
                         .iter()
-                        .chain([ApuSnapshot::from(&self.console)].iter())
+                        .chain([ApuSnapshot::from(&self.engine.console())].iter())
                         .enumerate()
                         .map(|(i, s)| {
                             let data = Spc700OpcodeData::from_opcode(s.opcode);
@@ -814,7 +815,7 @@ impl Program {
                 InstDisplay::Cpu => scrollable(Column::with_children(
                     self.previous_instruction_snapshots
                         .iter()
-                        .chain([InstructionSnapshot::from(&self.console)].iter())
+                        .chain([InstructionSnapshot::from(&self.engine.console())].iter())
                         .enumerate()
                         .map(|(i, s)| {
                             let data =
@@ -823,11 +824,6 @@ impl Program {
                                 text(format!("{:02X}", s.cpu.pbr)),
                                 text(format!("{:04X}", s.cpu.pc)),
                                 text(format!("{:02X}", s.opcode)),
-                                text(data.name.to_string()).color(if i == NUM_PREVIOUS_STATES {
-                                    Color::WHITE
-                                } else {
-                                    COLORS[0]
-                                }),
                                 text(format!(
                                     "{:6}",
                                     format_address_mode(data.addr_mode, &s.operands, data.bytes,)

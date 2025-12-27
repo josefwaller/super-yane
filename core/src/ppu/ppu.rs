@@ -1257,9 +1257,14 @@ impl Ppu {
         // self.forced_blanking || self.is_in_vblank()
         true
     }
+    /// Returns [`true`] if the PPU is currently in the VBlank period, and [`false`] otherwise.
+    /// Note that this is independant of the VBlank flag, which is cleared on read.
+    /// This method will always return [`true`] if the PPU is in the VBlank period, regardless of
+    /// whether the flag is set.
     pub fn is_in_vblank(&self) -> bool {
         self.cursor_y() > if self.overscan { 240 } else { 225 }
     }
+    /// Returns [`true`] if the PPU is currently in HBlank.
     pub fn is_in_hblank(&self) -> bool {
         self.cursor_x() >= 274
     }

@@ -7,7 +7,8 @@ use std::{
     time::Duration,
 };
 use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
-use wdc65816::{format_address_mode, opcode_data};
+
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::instruction_snapshot::InstructionSnapshot;
 
@@ -70,7 +71,7 @@ impl Engine {
             .name("Super Y.A.N.E. helper".to_string())
             .spawn(move || {
                 use Command::*;
-                let mut console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
+                let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
                 loop {
                     let payload = receiver.recv().unwrap();
                     console.input_ports_mut()[0] = payload.input[0];
@@ -78,13 +79,13 @@ impl Engine {
                         MasterCycles(n) => {
                             let goal_cycles = console.total_master_clocks() + n;
                             while *console.total_master_clocks() < goal_cycles {
-                                let vblank = console.in_vblank();
+                                let vblank = console.ppu().is_in_vblank();
                                 if payload.settings.log_cpu {
                                     let inst = InstructionSnapshot::from(&console);
                                     debug!("{}", inst);
                                 }
                                 console.advance_instructions(1);
-                                if vblank && !console.in_vblank() {
+                                if vblank && !console.ppu().is_in_vblank() {
                                     stream_sender
                                         .send(StreamPayload::new(
                                             console.ppu().screen_data_rgb(),

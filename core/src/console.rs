@@ -615,11 +615,6 @@ impl Console {
     pub fn reset(&mut self) {
         self.cpu.reset(&mut self.rest);
     }
-    /// Return [`true`] if the console is currently in VBlank, and [`false`] otherwise
-    pub fn in_vblank(&self) -> bool {
-        // Todo: Actually implement
-        self.ppu().vblank
-    }
     /// Read a byte in CPU space
     /// NOTE: Only reads from the cartridge
     /// TODO: Find a way to handle reading from everywhere without making self mutable
