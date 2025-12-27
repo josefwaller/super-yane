@@ -1,16 +1,10 @@
-use std::{
-    env,
-    fs::File,
-    rc::Rc,
-    sync::{Arc, Mutex},
-    thread::{self, sleep},
-    time::Duration,
-};
+use std::{env, fs::File};
 
 use iced::{Font, Settings};
 use log::*;
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
-use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
+use super_yane::Console;
 
 mod apu_snapshot;
 mod emu_state;
@@ -20,14 +14,27 @@ mod program;
 mod utils;
 mod engine;
 mod widgets;
-use emu_state::EmuState;
 use program::Program;
 mod table;
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 fn initial_state() -> Program {
-    let mut a = Program::default();
+    let sdl = sdl2::init().expect("Unable to init SDL");
+    let audio = sdl.audio().unwrap();
+    let channel: AudioQueue<f32> = audio
+        .open_queue(
+            None,
+            &AudioSpecDesired {
+                freq: Some(32_000),
+                channels: Some(1),
+                samples: None,
+            },
+        )
+        .unwrap();
+    info!("Channel spec is {:?}", channel.spec());
+    let mut a = Program::new(Console::with_cartridge(DEFAULT_CARTRIDGE), channel);
+    // If an environment variable was passed, load that instead
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
             Ok(bytes) => {

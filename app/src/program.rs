@@ -40,11 +40,9 @@ use wdc65816::{format_address_mode, opcode_data};
 
 use crate::utils::utils::{hex_fmt, table_row};
 use crate::{
-    EmuState, apu_snapshot::ApuSnapshot, instruction_snapshot::InstructionSnapshot,
-    widgets::ram::ram,
+    apu_snapshot::ApuSnapshot, instruction_snapshot::InstructionSnapshot, widgets::ram::ram,
 };
 use derive_new::new;
-use std::sync::{Arc, Mutex};
 
 pub const VOLUME: f32 = 5.0;
 pub fn with_indent<'a, Message: 'a>(
@@ -146,82 +144,50 @@ pub enum Message {
     OnClose(window::Id),
 }
 
+#[derive(new)]
 pub struct Program {
     console: Console,
+    #[new(value = "0")]
     ram_offset: usize,
+    #[new(value = "true")]
     is_paused: bool,
+    #[new(value = "RamDisplay::WorkRam")]
     ram_display: RamDisplay,
     /// When showing VRAM as an image, how many BPP to show for the image
+    #[new(value = "2")]
     vram_bpp: usize,
     /// Cached VRAM RGBA data for rendering
+    #[new(value = "Vec::new()")]
     vram_rgba_data: Vec<u8>,
+    #[new(value = "0")]
     total_instructions: u32,
+    #[new(value = "VecDeque::new()")]
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
+    #[new(value = "VecDeque::new()")]
     previous_apu_snapshots: VecDeque<ApuSnapshot>,
+    #[new(value = "InstDisplay::Cpu")]
     inst_display: InstDisplay,
+    #[new(value = "InfoDisplay::General")]
     info_display: InfoDisplay,
+    #[new(value = "false")]
     log_apu: bool,
+    #[new(value = "false")]
     record: bool,
+    #[new(value = "Vec::new()")]
     samples: Vec<f32>,
+    #[new(value = "Duration::ZERO")]
     emu_time: Duration,
+    #[new(value = "Instant::now()")]
     last_frame_time: Instant,
     channel: AudioQueue<f32>,
+    #[new(value = "Engine::new()")]
     pub engine: Engine,
+    #[new(value = "AdvanceSettings::default()")]
     settings: AdvanceSettings,
 }
 
 const NUM_BREAKPOINT_STATES: usize = 20;
 const NUM_PREVIOUS_STATES: usize = 200;
-
-impl Default for Program {
-    fn default() -> Self {
-        let default_console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
-        let sdl = sdl2::init().expect("Unable to init SDL");
-        let audio = sdl.audio().unwrap();
-        let channel: AudioQueue<f32> = audio
-            .open_queue(
-                None,
-                &AudioSpecDesired {
-                    freq: Some(32_000),
-                    channels: Some(1),
-                    samples: None,
-                },
-            )
-            .unwrap();
-        debug!("Channel spec is {:?}", channel.spec());
-        let state = Arc::new(Mutex::new(EmuState::new(
-            Some(Console::with_cartridge(include_bytes!(
-                "../roms/HelloWorld.sfc"
-            ))),
-            0,
-        )));
-        let console = state.lock().unwrap().emu.clone().unwrap().clone();
-        // Todo remove
-        channel.resume();
-
-        Program {
-            console,
-            ram_offset: 0,
-            is_paused: true,
-            ram_display: RamDisplay::WorkRam,
-            vram_bpp: 2,
-            vram_rgba_data: vec![0xFF, 8 * 8],
-            total_instructions: 0,
-            previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
-            previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
-            inst_display: InstDisplay::Cpu,
-            info_display: InfoDisplay::General,
-            log_apu: false,
-            record: false,
-            samples: vec![],
-            emu_time: Duration::from_micros(0),
-            last_frame_time: Instant::now(),
-            channel,
-            engine: Engine::new(),
-            settings: AdvanceSettings::default(),
-        }
-    }
-}
 
 impl Program {
     fn pause(&mut self) {
