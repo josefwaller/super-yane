@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     engine::{AdvanceSettings, Engine},
+    table::{cell, table},
     widgets::{background_table, screen::Screen, text_table, vertical_table},
 };
 use iced::{
@@ -60,7 +61,7 @@ pub const COLORS: [Color; 5] = [
 ];
 
 #[derive(Debug, Clone, PartialEq)]
-enum RamDisplay {
+pub enum RamDisplay {
     WorkRam,
     VideoRam,
     ColorRam,
@@ -81,7 +82,7 @@ impl Display for RamDisplay {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum InstDisplay {
+pub enum InstDisplay {
     Cpu,
     Apu,
 }
@@ -98,7 +99,25 @@ impl Display for InstDisplay {
         )
     }
 }
-
+#[derive(Default, PartialEq, Debug, Clone)]
+pub enum InfoDisplay {
+    #[default]
+    General,
+    Oam,
+}
+impl Display for InfoDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use InfoDisplay::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                General => "General",
+                Oam => "Oam",
+            }
+        )
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
@@ -117,6 +136,7 @@ pub enum Message {
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
     SetInstDisplay(InstDisplay),
+    SetInfoDisplay(InfoDisplay),
     LoadRom,
     LoadSavestate,
     CreateSavestate,
@@ -145,6 +165,7 @@ pub struct Application {
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
     previous_apu_snapshots: VecDeque<ApuSnapshot>,
     inst_display: InstDisplay,
+    info_display: InfoDisplay,
     log_apu: bool,
     record: bool,
     samples: Vec<f32>,
@@ -202,6 +223,7 @@ impl Default for Application {
             previous_instruction_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             previous_apu_snapshots: VecDeque::with_capacity(NUM_PREVIOUS_STATES),
             inst_display: InstDisplay::Cpu,
+            info_display: InfoDisplay::General,
             log_apu: false,
             record: false,
             samples: vec![],
@@ -442,20 +464,53 @@ impl Application {
             Message::Record(v) => {
                 self.record = v;
             }
+            Message::SetInfoDisplay(v) => self.info_display = v,
         };
         Task::none()
+    }
+    pub fn info_display(&self) -> Element<'_, Message> {
+        match self.info_display {
+            InfoDisplay::General => column![
+                self.cpu_data().into(),
+                self.apu_data().into(),
+                self.ppu_data().into(),
+                self.dma_data()
+            ]
+            .into(),
+            InfoDisplay::Oam => {
+                return table::<5usize, Message>(
+                    [" #", "( x, y)", "X", "Tile", "Name"],
+                    self.console
+                        .ppu()
+                        .oam_sprites
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| {
+                            [
+                                cell(format!("{:02X}", i)),
+                                cell(format!("({:02X}, {:02X})", s.x, s.y)),
+                                cell(format!("{}", u8::from(s.msb_x))),
+                                cell(format!("{:02X}", s.tile_index)),
+                                cell(format!("{:01}", s.name_select)),
+                            ]
+                        }),
+                )
+                .into();
+            }
+        }
     }
     pub fn view(&self) -> Element<'_, Message> {
         column![
             row![
-                scrollable(column![
-                    self.cpu_data().into(),
-                    self.apu_data().into(),
-                    self.ppu_data().into(),
-                    self.dma_data()
-                ])
-                .spacing(0)
-                .width(Length::Shrink),
+                column![
+                    pick_list(
+                        [InfoDisplay::General, InfoDisplay::Oam],
+                        Some(self.info_display.clone()),
+                        Message::SetInfoDisplay,
+                    ),
+                    scrollable(self.info_display())
+                    .spacing(0)
+                ],
                 container(column![
                     canvas(Screen {
                         frame_data: self.engine.prev_frame_data.as_flattened(),

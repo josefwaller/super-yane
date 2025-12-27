@@ -558,14 +558,6 @@ impl Console {
                                 match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
                                     0 => d.hdma_enable = false,
                                     lc => {
-                                        if i == 4 {
-                                        debug!(
-                                            "Read LC from {:04X} for {}, {:02X}",
-                                            d.current_hdma_table_addr(0),
-                                            i,
-                                            lc
-                                        );
-                                        }
                                         // Get line counter
                                         match lc {
                                             0 => unreachable!(),
@@ -593,29 +585,12 @@ impl Console {
                                                         )
                                                         .0,
                                                 ]);
-                                            if i == 4 {
-                                            debug!("Loaded indirect addr from {:04X} {:04X}",
-                                                d.current_hdma_table_addr(1),
-                                                d.indirect_data_addr
-                                            );
-                                            }
                                         } else {
                                             d.src_addr = d.current_hdma_table_addr(1) as u16;
                                         }
                                         d.inc_table_addr();
                                         // Trigger DMA
                                         d.is_executing = true;
-                                        if i == 4 {
-                                        debug!(
-                                            "Start HDMA {} i={} r={} src={:06X} dest={:04X} table={:06X}",
-                                            i,
-                                            d.indirect,
-                                            d.hdma_repeat,
-                                            d.full_src_addr(),
-                                            d.dest_addr,
-                                            d.current_hdma_table_addr(0)
-                                        );
-                                        }
                                         d.num_bytes_transferred = 0;
                                         // Since we just went over a scanline here, dec line counter
                                         d.hdma_line_counter -= 1;
@@ -627,18 +602,6 @@ impl Console {
                                 if d.hdma_repeat {
                                     d.is_executing = true;
                                     d.num_bytes_transferred = 0;
-                                    if i == 4 {
-                                    debug!(
-                                        "Restart HDMA {} i={} r={} src={:06X} dest={:04X} pat={:?} table={:06X}",
-                                        i,
-                                        d.indirect,
-                                        d.hdma_repeat,
-                                        d.full_src_addr(),
-                                        d.dest_addr,
-                                        d.transfer_pattern(),
-                                        d.current_hdma_table_addr(0)
-                                    );
-                                    }
                                 }
                             }
                         }

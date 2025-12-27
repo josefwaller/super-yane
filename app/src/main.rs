@@ -22,6 +22,7 @@ mod engine;
 mod widgets;
 use application::Application;
 use emu_state::EmuState;
+mod table;
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 

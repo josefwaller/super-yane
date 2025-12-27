@@ -348,7 +348,7 @@ impl Ppu {
                     if self.oam_addr < 0x200 {
                         // Writes only on the second write (oam_addr is odd)
                         self.write_oam_byte(self.oam_addr.wrapping_sub(1) % 0x200, self.oam_latch);
-                        self.write_oam_byte(self.oam_addr, value);
+                        self.write_oam_byte(self.oam_addr % 0x200, value);
                     }
                 }
                 if self.oam_addr >= 0x200 {
@@ -364,12 +364,6 @@ impl Ppu {
                 });
                 self.bg3_prio = (value & 0x08) != 0;
                 self.bg_mode = (value & 0x07) as u32;
-                debug!(
-                    "BG MODE {:02X} {} ({:?})",
-                    value,
-                    self.bg_mode,
-                    self.dot_xy()
-                );
             }
             0x2106 => {
                 (0..4).for_each(|i| {
@@ -653,6 +647,9 @@ impl Ppu {
     /// Write a single byte to OAM
     fn write_oam_byte(&mut self, addr: usize, value: u8) {
         let addr = addr % (0x220);
+        if addr > 0x220 {
+            debug!("Addr {:04X}", addr);
+        }
         if addr < 0x200 {
             let sprite_index = (addr / 4) % self.oam_sprites.len();
             let sprite = &mut self.oam_sprites[sprite_index];
