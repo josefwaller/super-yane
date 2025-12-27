@@ -21,7 +21,9 @@ use iced::{
         key::Key::{Character, Named},
     },
     widget::{
-        Column, button, canvas, checkbox, column, container, pick_list, row, scrollable, text_input,
+        Column, Image, button, canvas, checkbox, column, container,
+        image::{FilterMethod, Handle},
+        pick_list, row, scrollable, text_input,
     },
     window,
 };
@@ -52,6 +54,9 @@ pub fn with_indent<'a, Message: 'a>(
     container(e.into()).padding(Padding::new(0.0).left(30))
 }
 
+const VRAM_IMAGE_WIDTH: u32 = 8 * 16;
+const VRAM_IMAGE_HEIGHT: u32 = 8 * 8;
+
 pub const COLORS: [Color; 5] = [
     color!(0x98c2d4),
     color!(0xd49e98),
@@ -63,7 +68,10 @@ pub const COLORS: [Color; 5] = [
 #[derive(Debug, Clone, PartialEq)]
 pub enum RamDisplay {
     WorkRam,
-    VideoRam,
+    /// Display VRAM as binary data
+    VideoRamHex,
+    /// Display VRAM as an image
+    VideoRamTiles,
     ColorRam,
 }
 impl Display for RamDisplay {
@@ -73,9 +81,10 @@ impl Display for RamDisplay {
             f,
             "{}",
             match self {
-                WorkRam => "WRAM",
-                VideoRam => "VRAM",
-                ColorRam => "CGRAM",
+                WorkRam => "WRAM".to_string(),
+                VideoRamHex => "VRAM (Hex)".to_string(),
+                VideoRamTiles => format!("VRAM (Tiles)"),
+                ColorRam => "CGRAM".to_string(),
             }
         )
     }
@@ -161,6 +170,10 @@ pub struct Application {
     ignore_breakpoints: bool,
     emulate_future_states: bool,
     ram_display: RamDisplay,
+    /// When showing VRAM as an image, how many BPP to show for the image
+    vram_bpp: usize,
+    /// Cached VRAM RGBA data for rendering
+    vram_rgba_data: Vec<u8>,
     total_instructions: u32,
     previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
     previous_apu_snapshots: VecDeque<ApuSnapshot>,
@@ -215,7 +228,9 @@ impl Default for Application {
             vblank_breakpoint: false,
             ignore_breakpoints: false,
             emulate_future_states: false,
-            ram_display: RamDisplay::VideoRam,
+            ram_display: RamDisplay::WorkRam,
+            vram_bpp: 2,
+            vram_rgba_data: vec![0xFF, 8 * 8],
             total_instructions: 0,
             previous_console: Box::new(default_console.clone()),
             previous_console_lag: 0,
@@ -346,6 +361,7 @@ impl Application {
                 self.last_frame_time = ft;
                 self.engine.on_frame();
                 self.console = self.engine.console().clone();
+                self.update_vram_cache();
                 let samples: Vec<f32> = self
                     .engine
                     .swap_samples()
@@ -513,7 +529,9 @@ impl Application {
                 ],
                 container(column![
                     canvas(Screen {
-                        frame_data: self.engine.prev_frame_data.as_flattened(),
+                        rgba_data: self.engine.prev_frame_data.as_flattened(),
+                        width: 256,
+                        height: 240
                     })
                     .height(Length::Fill)
                     .width(Length::Fill),
@@ -551,7 +569,7 @@ impl Application {
             ]
             .spacing(10)
             .height(Length::Fill),
-            row![self.ram_view().into(), self.breakpoints().into()]
+            row![self.ram_view().into()]
                 .spacing(10)
                 .height(Length::Fixed(200.0)),
         ]
@@ -564,7 +582,8 @@ impl Application {
         Column::with_children([
             pick_list(
                 [
-                    RamDisplay::VideoRam,
+                    RamDisplay::VideoRamHex,
+                    RamDisplay::VideoRamTiles,
                     RamDisplay::WorkRam,
                     RamDisplay::ColorRam,
                 ],
@@ -572,8 +591,8 @@ impl Application {
                 Message::SetRamDisplay,
             )
             .into(),
-            if self.ram_display == RamDisplay::ColorRam {
-                ram(
+            match self.ram_display {
+                RamDisplay::ColorRam => ram(
                     &self.console.ppu().cgram,
                     self.ram_offset,
                     COLORS[1],
@@ -581,31 +600,38 @@ impl Application {
                     color!(0xAAAAAA),
                     0,
                 )
-                .into()
-            } else {
-                ram(
-                    match self.ram_display {
-                        RamDisplay::VideoRam => &self.console.ppu().vram,
-                        RamDisplay::WorkRam => self.console.ram().as_slice(),
-                        RamDisplay::ColorRam => &[],
-                    },
+                .into(),
+                RamDisplay::WorkRam => ram(
+                    &self.console.ram().as_slice(),
                     self.ram_offset,
-                    match self.ram_display {
-                        RamDisplay::VideoRam => COLORS[3],
-                        RamDisplay::WorkRam => COLORS[2],
-                        RamDisplay::ColorRam => COLORS[1],
-                    },
+                    COLORS[2],
                     Color::WHITE,
                     color!(0xAAAAAA),
-                    match self.ram_display {
-                        RamDisplay::VideoRam => 0,
-                        RamDisplay::WorkRam => 0x7E0000,
-                        RamDisplay::ColorRam => 0,
-                    },
+                    0x7E0000,
                 )
-                .into()
+                .into(),
+                RamDisplay::VideoRamHex => ram(
+                    &self.console.ppu().vram,
+                    self.ram_offset,
+                    COLORS[3],
+                    Color::WHITE,
+                    color!(0xAAAAAA),
+                    0,
+                )
+                .into(),
+                RamDisplay::VideoRamTiles => canvas(Screen {
+                    rgba_data: self.vram_rgba_data.as_slice(),
+                    width: VRAM_IMAGE_WIDTH,
+                    height: VRAM_IMAGE_HEIGHT,
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into(),
             },
         ])
+    }
+    fn update_vram_cache(&mut self) {
+        self.vram_rgba_data = vec![0xFF; VRAM_IMAGE_WIDTH as usize * VRAM_IMAGE_HEIGHT as usize * 4]
     }
     fn breakpoints(&self) -> impl Into<Element<Message>> {
         column![

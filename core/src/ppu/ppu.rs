@@ -316,6 +316,10 @@ impl Ppu {
             0x2101 => {
                 self.oam_name_addr = (value as usize & 0x03) << 13;
                 self.oam_name_select = ((value as usize & 0x18) + 0x08) << (12 - 3);
+                debug!(
+                    "Write to OAM NAME SELECT {:04X} {:04X}",
+                    self.oam_name_select, self.oam_name_select
+                );
                 let size_select = (value & 0xE0) >> 5;
                 self.oam_sizes = [
                     match size_select {
@@ -355,7 +359,7 @@ impl Ppu {
                     // Writes immediately
                     self.write_oam_byte(self.oam_addr, value);
                 }
-                self.oam_addr = (self.oam_addr + 1) % 0x10000;
+                self.oam_addr = (self.oam_addr + 1) % 0x4_0000;
             }
             0x2105 => {
                 // Copy background sizes
@@ -428,6 +432,10 @@ impl Ppu {
                     true => VramIncMode::LowReadHighWrite,
                 };
                 self.vram_remap = (value >> 2) as u32 & 0x03;
+                debug!(
+                    "VRAM REMAP {:04X} {:02X}",
+                    self.vram_remap, self.vram_increment_amount
+                );
             }
             0x2116 => {
                 self.vram_addr = (self.vram_addr & 0x7F00) | (value as usize);
@@ -885,7 +893,11 @@ impl Ppu {
                 let palette = &self.cgram[palette_index..(palette_index + 0x10)];
                 (0..width).for_each(|i| {
                     // Check if the pixel at (sprite x + i) is on the screen
-                    let sx = s.x as i32 + i as i32 + if s.msb_x { -0x100 } else { 0 };
+                    let sx = if s.msb_x {
+                        -(s.x as i32) + 1
+                    } else {
+                        s.x as i32
+                    } + i as i32;
                     if sx < 0x100 && sx > 0x00 {
                         // Get slice to draw
                         let (tile_low, tile_high, x) = if s.flip_x {

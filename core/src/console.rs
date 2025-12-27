@@ -314,46 +314,30 @@ impl ExternalArchitecture {
                                     // Address low byte
                                     d.src_addr = (d.src_addr & 0xFF00) | value as u16;
                                     d.hdma_table_addr = d.src_addr;
-                                    debug!("WRITE HDMA TABLE {} {:04X}", r, d.hdma_table_addr);
                                 }
                                 3 => {
                                     // Address high byte
                                     d.src_addr = (d.src_addr & 0x00FF) | (value as u16 * 0x100);
                                     d.hdma_table_addr = d.src_addr;
-                                    debug!("WRITE HDMA TABLE {} {:04X}", r, d.hdma_table_addr);
                                 }
                                 4 => {
                                     // Address bank
                                     d.src_bank = value;
                                     d.hdma_table_bank = value;
-                                    debug!("WRITE HDMA TABLE BANK {} {:02X}", r, d.hdma_table_bank);
                                 }
                                 5 => {
                                     // Byte counter low byte
                                     d.byte_counter = (d.byte_counter & 0xFF00) | value as u16;
                                     d.indirect_data_addr = d.byte_counter;
-                                    if r == 4 {
-                                        debug!(
-                                            "WRITE INDIRECT DATA {} {:02X}",
-                                            r, d.indirect_data_addr
-                                        );
-                                    }
                                 }
                                 6 => {
                                     // Byte counter high byte
                                     d.byte_counter =
                                         (d.byte_counter & 0x00FF) | (value as u16 * 0x100);
                                     d.indirect_data_addr = d.byte_counter;
-                                    if r == 4 {
-                                        debug!(
-                                            "WRITE INDIRECT DATA {} {:02X}",
-                                            r, d.indirect_data_addr
-                                        );
-                                    }
                                 }
                                 7 => {
                                     d.indirect_bank = value;
-                                    debug!("WRITE INDIRECT BANK {} {:02X}", r, d.indirect_bank);
                                 }
                                 8 => {
                                     d.current_hdma_table_addr =
