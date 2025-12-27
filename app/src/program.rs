@@ -20,7 +20,10 @@ use iced::{
         Key,
         key::Key::{Character, Named},
     },
-    widget::{Column, button, canvas, checkbox, column, container, pick_list, row, scrollable},
+    widget::{
+        Column, button, canvas, checkbox, column, container, pick_list, row, scrollable,
+        space::horizontal,
+    },
     window,
 };
 use log::*;
@@ -30,7 +33,9 @@ use iced::widget::text;
 use rfd::FileDialog;
 use sdl2::audio::AudioQueue;
 use spc700::{OpcodeData as Spc700OpcodeData, format_address_modes};
-use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8};
+use super_yane::{
+    Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8, utils::color_to_rgb_bytes,
+};
 use wavers::{Samples, write};
 use wdc65816::{format_address_mode, opcode_data};
 
@@ -46,13 +51,6 @@ pub fn with_indent<'a, Message: 'a>(
 ) -> impl Into<Element<'a, Message>> {
     container(e.into()).padding(Padding::new(0.0).left(30))
 }
-
-const DEBUG_PALETTE: [[u8; 4]; 4] = [
-    [0x00; 4],
-    [0xFF, 0x00, 0x00, 0xFF],
-    [0x00, 0xFF, 0x00, 0xFF],
-    [0x00, 0x00, 0xFF, 0xFF],
-];
 
 const VRAM_IMAGE_WIDTH: usize = 8 * 32;
 const VRAM_IMAGE_HEIGHT: usize = 8 * 8;
@@ -135,6 +133,7 @@ pub enum Message {
     ChangeVramPage(usize),
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
+    SetVramBpp(usize),
     SetInstDisplay(InstDisplay),
     SetInfoDisplay(InfoDisplay),
     LoadRom,
@@ -381,6 +380,9 @@ impl Program {
                 self.ram_display = d;
                 self.ram_offset = 0;
             }
+            Message::SetVramBpp(bpp) => {
+                self.vram_bpp = bpp;
+            }
             Message::SetInstDisplay(d) => self.inst_display = d,
             Message::ToggleLogApu(v) => self.log_apu = v,
             Message::ToggleLogCpu(v) => self.settings.log_cpu = v,
@@ -487,17 +489,25 @@ impl Program {
         .into()
     }
     fn ram_view(&self) -> impl Into<Element<Message>> {
+        let element: Element<Message> = if self.ram_display == RamDisplay::VideoRamTiles {
+            pick_list([2, 4, 8], Some(self.vram_bpp.clone()), Message::SetVramBpp).into()
+        } else {
+            horizontal().into()
+        };
         Column::with_children([
-            pick_list(
-                [
-                    RamDisplay::VideoRamHex,
-                    RamDisplay::VideoRamTiles,
-                    RamDisplay::WorkRam,
-                    RamDisplay::ColorRam,
-                ],
-                Some(self.ram_display.clone()),
-                Message::SetRamDisplay,
-            )
+            row![
+                pick_list(
+                    [
+                        RamDisplay::VideoRamHex,
+                        RamDisplay::VideoRamTiles,
+                        RamDisplay::WorkRam,
+                        RamDisplay::ColorRam,
+                    ],
+                    Some(self.ram_display.clone()),
+                    Message::SetRamDisplay,
+                ),
+                element
+            ]
             .into(),
             match self.ram_display {
                 RamDisplay::ColorRam => ram(
@@ -541,19 +551,47 @@ impl Program {
     fn update_vram_cache(&mut self) {
         const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
         const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
+        let num_slices = match self.vram_bpp {
+            2 => 1,
+            4 => 2,
+            8 => 4,
+            _ => unreachable!("Invalid VRAM BPP: {}", self.vram_bpp),
+        };
+        // How many slices each tile needs
+        let slice_step = 8 * num_slices;
         (0..NUM_TILES_X).for_each(|tile_x| {
             (0..NUM_TILES_Y).for_each(|tile_y| {
+                let tile_index = tile_x + NUM_TILES_X * tile_y;
                 (0..8).for_each(|fine_y| {
-                    let slice = self
-                        .engine
-                        .console()
-                        .ppu()
-                        .get_2bpp_slice(fine_y + 8 * tile_x + 8 * NUM_TILES_X * tile_y);
+                    let slice = (0..num_slices)
+                        .map(|i| {
+                            self.engine
+                                .console()
+                                .ppu()
+                                .get_2bpp_slice(fine_y + slice_step * tile_index + 8 * i)
+                        })
+                        .enumerate()
+                        .fold([0; 8], |acc, (j, e)| {
+                            core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
+                        });
+                    let direct_color = false;
                     (0..8).for_each(|i| {
                         self.vram_rgba_data[8 * tile_x
                             + 8 * VRAM_IMAGE_WIDTH * tile_y
                             + VRAM_IMAGE_WIDTH * fine_y
-                            + i] = DEBUG_PALETTE[slice[i] as usize];
+                            + i] = if direct_color {
+                            [
+                                (slice[i] & 0x03) << 5,
+                                (slice[i] & 0x38) << 2,
+                                (slice[i] & 0xC0),
+                                0xFF,
+                            ]
+                        } else {
+                            let c = color_to_rgb_bytes(
+                                self.engine.console().ppu().cgram[slice[i] as usize],
+                            );
+                            [c[0], c[1], c[2], 0xFF]
+                        };
                     })
                 })
             });

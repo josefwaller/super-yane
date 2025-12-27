@@ -626,7 +626,7 @@ impl Ppu {
     /// Used for debugging features in order to use an internal 2BPP cache in the emulator for
     /// efficiency.
     pub fn get_2bpp_slice(&self, slice_index: usize) -> [u8; 8] {
-        self.vram_cache_2bpp[slice_index]
+        self.vram_cache_2bpp[slice_index % self.vram_cache_2bpp.len()]
     }
     fn inc_vram_addr(&mut self) {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
