@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["app", "core", "wdc65816", "spc700"]
-exclude = ["ide/src-tauri"]
 
 [workspace.dependencies]
 log = "0.4.27"
