@@ -130,7 +130,7 @@ pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
     OnEvent(Event),
-    ChangeVramPage(usize),
+    ChangeRamPage(usize),
     ChangePaused(bool),
     SetRamDisplay(RamDisplay),
     SetVramBpp(usize),
@@ -149,7 +149,8 @@ pub enum Message {
 #[derive(new)]
 pub struct Program {
     #[new(value = "0")]
-    ram_offset: usize,
+    /// Which page of RAM we are viewing in the ram viewer
+    ram_page: usize,
     #[new(value = "true")]
     is_paused: bool,
     #[new(value = "RamDisplay::WorkRam")]
@@ -324,7 +325,7 @@ impl Program {
                 self.engine
                     .advance_instructions(num_instructions, self.settings.clone());
             }
-            Message::ChangeVramPage(new_vram_page) => self.ram_offset = new_vram_page,
+            Message::ChangeRamPage(ram_page) => self.ram_page = ram_page,
             Message::ChangePaused(p) => {
                 if p {
                     self.pause();
@@ -378,7 +379,7 @@ impl Program {
             }
             Message::SetRamDisplay(d) => {
                 self.ram_display = d;
-                self.ram_offset = 0;
+                self.ram_page = 0;
             }
             Message::SetVramBpp(bpp) => {
                 self.vram_bpp = bpp;
@@ -512,7 +513,7 @@ impl Program {
             match self.ram_display {
                 RamDisplay::ColorRam => ram(
                     &self.engine.console().ppu().cgram,
-                    self.ram_offset,
+                    0,
                     COLORS[1],
                     Color::WHITE,
                     color!(0xAAAAAA),
@@ -521,7 +522,7 @@ impl Program {
                 .into(),
                 RamDisplay::WorkRam => ram(
                     &self.engine.console().ram().as_slice(),
-                    self.ram_offset,
+                    0,
                     COLORS[2],
                     Color::WHITE,
                     color!(0xAAAAAA),
@@ -530,7 +531,7 @@ impl Program {
                 .into(),
                 RamDisplay::VideoRamHex => ram(
                     &self.engine.console().ppu().vram,
-                    self.ram_offset,
+                    0,
                     COLORS[3],
                     Color::WHITE,
                     color!(0xAAAAAA),

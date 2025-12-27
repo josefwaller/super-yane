@@ -1,11 +1,9 @@
 use std::fmt::UpperHex;
 
 use iced::{
-    Color, Element, Length,
+    Alignment, Color, Element, Length,
     widget::{
-        Row, Scrollable, column, container,
-        keyed::Column,
-        row,
+        Column, Row, Scrollable, column, container, row,
         scrollable::{Direction, Scrollbar},
         text,
     },
@@ -16,7 +14,7 @@ use crate::program::Message;
 /// TODO: Generalize to not require Element
 pub fn ram<T: UpperHex + Copy>(
     ram: &[T],
-    offset: usize,
+    page: usize,
     label_color: Color,
     byte_color: Color,
     zero_color: Color,
@@ -26,52 +24,54 @@ where
     u32: From<T>,
 {
     let bytes_per_line = 0x20;
-    let num_lines = 30;
-    // +2 for the '0x' prefix
-    let addr_column_len = 2 + ((addr_offset + ram.len()).ilog2() as usize / 4 + 1);
-    column![
-        Row::with_children((0..(bytes_per_line + 1)).into_iter().map(|i| {
-            if i == 0 {
-                text(format!("{:width$}", "", width = addr_column_len)).into()
+    let num_lines = 8;
+    Column::with_children(
+        [Row::with_children((0..(bytes_per_line + 1)).map(|i| {
+            text(if i == 0 {
+                "ADDR".to_string()
             } else {
-                text(format!("{:02X}", i - 1)).color(label_color).into()
-            }
+                format!("+{:02X}", i - 1)
+            })
+            .color(label_color)
+            .align_x(if i == 0 {
+                Alignment::Start
+            } else {
+                Alignment::End
+            })
+            .width(Length::Fill)
+            .into()
         }))
-        .spacing(10),
-        Scrollable::new(Column::with_children(
-            ram.chunks(bytes_per_line).enumerate().map(|(i, line)| {
-                if (i + 1) * 12 < offset || (i + 1) * 12 > offset + num_lines * 12 {
-                    (i, Row::new().height(12).into())
-                } else {
-                    (
-                        i,
-                        Row::with_children(
-                            [text(format!(
-                                "0x{:0width$X}",
-                                i * bytes_per_line + addr_offset,
-                                width = addr_column_len - 2
-                            ))
-                            .color(label_color)
-                            .into()]
-                            .into_iter()
-                            .chain(line.iter().map(|l| {
-                                text(format!("{:02X}", l))
-                                    .color(if u32::from(*l) == 0 {
-                                        zero_color
-                                    } else {
-                                        byte_color
-                                    })
-                                    .into()
-                            })),
-                        )
-                        .spacing(10)
-                        .height(Length::Fixed(16.0))
-                        .into(),
-                    )
-                }
-            }),
-        ))
-        .on_scroll(|v| Message::ChangeVramPage(v.absolute_offset().y as usize))
-        .spacing(10)
-    ]
+        .into()]
+        .into_iter()
+        .chain((0..num_lines).into_iter().map(|y| {
+            Row::with_children(
+                // Add the header
+                [text(format!("{:04X}", addr_offset + bytes_per_line * y))
+                    .color(label_color)
+                    .width(Length::Fill)
+                    .align_x(Alignment::Start)
+                    .into()]
+                .into_iter()
+                .chain((0..bytes_per_line).into_iter().map(|x| {
+                    let index = num_lines * bytes_per_line * page + bytes_per_line * y + x;
+                    let color = if index >= ram.len() || u32::from(ram[index].into()) == 0 {
+                        zero_color
+                    } else {
+                        byte_color
+                    };
+                    text(if index < ram.len() {
+                        format!("{:02X}", ram[index])
+                    } else {
+                        "NA".to_string()
+                    })
+                    .color(color)
+                    .width(Length::Fill)
+                    .align_x(Alignment::End)
+                    .into()
+                })),
+            )
+            .height(Length::Fill)
+            .into()
+        })),
+    )
 }
