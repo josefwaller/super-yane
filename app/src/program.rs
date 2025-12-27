@@ -47,8 +47,15 @@ pub fn with_indent<'a, Message: 'a>(
     container(e.into()).padding(Padding::new(0.0).left(30))
 }
 
-const VRAM_IMAGE_WIDTH: u32 = 8 * 16;
-const VRAM_IMAGE_HEIGHT: u32 = 8 * 8;
+const DEBUG_PALETTE: [[u8; 4]; 4] = [
+    [0x00; 4],
+    [0xFF, 0x00, 0x00, 0xFF],
+    [0x00, 0xFF, 0x00, 0xFF],
+    [0x00, 0x00, 0xFF, 0xFF],
+];
+
+const VRAM_IMAGE_WIDTH: usize = 8 * 32;
+const VRAM_IMAGE_HEIGHT: usize = 8 * 8;
 
 pub const COLORS: [Color; 5] = [
     color!(0x98c2d4),
@@ -152,8 +159,8 @@ pub struct Program {
     #[new(value = "2")]
     vram_bpp: usize,
     /// Cached VRAM RGBA data for rendering
-    #[new(value = "Vec::new()")]
-    vram_rgba_data: Vec<u8>,
+    #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT]")]
+    vram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT],
     #[new(value = "0")]
     total_instructions: u32,
     #[new(value = "VecDeque::new()")]
@@ -521,9 +528,9 @@ impl Program {
                 )
                 .into(),
                 RamDisplay::VideoRamTiles => canvas(Screen {
-                    rgba_data: self.vram_rgba_data.as_slice(),
-                    width: VRAM_IMAGE_WIDTH,
-                    height: VRAM_IMAGE_HEIGHT,
+                    rgba_data: self.vram_rgba_data.as_flattened(),
+                    width: VRAM_IMAGE_WIDTH as u32,
+                    height: VRAM_IMAGE_HEIGHT as u32,
                 })
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -532,7 +539,25 @@ impl Program {
         ])
     }
     fn update_vram_cache(&mut self) {
-        self.vram_rgba_data = vec![0xFF; VRAM_IMAGE_WIDTH as usize * VRAM_IMAGE_HEIGHT as usize * 4]
+        const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
+        const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
+        (0..NUM_TILES_X).for_each(|tile_x| {
+            (0..NUM_TILES_Y).for_each(|tile_y| {
+                (0..8).for_each(|fine_y| {
+                    let slice = self
+                        .engine
+                        .console()
+                        .ppu()
+                        .get_2bpp_slice(fine_y + 8 * tile_x + 8 * NUM_TILES_X * tile_y);
+                    (0..8).for_each(|i| {
+                        self.vram_rgba_data[8 * tile_x
+                            + 8 * VRAM_IMAGE_WIDTH * tile_y
+                            + VRAM_IMAGE_WIDTH * fine_y
+                            + i] = DEBUG_PALETTE[slice[i] as usize];
+                    })
+                })
+            });
+        });
     }
     fn cpu_data(&self) -> impl Into<Element<Message>> {
         let cpu = self.engine.console().cpu().clone();
