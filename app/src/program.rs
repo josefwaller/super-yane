@@ -22,7 +22,7 @@ use iced::{
         key::Key::{Character, Named},
     },
     widget::{
-        Column, button, canvas, checkbox, column, container, pick_list, row, scrollable,
+        Column, Row, button, canvas, checkbox, column, container, pick_list, row, scrollable,
         space::horizontal,
     },
     window,
@@ -62,10 +62,10 @@ fn num_palettes(bpp: usize) -> usize {
     }
 }
 
-const VRAM_IMAGE_WIDTH: usize = 8 * 16;
-const VRAM_IMAGE_HEIGHT: usize = 8 * 4;
-const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
-const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
+const NUM_TILES_X: usize = 16;
+const NUM_TILES_Y: usize = 4;
+const VRAM_IMAGE_WIDTH: usize = NUM_TILES_X * 9;
+const VRAM_IMAGE_HEIGHT: usize = NUM_TILES_Y * 9;
 const TILES_PER_PAGE: usize = NUM_TILES_X * NUM_TILES_Y;
 
 pub const COLORS: [Color; 5] = [
@@ -572,6 +572,7 @@ impl Program {
                 button("Next Page").on_press(Message::SetRamPage(self.ram_page + 1)),
                 tile_elements
             ]
+            .spacing(10)
             .into(),
             match self.ram_display {
                 RamDisplay::ColorRam => ram(
@@ -602,20 +603,37 @@ impl Program {
                 )
                 .into(),
                 RamDisplay::VideoRamTiles => row![
-                    Column::with_children((0..NUM_TILES_Y).map(|i| {
-                        text(format!("{:04X}", NUM_TILES_X * i))
+                    Column::with_children([text("Index/Addr").into()].into_iter().chain(
+                        (0..NUM_TILES_Y).map(|i| {
+                            let tile_index =
+                                (NUM_TILES_X * NUM_TILES_Y) * self.ram_page + NUM_TILES_X * i;
+                            text(format!(
+                                "{:03X}/0x{:04X}",
+                                tile_index,
+                                tile_index * 8 * self.vram_bpp
+                            ))
                             .height(Length::Fill)
                             .align_y(Alignment::Center)
                             .into()
-                    })),
-                    canvas(Screen {
-                        rgba_data: self.vram_rgba_data.as_flattened(),
-                        width: VRAM_IMAGE_WIDTH as u32,
-                        height: VRAM_IMAGE_HEIGHT as u32,
-                    })
-                    .width(Length::Fill)
-                    .height(Length::Fill)
+                        })
+                    )),
+                    column![
+                        Row::with_children((0..NUM_TILES_X).map(|x| {
+                            text(format!("+{:01X}/{:02X}", x, x * 8 * self.vram_bpp))
+                                .width(Length::Fill)
+                                .align_x(Alignment::Center)
+                                .into()
+                        })),
+                        canvas(Screen {
+                            rgba_data: self.vram_rgba_data.as_flattened(),
+                            width: VRAM_IMAGE_WIDTH as u32,
+                            height: VRAM_IMAGE_HEIGHT as u32,
+                        })
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                    ]
                 ]
+                .spacing(10)
                 .into(),
             },
         ])

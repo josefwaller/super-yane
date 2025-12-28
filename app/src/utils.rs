@@ -40,7 +40,7 @@ pub fn vram_to_rgba(
         8 => 4,
         _ => unreachable!("Invalid VRAM BPP: {}", bpp),
     };
-    let image_width = num_tiles.0 * 8;
+    let image_width = num_tiles.0 * 9;
     // How many slices each tile needs
     let slice_step = 8 * num_slices;
     let colors_per_palette = 2usize.pow(bpp as u32);
@@ -58,26 +58,23 @@ pub fn vram_to_rgba(
                     .fold([0; 8], |acc, (j, e)| {
                         core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
                     });
-                (0..8).for_each(|i| {
-                    buffer[8 * tile_x + 8 * image_width * tile_y + image_width * fine_y + i] =
-                        if direct_color {
-                            [
-                                (slice[i] & 0x03) << 5,
-                                (slice[i] & 0x38) << 2,
-                                (slice[i] & 0xC0),
-                                0xFF,
-                            ]
+                (0..8).for_each(|fine_x| {
+                    let x = 9 * tile_x + fine_x;
+                    let y = 9 * tile_y + fine_y;
+                    let s = slice[fine_x];
+                    // buffer[8 * tile_x + 8 * image_width * tile_y + image_width * fine_y + i] =
+                    buffer[y * image_width + x] = if direct_color {
+                        [(s & 0x03) << 5, (s & 0x38) << 2, (s & 0xC0), 0xFF]
+                    } else {
+                        if s == 0 {
+                            [0x00; 4]
                         } else {
-                            if slice[i] == 0 {
-                                [0x00; 4]
-                            } else {
-                                let c = color_to_rgb_bytes(
-                                    console.ppu().cgram
-                                        [colors_per_palette * palette + slice[i] as usize],
-                                );
-                                [c[0], c[1], c[2], 0xFF]
-                            }
-                        };
+                            let c = color_to_rgb_bytes(
+                                console.ppu().cgram[colors_per_palette * palette + s as usize],
+                            );
+                            [c[0], c[1], c[2], 0xFF]
+                        }
+                    };
                 })
             })
         });
