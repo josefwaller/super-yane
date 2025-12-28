@@ -43,6 +43,7 @@ pub fn vram_to_rgba(
     let image_width = num_tiles.0 * 8;
     // How many slices each tile needs
     let slice_step = 8 * num_slices;
+    let colors_per_palette = 2usize.pow(bpp as u32);
     (0..num_tiles.0).for_each(|tile_x| {
         (0..num_tiles.1).for_each(|tile_y| {
             let tile_index = tile_offset + tile_x + num_tiles.0 * tile_y;
@@ -67,10 +68,9 @@ pub fn vram_to_rgba(
                                 0xFF,
                             ]
                         } else {
-                            if i == 0 {
+                            if slice[i] == 0 {
                                 [0x00; 4]
                             } else {
-                                let colors_per_palette = 2usize.pow(bpp as u32);
                                 let c = color_to_rgb_bytes(
                                     console.ppu().cgram
                                         [colors_per_palette * palette + slice[i] as usize],

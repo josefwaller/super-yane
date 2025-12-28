@@ -62,8 +62,8 @@ fn num_palettes(bpp: usize) -> usize {
     }
 }
 
-const VRAM_IMAGE_WIDTH: usize = 8 * 32;
-const VRAM_IMAGE_HEIGHT: usize = 8 * 8;
+const VRAM_IMAGE_WIDTH: usize = 8 * 16;
+const VRAM_IMAGE_HEIGHT: usize = 8 * 4;
 const NUM_TILES_X: usize = VRAM_IMAGE_WIDTH / 8;
 const NUM_TILES_Y: usize = VRAM_IMAGE_HEIGHT / 8;
 const TILES_PER_PAGE: usize = NUM_TILES_X * NUM_TILES_Y;
@@ -601,13 +601,21 @@ impl Program {
                     0,
                 )
                 .into(),
-                RamDisplay::VideoRamTiles => canvas(Screen {
-                    rgba_data: self.vram_rgba_data.as_flattened(),
-                    width: VRAM_IMAGE_WIDTH as u32,
-                    height: VRAM_IMAGE_HEIGHT as u32,
-                })
-                .width(Length::Fill)
-                .height(Length::Fill)
+                RamDisplay::VideoRamTiles => row![
+                    Column::with_children((0..NUM_TILES_Y).map(|i| {
+                        text(format!("{:04X}", NUM_TILES_X * i))
+                            .height(Length::Fill)
+                            .align_y(Alignment::Center)
+                            .into()
+                    })),
+                    canvas(Screen {
+                        rgba_data: self.vram_rgba_data.as_flattened(),
+                        width: VRAM_IMAGE_WIDTH as u32,
+                        height: VRAM_IMAGE_HEIGHT as u32,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                ]
                 .into(),
             },
         ])
