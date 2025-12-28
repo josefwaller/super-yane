@@ -8,6 +8,7 @@ use std::{
 use crate::{
     engine::{AdvanceSettings, Engine},
     table::{cell, table},
+    utils::vram_to_rgba,
     widgets::{background_table, screen::Screen, text_table, vertical_table},
 };
 use iced::{
@@ -311,7 +312,15 @@ impl Program {
                 }
                 self.last_frame_time = ft;
                 self.engine.on_frame();
-                self.update_vram_cache();
+                vram_to_rgba(
+                    self.engine.console(),
+                    (NUM_TILES_X, NUM_TILES_Y),
+                    self.vram_bpp,
+                    self.ram_page * TILES_PER_PAGE,
+                    self.vram_palette,
+                    self.vram_direct_color,
+                    &mut self.vram_rgba_data,
+                );
                 let samples: Vec<f32> = self
                     .engine
                     .swap_samples()
@@ -383,7 +392,9 @@ impl Program {
                     self.is_paused = true;
                     self.emu_time = Duration::ZERO;
                 }
-                None => {}
+                None => {
+                    self.last_frame_time = Instant::now();
+                }
             },
             Message::LoadSavestate => match FileDialog::new()
                 .add_filter("Super YANE savestate files", &["sy.bin"])
@@ -601,59 +612,7 @@ impl Program {
             },
         ])
     }
-    fn update_vram_cache(&mut self) {
-        let num_slices = match self.vram_bpp {
-            2 => 1,
-            4 => 2,
-            8 => 4,
-            _ => unreachable!("Invalid VRAM BPP: {}", self.vram_bpp),
-        };
-        // How many slices each tile needs
-        let slice_step = 8 * num_slices;
-        (0..NUM_TILES_X).for_each(|tile_x| {
-            (0..NUM_TILES_Y).for_each(|tile_y| {
-                let tile_index = TILES_PER_PAGE * self.ram_page + tile_x + NUM_TILES_X * tile_y;
-                (0..8).for_each(|fine_y| {
-                    let slice = (0..num_slices)
-                        .map(|i| {
-                            self.engine
-                                .console()
-                                .ppu()
-                                .get_2bpp_slice(fine_y + slice_step * tile_index + 8 * i)
-                        })
-                        .enumerate()
-                        .fold([0; 8], |acc, (j, e)| {
-                            core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
-                        });
-                    (0..8).for_each(|i| {
-                        self.vram_rgba_data[8 * tile_x
-                            + 8 * VRAM_IMAGE_WIDTH * tile_y
-                            + VRAM_IMAGE_WIDTH * fine_y
-                            + i] = if self.vram_direct_color {
-                            [
-                                (slice[i] & 0x03) << 5,
-                                (slice[i] & 0x38) << 2,
-                                (slice[i] & 0xC0),
-                                0xFF,
-                            ]
-                        } else {
-                            if i == 0 {
-                                [0x00; 4]
-                            } else {
-                                let colors_per_palette = 2usize.pow(self.vram_bpp as u32);
-                                let c = color_to_rgb_bytes(
-                                    self.engine.console().ppu().cgram[colors_per_palette
-                                        * self.vram_palette
-                                        + slice[i] as usize],
-                                );
-                                [c[0], c[1], c[2], 0xFF]
-                            }
-                        };
-                    })
-                })
-            });
-        });
-    }
+
     fn cpu_data(&self) -> impl Into<Element<Message>> {
         let cpu = self.engine.console().cpu().clone();
         let values = text_table(
