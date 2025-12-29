@@ -45,5 +45,6 @@ pub fn table<'a, const W: usize, E: 'a>(
             .flatten(),
     )
     .columns(W)
+    .spacing(10)
     .height(Length::Shrink)
 }

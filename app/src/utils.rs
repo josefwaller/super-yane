@@ -17,13 +17,15 @@ pub mod utils {
     pub(crate) use hex_fmt;
     pub(crate) use table_row;
 }
-/// Render a section of VRAM as RGBA image data
+/// Render a section of VRAM as RGBA image data.
+/// Always interprets VRAM as 16 tiles wide.
 /// console: The console to use the VRAM and palettes of
 /// num_tiles: How many tiles to render, in (x, y) format
 /// bpp: THe bits per pixel
 /// tile_offset: How many tiles to skip before rendering
 /// palette: The index of the palette to use
 /// direct_color: Whether to render with direct color or not
+/// gap: How big of a gap to leave between tiles. 0 means that tiles will be tightly packed.
 /// buffer: The buffer to write to. Provided so that we don't hvae to recreate an array every time
 pub fn vram_to_rgba(
     console: &Console,
@@ -48,7 +50,7 @@ pub fn vram_to_rgba(
     let colors_per_palette = 2usize.pow(bpp as u32);
     (0..num_tiles.0).for_each(|tile_x| {
         (0..num_tiles.1).for_each(|tile_y| {
-            let tile_index = tile_offset + tile_x + num_tiles.0 * tile_y;
+            let tile_index = tile_offset + tile_x + 16 * tile_y;
             (0..8).for_each(|fine_y| {
                 let slice = (0..num_slices)
                     .map(|i| {
