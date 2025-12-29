@@ -901,7 +901,7 @@ impl Ppu {
                 (0..width).for_each(|i| {
                     // Check if the pixel at (sprite x + i) is on the screen
                     let sx = if s.msb_x {
-                        -(s.x as i32) + 1
+                        s.x as i32 - 0x100
                     } else {
                         s.x as i32
                     } + i as i32;
