@@ -1,6 +1,7 @@
 use iced::{
     Alignment, Color, Element, Length, color,
-    widget::{Column, Row, keyed::Column as KeyedColumn, text},
+    theme::Style,
+    widget::{Grid, Row, container, keyed::Column as KeyedColumn, text},
 };
 
 #[derive(Clone)]
@@ -12,9 +13,11 @@ pub struct Cell {
 const DEFAULT_COLOR: Color = Color::WHITE;
 const HEADER_COLOR: Color = color!(0xFFADAD);
 
-impl<'a, E> From<Cell> for Element<'a, E> {
+impl<'a, E: 'a> From<Cell> for Element<'a, E> {
     fn from(value: Cell) -> Self {
-        text(value.contents).color(value.color).into()
+        container(text(value.contents).color(value.color))
+            .center_y(Length::Shrink)
+            .into()
     }
 }
 
@@ -33,19 +36,14 @@ pub fn h_cell(s: impl Into<String>) -> Cell {
 
 pub fn table<'a, const W: usize, E: 'a>(
     headers: [impl Into<String> + Clone; W],
-    values: impl IntoIterator<Item = [Cell; W]>,
+    values: impl IntoIterator<Item = [Element<'a, E>; W]>,
 ) -> impl Into<Element<'a, E>> {
-    let v: Vec<[Cell; W]> = values.into_iter().collect();
-    Row::with_children((0..W).map(move |i| {
-        Column::with_children(
-            [h_cell(headers[i].clone().into())]
-                .into_iter()
-                .chain(v.iter().map(|row| row[i].clone()))
-                .map(|e| e.into()),
-        )
-        .align_x(Alignment::End)
-        .into()
-    }))
-    .spacing(10)
-    .padding(10)
+    Grid::with_children(
+        [headers.map(|s| h_cell(s.into()).into())]
+            .into_iter()
+            .chain(values)
+            .flatten(),
+    )
+    .columns(W)
+    .height(Length::Shrink)
 }

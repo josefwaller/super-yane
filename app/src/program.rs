@@ -451,8 +451,8 @@ impl Program {
             ]
             .into(),
             InfoDisplay::Oam => {
-                return table::<5usize, Message>(
-                    [" #", "( x, y)", "X", "Tile", "Name"],
+                return table::<6usize, Message>(
+                    [" #", "( x, y)", "X", "Tile", "Name", "button"],
                     self.engine
                         .console()
                         .ppu()
@@ -461,11 +461,12 @@ impl Program {
                         .enumerate()
                         .map(|(i, s)| {
                             [
-                                cell(format!("{:02X}", i)),
-                                cell(format!("({:02X}, {:02X})", s.x, s.y)),
-                                cell(format!("{}", u8::from(s.msb_x))),
-                                cell(format!("{:02X}", s.tile_index)),
-                                cell(format!("{:01}", s.name_select)),
+                                cell(format!("{:02X}", i)).into(),
+                                cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
+                                cell(format!("{}", u8::from(s.msb_x))).into(),
+                                cell(format!("{:02X}", s.tile_index)).into(),
+                                cell(format!("{:01}", s.name_select)).into(),
+                                button("CLick me").into(),
                             ]
                         }),
                 )
