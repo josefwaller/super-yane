@@ -1,3 +1,4 @@
+use derive_new::new;
 use iced::{
     Rectangle, Renderer, Theme,
     mouse::Cursor,
@@ -6,6 +7,8 @@ use iced::{
         image::{FilterMethod, Handle},
     },
 };
+
+#[derive(new)]
 pub struct Screen<'a> {
     pub rgba_data: &'a [u8],
     pub width: u32,

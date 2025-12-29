@@ -32,6 +32,7 @@ pub fn vram_to_rgba(
     tile_offset: usize,
     palette: usize,
     direct_color: bool,
+    gap: usize,
     buffer: &mut [[u8; 4]],
 ) {
     let num_slices = match bpp {
@@ -40,7 +41,8 @@ pub fn vram_to_rgba(
         8 => 4,
         _ => unreachable!("Invalid VRAM BPP: {}", bpp),
     };
-    let image_width = num_tiles.0 * 9;
+    let tile_size = 8 + gap;
+    let image_width = num_tiles.0 * tile_size;
     // How many slices each tile needs
     let slice_step = 8 * num_slices;
     let colors_per_palette = 2usize.pow(bpp as u32);
@@ -59,10 +61,9 @@ pub fn vram_to_rgba(
                         core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
                     });
                 (0..8).for_each(|fine_x| {
-                    let x = 9 * tile_x + fine_x;
-                    let y = 9 * tile_y + fine_y;
+                    let x = tile_size * tile_x + fine_x;
+                    let y = tile_size * tile_y + fine_y;
                     let s = slice[fine_x];
-                    // buffer[8 * tile_x + 8 * image_width * tile_y + image_width * fine_y + i] =
                     buffer[y * image_width + x] = if direct_color {
                         [(s & 0x03) << 5, (s & 0x38) << 2, (s & 0xC0), 0xFF]
                     } else {

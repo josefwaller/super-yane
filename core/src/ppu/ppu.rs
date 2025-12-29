@@ -879,9 +879,7 @@ impl Ppu {
                 } else {
                     ((y - s.y) % 8, (y - s.y) / 8)
                 };
-                let tile_index = s.tile_index + 16 * tile_y;
-                let slice_addr = 2 * (self.oam_name_addr + s.name_select * self.oam_name_select)
-                    + 32 * tile_index;
+                let slice_addr = self.sprite_tile_slice_addr(s, tile_y);
                 let width = size.0;
                 // Todo: Optimize this so that we don't fetch all the tiles all the time
                 let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
@@ -1261,6 +1259,12 @@ impl Ppu {
                 }
             }
         })
+    }
+    pub fn sprite_tile_slice_addr(&self, s: &Sprite, tile_y: usize) -> usize {
+        let tile_index = s.tile_index + 16 * tile_y;
+        let slice_addr =
+            2 * (self.oam_name_addr + s.name_select * self.oam_name_select) + 32 * tile_index;
+        slice_addr
     }
     pub fn can_write_vram(&self) -> bool {
         // self.forced_blanking || self.is_in_vblank()

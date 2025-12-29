@@ -182,6 +182,9 @@ pub struct Program {
     /// Cached VRAM RGBA data for rendering
     #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT]")]
     vram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT],
+    /// Cached OAM sprite data for rendering
+    #[new(value = "Box::new([[[0;4]; 64 * 64]; 128])")]
+    oam_sprite_rgba_data: Box<[[[u8; 4]; 64 * 64]; 128]>,
     #[new(value = "0")]
     total_instructions: u32,
     #[new(value = "VecDeque::new()")]
@@ -319,8 +322,25 @@ impl Program {
                     self.ram_page * TILES_PER_PAGE,
                     self.vram_palette,
                     self.vram_direct_color,
+                    1,
                     &mut self.vram_rgba_data,
                 );
+                // Update sprite graphics
+                (0..128).for_each(|i| {
+                    let spr = &self.engine.console().ppu().oam_sprites[i];
+                    let size = self.engine.console().ppu().oam_sizes[spr.size_select];
+                    vram_to_rgba(
+                        self.engine.console(),
+                        (size.0 / 8, size.1 / 8),
+                        4,
+                        self.engine.console().ppu().sprite_tile_slice_addr(spr, 0) / (4 * 8),
+                        // Sprites use the last 8 palettes
+                        8 + spr.palette_index,
+                        false,
+                        0,
+                        &mut self.oam_sprite_rgba_data[i],
+                    );
+                });
                 let samples: Vec<f32> = self
                     .engine
                     .swap_samples()
@@ -451,8 +471,8 @@ impl Program {
             ]
             .into(),
             InfoDisplay::Oam => {
-                return table::<6usize, Message>(
-                    [" #", "( x, y)", "X", "Tile", "Name", "button"],
+                return table::<7usize, Message>(
+                    [" #", "( x, y)", "X", "Tile", "Name", "Size", "Sprite"],
                     self.engine
                         .console()
                         .ppu()
@@ -460,13 +480,21 @@ impl Program {
                         .iter()
                         .enumerate()
                         .map(|(i, s)| {
+                            let size = self.engine.console().ppu().oam_sizes[s.size_select];
                             [
                                 cell(format!("{:02X}", i)).into(),
                                 cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
                                 cell(format!("{}", u8::from(s.msb_x))).into(),
                                 cell(format!("{:02X}", s.tile_index)).into(),
                                 cell(format!("{:01}", s.name_select)).into(),
-                                button("CLick me").into(),
+                                cell(format!("{:?}", size)).into(),
+                                canvas(Screen::new(
+                                    self.oam_sprite_rgba_data[i][0..(size.0 * size.1)]
+                                        .as_flattened(),
+                                    size.0 as u32,
+                                    size.1 as u32,
+                                ))
+                                .into(),
                             ]
                         }),
                 )
@@ -501,6 +529,7 @@ impl Program {
                         button("NEW SAVESTATE").on_press(Message::CreateSavestate),
                         button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
                         button("RESET").on_press(Message::Reset),
+                        button("ADVANCE SCANLINE").on_press(Message::AdvanceInstructions(1364)),
                         button("ADVANCE 500").on_press(Message::AdvanceInstructions(500))
                     ],
                     row![text(format!(
