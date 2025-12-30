@@ -269,6 +269,15 @@ impl ExternalArchitecture {
                             if (value >> i) & 0x01 != 0 {
                                 self.dma_channels[i].is_executing = true;
                                 self.dma_channels[i].num_bytes_transferred = 0;
+                                if i == 0 {
+                                    debug!(
+                                        "START DMA 0 {:02X} {:04X} -> {:04X} {:04X}",
+                                        self.dma_channels[1].src_bank,
+                                        self.dma_channels[i].src_addr,
+                                        self.dma_channels[i].dest_addr,
+                                        self.dma_channels[i].byte_counter
+                                    );
+                                }
                             }
                         });
                         return 6;

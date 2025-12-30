@@ -31,6 +31,7 @@ impl Cpu {
                 d.num_bytes_transferred = d.num_bytes_transferred.wrapping_add(1);
                 if d.num_bytes_transferred == d.get_num_bytes() {
                     d.is_executing = false;
+                    d.byte_counter = 0;
                 }
                 memory.dma_channels[i] = d;
             }

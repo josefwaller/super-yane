@@ -23,6 +23,7 @@ pub struct AdvanceSettings {
 pub enum Command {
     MasterCycles(u64),
     Instructions(u32),
+    ToVBlank,
     LoadRom(Vec<u8>),
     LoadSavestate(Console),
     Reset,
@@ -104,6 +105,24 @@ impl Engine {
                                 .send(console.clone())
                                 .expect("Unable to send console back to main thread");
                         }
+                        ToVBlank => {
+                            let mut vblank = console.ppu().is_in_vblank();
+                            while !vblank && console.ppu().is_in_vblank() {
+                                vblank = console.ppu().is_in_vblank();
+                                console.advance_instructions(1);
+                            }
+                            debug!("Done advancing");
+                            stream_sender
+                                .send(StreamPayload::new(
+                                    console.ppu().screen_data_rgb(),
+                                    console.apu_mut().sample_queue(),
+                                ))
+                                .expect("Unable to send frame data");
+
+                            console_sender
+                                .send(console.clone())
+                                .expect("Unable to send console to main thread");
+                        }
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
                         }
@@ -161,6 +180,17 @@ impl Engine {
                 settings,
             ))
             .expect("Unable to send to console thread");
+    }
+    pub fn advance_frames(&mut self, num_frames: u32, settings: AdvanceSettings) {
+        (0..num_frames).for_each(|_| {
+            self.sender
+                .send(UpdateEmuPayload::new(
+                    Command::ToVBlank,
+                    self.input_ports.clone(),
+                    settings.clone(),
+                ))
+                .expect("Unable to send to console thread")
+        });
     }
     /// Advance the console by a number of instructions
     pub fn advance_instructions(&mut self, instructions: u32, settings: AdvanceSettings) {

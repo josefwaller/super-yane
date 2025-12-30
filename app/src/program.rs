@@ -142,6 +142,7 @@ impl Display for InfoDisplay {
 pub enum Message {
     NewFrame(),
     AdvanceInstructions(u32),
+    AdvanceFrames(u32),
     OnEvent(Event),
     SetRamPage(usize),
     ChangePaused(bool),
@@ -303,6 +304,9 @@ impl Program {
             }
             Message::OnEvent(e) => {
                 return self.handle_input(e);
+            }
+            Message::AdvanceFrames(n) => {
+                self.engine.advance_frames(n, self.settings.clone());
             }
             Message::NewFrame() => {
                 let ft = Instant::now();
@@ -530,6 +534,7 @@ impl Program {
                         button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
                         button("RESET").on_press(Message::Reset),
                         button("ADVANCE SCANLINE").on_press(Message::AdvanceInstructions(1364)),
+                        button("ADVANCE FRAME").on_press(Message::AdvanceFrames(1)),
                         button("ADVANCE 500").on_press(Message::AdvanceInstructions(500))
                     ],
                     row![text(format!(
@@ -775,6 +780,18 @@ impl Program {
                 "VRAM INC mode",
                 self.engine.console().ppu().vram_increment_mode,
                 "{:?}"
+            ),
+            ppu_val!("OAM Nametable Addr (word)", oam_name_addr, "{:04X}"),
+            table_row!(
+                "OAM Nametable Addr (byte)",
+                self.engine.console().ppu().oam_name_addr * 2,
+                "{:04X}"
+            ),
+            ppu_val!("OAM Nametable Select (word)", oam_name_select, "{:04X}"),
+            table_row!(
+                "OAM Nametable Select (byte)",
+                self.engine.console().ppu().oam_name_select * 2,
+                "{:04X}"
             ),
             ppu_val!("Color math SRC", color_math_src),
             ppu_val!("Fixed Color", fixed_color),

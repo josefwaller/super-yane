@@ -99,6 +99,7 @@ pub struct Ppu {
     pub oam_sizes: [(usize, usize); 2],
     // Internal OAM address
     pub oam_addr: usize,
+    last_written_oam_addr: usize,
     pub oam_name_addr: usize,
     pub oam_name_select: usize,
     pub oam_latch: u8,
@@ -184,6 +185,7 @@ impl Default for Ppu {
             screen_buffer: [0; 256 * 240],
             dot: 0,
             oam_addr: 0,
+            last_written_oam_addr: 0,
             oam_name_addr: 0,
             oam_sizes: [(8, 8); 2],
             oam_name_select: 0x1000,
@@ -233,7 +235,7 @@ impl Ppu {
                 open_bus
             }
             0x2138 => {
-                warn!("Read from OAMDATAREAD");
+                warn!("Read from OAMDATA");
                 0
             }
             0x2139 => {
@@ -316,10 +318,6 @@ impl Ppu {
             0x2101 => {
                 self.oam_name_addr = (value as usize & 0x03) << 13;
                 self.oam_name_select = ((value as usize & 0x18) + 0x08) << (12 - 3);
-                debug!(
-                    "Write to OAM NAME SELECT {:04X} {:04X}",
-                    self.oam_name_select, self.oam_name_select
-                );
                 let size_select = (value & 0xE0) >> 5;
                 self.oam_sizes = [
                     match size_select {
@@ -340,9 +338,11 @@ impl Ppu {
             }
             0x2102 => {
                 self.oam_addr = (self.oam_addr & 0x200) | (2 * value as usize);
+                self.last_written_oam_addr = self.oam_addr;
             }
             0x2103 => {
                 self.oam_addr = (self.oam_addr & 0x1FF) | (0x200 * (value as usize & 0x01));
+                self.last_written_oam_addr = self.oam_addr;
                 // TODO: OAM Priority bit
             }
             0x2104 => {
@@ -664,9 +664,6 @@ impl Ppu {
     /// Write a single byte to OAM
     fn write_oam_byte(&mut self, addr: usize, value: u8) {
         let addr = addr % (0x220);
-        if addr > 0x220 {
-            debug!("Addr {:04X}", addr);
-        }
         if addr < 0x200 {
             let sprite_index = (addr / 4) % self.oam_sprites.len();
             let sprite = &mut self.oam_sprites[sprite_index];
@@ -948,6 +945,7 @@ impl Ppu {
                 if y == vblank_scanline && x == 0 {
                     debug!("VBLANK START");
                     self.vblank = true;
+                    self.oam_addr = self.last_written_oam_addr;
                 }
                 if x == 0 {
                     // Clear out data from previous line
@@ -1261,10 +1259,18 @@ impl Ppu {
         })
     }
     pub fn sprite_tile_slice_addr(&self, s: &Sprite, tile_y: usize) -> usize {
-        let tile_index = s.tile_index + 16 * tile_y;
-        let slice_addr =
-            2 * (self.oam_name_addr + s.name_select * self.oam_name_select) + 32 * tile_index;
-        slice_addr
+        let tile_index = (s.name_select << 8) + s.tile_index + 16 * tile_y;
+        let base_addr = 2 * self.oam_name_addr;
+        // Sprites are always 4bpp
+        const BYTES_PER_SPRITE: usize = 4 * 8;
+        if BYTES_PER_SPRITE * tile_index < 0x2000 {
+            base_addr + BYTES_PER_SPRITE * tile_index
+        } else {
+            base_addr + 2 * self.oam_name_select + (BYTES_PER_SPRITE * tile_index) - 0x2000
+        }
+        // let slice_addr =
+        //     2 * (self.oam_name_addr + s.name_select * self.oam_name_select) + 32 * tile_index;
+        // slice_addr
     }
     pub fn can_write_vram(&self) -> bool {
         // self.forced_blanking || self.is_in_vblank()
