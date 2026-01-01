@@ -17,3 +17,4 @@ __pycache__
 **/**.sy.bin
 **/profile.json
 samples.wav
+**/disassembly.txt

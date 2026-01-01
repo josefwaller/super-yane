@@ -1,7 +1,7 @@
 use derive_new::new;
 use log::*;
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     sync::mpsc::{self, Receiver, Sender},
     thread::{self},
     time::Duration,
@@ -10,7 +10,7 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
-use crate::instruction_snapshot::InstructionSnapshot;
+use crate::{disassembler, instruction_snapshot::InstructionSnapshot};
 
 /// Misc settings for advancing the emulator
 #[derive(Default, Clone)]
@@ -19,11 +19,17 @@ pub struct AdvanceSettings {
     pub log_cpu: bool,
 }
 
-/// Command send to the emulation thread
-pub enum Command {
+#[derive(Debug, Clone, PartialEq)]
+pub enum AdvanceAmount {
     MasterCycles(u64),
     Instructions(u32),
-    ToVBlank,
+    Frames(usize),
+    StartVBlank,
+    EndVBlank,
+}
+/// Command send to the emulation thread
+pub enum Command {
+    Advance(AdvanceAmount),
     LoadRom(Vec<u8>),
     LoadSavestate(Console),
     Reset,
@@ -32,11 +38,18 @@ pub enum Command {
 #[derive(new)]
 pub struct UpdateEmuPayload {
     /// How much to advance the emulator by
-    advance_by: Command,
+    command: Command,
     /// The current input
     input: [InputPort; 2],
     /// The settings
     settings: AdvanceSettings,
+}
+
+/// The Payload to send data back to the main thread after finishing emulation
+#[derive(new)]
+pub struct DoneEmuPayload {
+    console: Console,
+    disassembly: BTreeMap<usize, String>,
 }
 
 /// The payload sent every frame from the emulator thread containing output information
@@ -50,8 +63,9 @@ pub struct StreamPayload {
 /// Runs the application on a separate thread and sends data back and forth
 pub struct Engine {
     console: Console,
+    pub disassembly: BTreeMap<usize, String>,
     sender: Sender<UpdateEmuPayload>,
-    console_receiver: Receiver<Console>,
+    emu_data_receiver: Receiver<DoneEmuPayload>,
     stream_receiver: Receiver<StreamPayload>,
     pub input_ports: [InputPort; 2],
     /// The RGB data from the previous fully rendered frame
@@ -63,8 +77,8 @@ impl Engine {
     pub fn new() -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
-        // Send the console back to the main thread after emulating
-        let (console_sender, console_receiver) = mpsc::channel::<Console>();
+        // Send data back to the main thread after emulating
+        let (emu_data_sender, emu_data_receiver) = mpsc::channel::<DoneEmuPayload>();
         // Send new frame data every time a new frame is generated
         let (stream_sender, stream_receiver) = mpsc::channel::<StreamPayload>();
 
@@ -73,20 +87,56 @@ impl Engine {
             .spawn(move || {
                 use Command::*;
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
+                let mut disassembly = BTreeMap::<usize, String>::new();
                 loop {
                     let payload = receiver.recv().unwrap();
                     console.input_ports_mut()[0] = payload.input[0];
-                    match payload.advance_by {
-                        MasterCycles(n) => {
-                            let goal_cycles = console.total_master_clocks() + n;
-                            while *console.total_master_clocks() < goal_cycles {
-                                let vblank = console.ppu().is_in_vblank();
-                                if payload.settings.log_cpu {
-                                    let inst = InstructionSnapshot::from(&console);
-                                    debug!("{}", inst);
+                    /// Advance by 1 instruction
+                    macro_rules! advance {
+                        () => {
+                            let vblank = console.ppu().is_in_vblank();
+                            console.advance_instructions(1);
+                            if payload.settings.log_cpu {
+                                let inst = InstructionSnapshot::from(&console);
+                                info!("{}", inst);
+                            }
+                            if !disassembly.contains_key(&console.pc()) {
+                                // disassembly.insert(
+                                //     console.pc(),
+                                //     disassembler::Instruction::from_console(&console).to_string(),
+                                // );
+                            }
+                            if vblank && !console.ppu().is_in_vblank() {
+                                stream_sender
+                                    .send(StreamPayload::new(
+                                        console.ppu().screen_data_rgb(),
+                                        console.apu_mut().sample_queue(),
+                                    ))
+                                    .expect("Unable to send frame data");
+                            }
+                        };
+                    }
+                    match payload.command {
+                        Advance(a) => {
+                            use AdvanceAmount::*;
+                            match a {
+                                MasterCycles(n) => {
+                                    let goal_cycles = console.total_master_clocks() + n;
+                                    while *console.total_master_clocks() < goal_cycles {
+                                        advance!();
+                                    }
                                 }
-                                console.advance_instructions(1);
-                                if vblank && !console.ppu().is_in_vblank() {
+                                Instructions(instructions) => {
+                                    (0..instructions).for_each(|_| {
+                                        advance!();
+                                    });
+                                }
+                                StartVBlank => {
+                                    let mut vblank = console.ppu().is_in_vblank();
+                                    while !vblank && console.ppu().is_in_vblank() {
+                                        vblank = console.ppu().is_in_vblank();
+                                        advance!();
+                                    }
                                     stream_sender
                                         .send(StreamPayload::new(
                                             console.ppu().screen_data_rgb(),
@@ -94,33 +144,13 @@ impl Engine {
                                         ))
                                         .expect("Unable to send frame data");
                                 }
+                                _ => todo!(),
                             }
-                            console_sender
-                                .send(console.clone())
-                                .expect("Unable to send console to main thread");
-                        }
-                        Instructions(instructions) => {
-                            console.advance_instructions(instructions);
-                            console_sender
-                                .send(console.clone())
-                                .expect("Unable to send console back to main thread");
-                        }
-                        ToVBlank => {
-                            let mut vblank = console.ppu().is_in_vblank();
-                            while !vblank && console.ppu().is_in_vblank() {
-                                vblank = console.ppu().is_in_vblank();
-                                console.advance_instructions(1);
-                            }
-                            debug!("Done advancing");
-                            stream_sender
-                                .send(StreamPayload::new(
-                                    console.ppu().screen_data_rgb(),
-                                    console.apu_mut().sample_queue(),
-                                ))
-                                .expect("Unable to send frame data");
-
-                            console_sender
-                                .send(console.clone())
+                            emu_data_sender
+                                .send(DoneEmuPayload {
+                                    console: console.clone(),
+                                    disassembly: disassembly.clone(),
+                                })
                                 .expect("Unable to send console to main thread");
                         }
                         LoadRom(bytes) => {
@@ -141,7 +171,8 @@ impl Engine {
             console: Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc")),
             sender,
             stream_receiver,
-            console_receiver,
+            emu_data_receiver,
+            disassembly: BTreeMap::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 4]; 256 * 240],
             samples: VecDeque::new(),
@@ -175,28 +206,17 @@ impl Engine {
             (dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64).floor() as u64;
         self.sender
             .send(UpdateEmuPayload::new(
-                Command::MasterCycles(cycles),
+                Command::Advance(AdvanceAmount::MasterCycles(cycles)),
                 self.input_ports.clone(),
                 settings,
             ))
             .expect("Unable to send to console thread");
     }
-    pub fn advance_frames(&mut self, num_frames: u32, settings: AdvanceSettings) {
-        (0..num_frames).for_each(|_| {
-            self.sender
-                .send(UpdateEmuPayload::new(
-                    Command::ToVBlank,
-                    self.input_ports.clone(),
-                    settings.clone(),
-                ))
-                .expect("Unable to send to console thread")
-        });
-    }
     /// Advance the console by a number of instructions
-    pub fn advance_instructions(&mut self, instructions: u32, settings: AdvanceSettings) {
+    pub fn advance_amount(&mut self, amount: AdvanceAmount, settings: AdvanceSettings) {
         self.sender
             .send(UpdateEmuPayload::new(
-                Command::Instructions(instructions),
+                Command::Advance(amount),
                 self.input_ports.clone(),
                 settings,
             ))
@@ -215,8 +235,11 @@ impl Engine {
 
     pub fn on_frame(&mut self) {
         // Update console
-        match self.console_receiver.try_recv() {
-            Ok(c) => self.console = c,
+        match self.emu_data_receiver.try_recv() {
+            Ok(d) => {
+                self.console = d.console;
+                self.disassembly = d.disassembly;
+            }
             Err(_) => {}
         }
         // Update screen data

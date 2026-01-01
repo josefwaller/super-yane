@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::{
     collections::VecDeque,
     fmt::Display,
@@ -6,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    engine::{AdvanceSettings, Engine},
+    engine::{AdvanceAmount, AdvanceSettings, Engine},
     table::{cell, table},
     utils::vram_to_rgba,
     widgets::{background_table, screen::Screen, text_table, vertical_table},
@@ -33,12 +34,10 @@ use iced::widget::text;
 
 use rfd::FileDialog;
 use sdl2::audio::AudioQueue;
-use spc700::{OpcodeData as Spc700OpcodeData, format_address_modes};
 use super_yane::{
     Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8, utils::color_to_rgb_bytes,
 };
 use wavers::{Samples, write};
-use wdc65816::{format_address_mode, opcode_data};
 
 use crate::utils::utils::{hex_fmt, table_row};
 use crate::{
@@ -300,13 +299,21 @@ impl Program {
                 debug!("Closing application");
                 let samples = Samples::new(self.samples.clone().into_boxed_slice());
                 write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
+                let disassembly_lines = self
+                    .engine
+                    .disassembly
+                    .iter()
+                    .map(|(pc, i)| format!("{:06X}\t{}", pc, i))
+                    .join("\n");
+                std::fs::write(Path::new("./disassembly.txt"), &disassembly_lines).unwrap();
                 return window::latest().and_then(window::close);
             }
             Message::OnEvent(e) => {
                 return self.handle_input(e);
             }
             Message::AdvanceFrames(n) => {
-                self.engine.advance_frames(n, self.settings.clone());
+                self.engine
+                    .advance_amount(AdvanceAmount::Frames(n as usize), self.settings.clone());
             }
             Message::NewFrame() => {
                 let ft = Instant::now();
@@ -375,8 +382,10 @@ impl Program {
                 }
             }
             Message::AdvanceInstructions(num_instructions) => {
-                self.engine
-                    .advance_instructions(num_instructions, self.settings.clone());
+                self.engine.advance_amount(
+                    AdvanceAmount::Instructions(num_instructions),
+                    self.settings.clone(),
+                );
             }
             Message::SetRamPage(ram_page) => {
                 const BYTES_PER_PAGE: usize = 0x20 * 8;
@@ -548,7 +557,7 @@ impl Program {
                     iced::Background::Color(Color::BLACK)
                 )),
                 column![
-                    container(self.instructions()).height(Length::Fill),
+                    container(self.disassembly()).height(Length::Fill),
                     row![
                         text("Log CPU"),
                         checkbox(self.settings.log_cpu).on_toggle(Message::ToggleLogCpu),
@@ -933,63 +942,21 @@ impl Program {
             },
         ))
     }
-    fn instructions(&self) -> impl Into<Element<Message>> {
-        column![
-            pick_list(
-                [InstDisplay::Cpu, InstDisplay::Apu],
-                Some(self.inst_display.clone()),
-                Message::SetInstDisplay,
-            ),
-            container(match self.inst_display {
-                InstDisplay::Apu => scrollable(Column::with_children(
-                    self.previous_apu_snapshots
-                        .iter()
-                        .chain([ApuSnapshot::from(&self.engine.console())].iter())
-                        .enumerate()
-                        .map(|(i, s)| {
-                            let data = Spc700OpcodeData::from_opcode(s.opcode);
-                            row![
-                                text(format!("{:04X}", s.cpu.pc)),
-                                text(format!("{:02X}", s.opcode)),
-                                text(format!("{:4}", data.name)),
-                                text(format!(
-                                    "{:8}",
-                                    format_address_modes(&data.addr_modes, &s.operands,)
-                                )),
-                            ]
-                            .spacing(10)
-                            .into()
-                        })
-                ))
-                .width(Length::Fill)
-                .anchor_bottom()
-                .spacing(10),
-                InstDisplay::Cpu => scrollable(Column::with_children(
-                    self.previous_instruction_snapshots
-                        .iter()
-                        .chain([InstructionSnapshot::from(&self.engine.console())].iter())
-                        .enumerate()
-                        .map(|(i, s)| {
-                            let data =
-                                opcode_data(s.opcode, s.cpu.p.a_is_16bit(), s.cpu.p.xy_is_16bit());
-                            row![
-                                text(format!("{:02X}", s.cpu.pbr)),
-                                text(format!("{:04X}", s.cpu.pc)),
-                                text(format!("{:02X}", s.opcode)),
-                                text(format!(
-                                    "{:6}",
-                                    format_address_mode(data.addr_mode, &s.operands, data.bytes,)
-                                )),
-                            ]
-                            .spacing(10)
-                            .into()
-                        }),
-                ))
-                .width(Length::Fill)
-                .spacing(10)
-                .anchor_bottom(),
-            })
-        ]
+    fn disassembly(&self) -> impl Into<Element<Message>> {
+        scrollable(Column::with_children(self.engine.disassembly.iter().map(
+            |(pc, inst)| {
+                row![
+                    text(format!("{:06X}", pc)).color(if self.engine.console().pc() == *pc {
+                        color!(0xFF0000)
+                    } else {
+                        color!(0xFFFFFF)
+                    }),
+                    text(inst)
+                ]
+                .spacing(20)
+                .into()
+            },
+        )))
         .width(Length::Fixed(200.0))
     }
 
