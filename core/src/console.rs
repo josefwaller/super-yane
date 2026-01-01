@@ -81,7 +81,10 @@ impl ExternalArchitecture {
             let a = addr & 0xFFFF;
             match a {
                 0x0000..0x2000 => (self.ram[a], 6),
-                0x2000..0x2100 => (0, 6),
+                0x2000..0x2100 => {
+                    warn!("READ {:04X}", a);
+                    (0, 6)
+                }
                 0x2100..0x2140 => (self.ppu.read_byte(a, self.open_bus_value), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
                 0x2180 => {
@@ -224,6 +227,9 @@ impl ExternalArchitecture {
             // Check for non-rom area
             if a < 0x40_0000 && a & 0xFFFF < 0x8000 {
                 let a = a % 0x8000;
+                if a == 0x03C1 {
+                    debug!("WRITE {:02X}", value);
+                }
                 match a {
                     (0..0x2000) => {
                         self.ram[a] = value;
@@ -252,7 +258,7 @@ impl ExternalArchitecture {
                         6
                     }
                     0x4208 => {
-                        self.h_timer = (value as u16 & 0x01) | (self.h_timer & 0xFF);
+                        self.h_timer = ((value as u16 & 0x01) << 8) | (self.h_timer & 0xFF);
                         6
                     }
                     0x4209 => {
@@ -261,7 +267,7 @@ impl ExternalArchitecture {
                         6
                     }
                     0x420A => {
-                        self.v_timer = (value as u16 & 0x01) | (self.v_timer & 0xFF);
+                        self.v_timer = ((value as u16 & 0x01) << 8) | (self.v_timer & 0xFF);
                         6
                     }
                     0x420B => {
@@ -271,11 +277,12 @@ impl ExternalArchitecture {
                                 self.dma_channels[i].num_bytes_transferred = 0;
                                 if i == 0 {
                                     debug!(
-                                        "START DMA 0 {:02X} {:04X} -> {:04X} {:04X}",
+                                        "START DMA 0 {:02X} {:04X} -> {:04X} {:04X} (OAMADDR={:04X})",
                                         self.dma_channels[1].src_bank,
                                         self.dma_channels[i].src_addr,
                                         self.dma_channels[i].dest_addr,
-                                        self.dma_channels[i].byte_counter
+                                        self.dma_channels[i].byte_counter,
+                                        self.ppu.oam_addr
                                     );
                                 }
                             }
