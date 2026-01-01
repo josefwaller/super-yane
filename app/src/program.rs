@@ -804,6 +804,8 @@ impl Program {
             ),
             ppu_val!("Color math SRC", color_math_src),
             ppu_val!("Fixed Color", fixed_color),
+            table_row!("Window 0", self.engine.console().ppu().windows[0], "{}"),
+            table_row!("Window 1", self.engine.console().ppu().windows[1], "{}"),
             ppu_val!("Color Window Main", color_window_main_region),
             ppu_val!("Color Window Sub", color_window_sub_region),
             (

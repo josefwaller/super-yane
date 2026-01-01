@@ -75,6 +75,10 @@ pub struct Ppu {
     pub bg_v_off: u32,
     pub obj_main_enable: bool,
     pub obj_subscreen_enable: bool,
+    /// Whether to apply windows to the main screen for OBJ layers
+    pub windows_enabled_obj_main: bool,
+    /// Whether to apply windows to the subscreen for OBJ layers
+    pub windows_enabled_obj_sub: bool,
     pub vram_increment_amount: usize,
     pub vram_increment_mode: VramIncMode,
     pub vram_addr: usize,
@@ -193,6 +197,8 @@ impl Default for Ppu {
             oam_sprites: [Sprite::default(); 0x80],
             oam_buffers: [[None; 0x100]; 4],
             windows: [Window::default(); 2],
+            windows_enabled_obj_main: false,
+            windows_enabled_obj_sub: false,
             color_blend_mode: ColorBlendMode::Add,
             color_math_enable_backdrop: false,
             color_math_enable_obj: false,
@@ -549,16 +555,20 @@ impl Ppu {
                 self.obj_subscreen_enable = bit(value, 4);
             }
             // TODO: OAM sprite window enabled/disabled for main screen/subscreen
-            0x212E => self
-                .backgrounds
-                .iter_mut()
-                .enumerate()
-                .for_each(|(i, b)| b.windows_enabled_main = bit(value, i)),
-            0x212F => self
-                .backgrounds
-                .iter_mut()
-                .enumerate()
-                .for_each(|(i, b)| b.windows_enabled_sub = bit(value, i)),
+            0x212E => {
+                self.backgrounds
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, b)| b.windows_enabled_main = bit(value, i));
+                self.windows_enabled_obj_main = bit(value, 4);
+            }
+            0x212F => {
+                self.backgrounds
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, b)| b.windows_enabled_sub = bit(value, i));
+                self.windows_enabled_obj_sub = bit(value, 4);
+            }
             0x2130 => {
                 self.direct_color = bit(value, 0);
                 self.color_math_src = if bit(value, 1) {
@@ -1094,30 +1104,28 @@ impl Ppu {
                         };
                     }
                     // Calculate sprite window values
-                    let sprite_windows: [bool; 2] = core::array::from_fn(|i| {
-                        if self.windows[i].enabled_sprite {
-                            self.windows[i].invert_sprite ^ window_vals[i]
-                        } else {
-                            false
-                        }
-                    });
+                    let sprite_windows: [bool; 2] =
+                        core::array::from_fn(|i| self.windows[i].invert_sprite ^ window_vals[i]);
                     // Calculate the actual resulting sprite window vaue
-                    let sw = if sprite_windows[0] {
-                        if sprite_windows[1] { false } else { true }
-                    } else {
+                    let sw = if self.windows[0].enabled_sprite {
+                        if self.windows[1].enabled_sprite {
+                            self.sprite_window_logic
+                                .compute(sprite_windows[0], sprite_windows[1])
+                        } else {
+                            sprite_windows[0]
+                        }
+                    } else if self.windows[1].enabled_sprite {
                         sprite_windows[1]
+                    } else {
+                        false
                     };
                     // Get the pixel from a sprite layer with a given priority, or None
                     macro_rules! spr {
                         ($index: expr) => {
                             (
-                                if sw {
-                                    None
-                                } else {
-                                    self.oam_buffers[$index][x]
-                                },
-                                self.obj_main_enable,
-                                self.obj_subscreen_enable,
+                                self.oam_buffers[$index][x],
+                                self.obj_main_enable && !(sw && self.windows_enabled_obj_main),
+                                self.obj_subscreen_enable && !(sw && self.windows_enabled_obj_sub),
                                 // Todo: check if sprite is using palette 4-7
                                 false,
                             )
