@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    disassembler::Label,
     engine::{AdvanceAmount, AdvanceSettings, Engine},
     table::{cell, table},
     utils::vram_to_rgba,
@@ -960,34 +961,52 @@ impl Program {
             .unwrap_or(0);
         const NUM_LINES_TO_SHOW: usize = 30;
         scrollable(Column::with_children(
-            [row!(text(format!("{:6}", "PC")), text("INST")).into()]
-                .into_iter()
-                .chain(
-                    self.engine
-                        .disassembler
-                        .instructions()
-                        .iter()
-                        .skip(if index >= NUM_LINES_TO_SHOW / 2 {
-                            index - NUM_LINES_TO_SHOW / 2
-                        } else {
-                            0
-                        })
-                        .take(NUM_LINES_TO_SHOW)
-                        .map(|(pc, inst)| {
-                            row![
-                                text(format!("{:06X}", pc)).color(if console_pc == *pc {
-                                    color!(0xFF0000)
-                                } else {
-                                    color!(0xFFFFFF)
-                                }),
-                                text(inst.to_string())
-                            ]
-                            .spacing(20)
-                            .into()
-                        }),
-                ),
+            [row!(
+                text(format!("{:6}", "PC")),
+                text(format!("{:16}", "LABEL")),
+                text("INST")
+            )
+            .spacing(20)
+            .into()]
+            .into_iter()
+            .chain(
+                self.engine
+                    .disassembler
+                    .instructions()
+                    .iter()
+                    .skip(if index >= NUM_LINES_TO_SHOW / 2 {
+                        index - NUM_LINES_TO_SHOW / 2
+                    } else {
+                        0
+                    })
+                    .take(NUM_LINES_TO_SHOW)
+                    .map(|(pc, inst)| {
+                        row![
+                            text(format!("{:06X}", pc)).color(if console_pc == *pc {
+                                color!(0xFF0000)
+                            } else {
+                                color!(0xFFFFFF)
+                            }),
+                            text(format!(
+                                "{:16}",
+                                self.engine
+                                    .disassembler
+                                    .labels()
+                                    .get(pc)
+                                    .map(|l| match l {
+                                        Label::EntryPoint => "entry_point:".to_string(),
+                                        Label::Location(name) => format!("{}:", name),
+                                    })
+                                    .unwrap_or("".to_string())
+                            )),
+                            text(inst.to_string())
+                        ]
+                        .spacing(20)
+                        .into()
+                    }),
+            ),
         ))
-        .width(Length::Fixed(200.0))
+        .width(Length::Fixed(300.0))
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

@@ -1,6 +1,7 @@
 use super_yane::Console;
-use wdc65816::{format_address_mode, opcode_data};
+use wdc65816::{OpcodeData, format_address_mode, opcode_data};
 
+#[derive(Clone, Copy)]
 pub struct Instruction {
     opcode: u8,
     operands: [u8; 3],
@@ -27,5 +28,11 @@ impl Instruction {
             a: value.cpu().p.a_is_16bit(),
             xy: value.cpu().p.xy_is_16bit(),
         }
+    }
+    pub fn data(&self) -> OpcodeData {
+        opcode_data(self.opcode, self.a, self.xy)
+    }
+    pub fn operands(&self) -> &[u8] {
+        &self.operands[0..(self.data().bytes as usize)]
     }
 }

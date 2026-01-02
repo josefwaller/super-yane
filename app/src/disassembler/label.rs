@@ -1,4 +1,4 @@
 pub enum Label {
     EntryPoint,
-    Location(usize),
+    Location(String),
 }

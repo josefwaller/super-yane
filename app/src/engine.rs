@@ -153,6 +153,14 @@ impl Engine {
                         }
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
+                            disassembler.add_current_instruction(&console);
+                            disassembler.add_entrypoint(&console);
+                            emu_data_sender
+                                .send(DoneEmuPayload {
+                                    console: console.clone(),
+                                    disassembler,
+                                })
+                                .expect("Unable to send console to main thread");
                         }
                         LoadSavestate(c) => {
                             console = c;
