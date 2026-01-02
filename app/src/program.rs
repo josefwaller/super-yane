@@ -993,7 +993,7 @@ impl Program {
                                     })
                                     .unwrap_or("".to_string())
                             )),
-                            text(inst.to_string())
+                            text(inst.to_string(self.engine.disassembler.labels()))
                         ]
                         .spacing(20)
                         .into()

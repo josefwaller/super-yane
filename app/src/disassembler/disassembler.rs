@@ -23,7 +23,7 @@ impl<'a> Iterator for LinesIterator<'a> {
             .instructions
             .iter()
             .nth(self.instruction_index)
-            .map(|(pc, i)| (pc, format!("{:8}{}", " ", i.to_string())));
+            .map(|(pc, i)| (pc, format!("{:8}{}", " ", i.to_string(self.labels))));
         let lab = self
             .labels
             .iter()
@@ -81,13 +81,7 @@ impl Disassembler {
             let inst = Instruction::from_console(&console);
             self.instructions
                 .insert(console.cartridge().transform_address(console.pc()), inst);
-            // Relative address
-            if [BCC, BCS, BNE, BEQ, BPL, BMI, BVC, BVS, BRA, BRL].contains(&inst.data().code) {
-                // Add a label (+2 to account for the PC incrementing during execution)
-                let addr = (console.pc() as isize
-                    + i8::from_le_bytes([inst.operands()[0]]) as isize)
-                    as usize
-                    + 2;
+            if let Some(addr) = inst.get_jump_addr(console.pc()) {
                 self.labels.insert(
                     console.cartridge().transform_address(addr),
                     Label::Location(get_label_name("", addr)),
