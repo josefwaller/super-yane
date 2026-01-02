@@ -300,13 +300,7 @@ impl Program {
                 debug!("Closing application");
                 let samples = Samples::new(self.samples.clone().into_boxed_slice());
                 write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
-                let disassembly_lines = self
-                    .engine
-                    .disassembler
-                    .instructions()
-                    .iter()
-                    .map(|(pc, i)| format!("{:06X}\t{}", pc, i.to_string()))
-                    .join("\n");
+                let disassembly_lines = self.engine.disassembler.lines().join("\n");
                 std::fs::write(Path::new("./disassembly.txt"), &disassembly_lines).unwrap();
                 return window::latest().and_then(window::close);
             }
