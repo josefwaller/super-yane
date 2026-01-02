@@ -624,6 +624,7 @@ impl Console {
         self.rest.cartridge.read_byte(self.pc())
     }
     /// Get the current program counter of the console
+    /// TODO: Move this to either CPU or wdc65816
     pub fn pc(&self) -> usize {
         self.cpu.core.pbr as usize * 0x10000 + self.cpu.core.pc as usize
     }

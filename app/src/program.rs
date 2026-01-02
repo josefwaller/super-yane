@@ -301,9 +301,10 @@ impl Program {
                 write(Path::new("./samples.wav"), &samples, 32_000, 1).unwrap();
                 let disassembly_lines = self
                     .engine
-                    .disassembly
+                    .disassembler
+                    .instructions()
                     .iter()
-                    .map(|(pc, i)| format!("{:06X}\t{}", pc, i))
+                    .map(|(pc, i)| format!("{:06X}\t{}", pc, i.to_string()))
                     .join("\n");
                 std::fs::write(Path::new("./disassembly.txt"), &disassembly_lines).unwrap();
                 return window::latest().and_then(window::close);
@@ -945,20 +946,47 @@ impl Program {
         ))
     }
     fn disassembly(&self) -> impl Into<Element<Message>> {
-        scrollable(Column::with_children(self.engine.disassembly.iter().map(
-            |(pc, inst)| {
-                row![
-                    text(format!("{:06X}", pc)).color(if self.engine.console().pc() == *pc {
-                        color!(0xFF0000)
-                    } else {
-                        color!(0xFFFFFF)
-                    }),
-                    text(inst)
-                ]
-                .spacing(20)
-                .into()
-            },
-        )))
+        let console_pc = self
+            .engine
+            .console()
+            .cartridge()
+            .transform_address(self.engine.console().pc());
+        let index = self
+            .engine
+            .disassembler
+            .instructions()
+            .iter()
+            .position(|(pc, _)| *pc == console_pc)
+            .unwrap_or(0);
+        const NUM_LINES_TO_SHOW: usize = 30;
+        scrollable(Column::with_children(
+            [row!(text(format!("{:6}", "PC")), text("INST")).into()]
+                .into_iter()
+                .chain(
+                    self.engine
+                        .disassembler
+                        .instructions()
+                        .iter()
+                        .skip(if index >= NUM_LINES_TO_SHOW / 2 {
+                            index - NUM_LINES_TO_SHOW / 2
+                        } else {
+                            0
+                        })
+                        .take(NUM_LINES_TO_SHOW)
+                        .map(|(pc, inst)| {
+                            row![
+                                text(format!("{:06X}", pc)).color(if console_pc == *pc {
+                                    color!(0xFF0000)
+                                } else {
+                                    color!(0xFFFFFF)
+                                }),
+                                text(inst.to_string())
+                            ]
+                            .spacing(20)
+                            .into()
+                        }),
+                ),
+        ))
         .width(Length::Fixed(200.0))
     }
 

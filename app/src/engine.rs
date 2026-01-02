@@ -10,7 +10,10 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
-use crate::{disassembler, instruction_snapshot::InstructionSnapshot};
+use crate::{
+    disassembler::{self, Disassembler},
+    instruction_snapshot::InstructionSnapshot,
+};
 
 /// Misc settings for advancing the emulator
 #[derive(Default, Clone)]
@@ -49,7 +52,7 @@ pub struct UpdateEmuPayload {
 #[derive(new)]
 pub struct DoneEmuPayload {
     console: Console,
-    disassembly: BTreeMap<usize, String>,
+    disassembler: Disassembler,
 }
 
 /// The payload sent every frame from the emulator thread containing output information
@@ -63,7 +66,7 @@ pub struct StreamPayload {
 /// Runs the application on a separate thread and sends data back and forth
 pub struct Engine {
     console: Console,
-    pub disassembly: BTreeMap<usize, String>,
+    pub disassembler: Disassembler,
     sender: Sender<UpdateEmuPayload>,
     emu_data_receiver: Receiver<DoneEmuPayload>,
     stream_receiver: Receiver<StreamPayload>,
@@ -87,9 +90,9 @@ impl Engine {
             .spawn(move || {
                 use Command::*;
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
-                let mut disassembly = BTreeMap::<usize, String>::new();
                 loop {
                     let payload = receiver.recv().unwrap();
+                    let mut disassembler = Disassembler::new();
                     console.input_ports_mut()[0] = payload.input[0];
                     /// Advance by 1 instruction
                     macro_rules! advance {
@@ -100,12 +103,7 @@ impl Engine {
                                 let inst = InstructionSnapshot::from(&console);
                                 info!("{}", inst);
                             }
-                            if !disassembly.contains_key(&console.pc()) {
-                                // disassembly.insert(
-                                //     console.pc(),
-                                //     disassembler::Instruction::from_console(&console).to_string(),
-                                // );
-                            }
+                            disassembler.add_current_instruction(&console);
                             if vblank && !console.ppu().is_in_vblank() {
                                 stream_sender
                                     .send(StreamPayload::new(
@@ -149,7 +147,7 @@ impl Engine {
                             emu_data_sender
                                 .send(DoneEmuPayload {
                                     console: console.clone(),
-                                    disassembly: disassembly.clone(),
+                                    disassembler,
                                 })
                                 .expect("Unable to send console to main thread");
                         }
@@ -172,7 +170,7 @@ impl Engine {
             sender,
             stream_receiver,
             emu_data_receiver,
-            disassembly: BTreeMap::new(),
+            disassembler: Disassembler::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 4]; 256 * 240],
             samples: VecDeque::new(),
@@ -187,6 +185,7 @@ impl Engine {
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread");
+        self.disassembler = Disassembler::new();
     }
     pub fn load_savestate(&mut self, bytes: &[u8]) {
         let mut console: Console = serde_brief::from_slice(bytes).unwrap();
@@ -236,9 +235,9 @@ impl Engine {
     pub fn on_frame(&mut self) {
         // Update console
         match self.emu_data_receiver.try_recv() {
-            Ok(d) => {
+            Ok(mut d) => {
                 self.console = d.console;
-                self.disassembly = d.disassembly;
+                self.disassembler.merge(&mut d.disassembler);
             }
             Err(_) => {}
         }
