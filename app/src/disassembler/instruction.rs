@@ -48,6 +48,17 @@ impl Instruction {
         if [BCC, BCS, BNE, BEQ, BPL, BMI, BVC, BVS, BRA, BRL].contains(&self.opcode) {
             // Add a label (+2 to account for the PC incrementing during execution)
             Some((pc as isize + i8::from_le_bytes([self.operands()[0]]) as isize) as usize + 2)
+        // Absolute address
+        } else if [JMP_A, JSR_A].contains(&self.opcode) {
+            Some(u16::from_le_bytes(core::array::from_fn(|i| self.operands[i])) as usize)
+        } else if [JMP_AL].contains(&self.opcode) {
+            Some(u32::from_le_bytes(core::array::from_fn(|i| {
+                if i < self.operands.len() {
+                    self.operands[i]
+                } else {
+                    0
+                }
+            })) as usize)
         } else {
             None
         }
