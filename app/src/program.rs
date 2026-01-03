@@ -141,8 +141,8 @@ impl Display for InfoDisplay {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
-    AdvanceInstructions(u32),
-    AdvanceFrames(u32),
+    SetAdvanceAmount(AdvanceAmount),
+    Advance,
     OnEvent(Event),
     SetRamPage(usize),
     ChangePaused(bool),
@@ -211,6 +211,8 @@ pub struct Program {
     pub engine: Engine,
     #[new(value = "AdvanceSettings::default()")]
     settings: AdvanceSettings,
+    #[new(value = "AdvanceAmount::Instructions(1)")]
+    advance_amount: AdvanceAmount,
 }
 
 impl Program {
@@ -307,10 +309,10 @@ impl Program {
             Message::OnEvent(e) => {
                 return self.handle_input(e);
             }
-            Message::AdvanceFrames(n) => {
-                self.engine
-                    .advance_amount(AdvanceAmount::Frames(n as usize), self.settings.clone());
-            }
+            Message::SetAdvanceAmount(advance_amount) => self.advance_amount = advance_amount,
+            Message::Advance => self
+                .engine
+                .advance_amount(self.advance_amount.clone(), self.settings.clone()),
             Message::NewFrame() => {
                 let ft = Instant::now();
                 if !self.is_paused {
@@ -376,12 +378,6 @@ impl Program {
                         .queue_audio(samples.as_slice())
                         .expect("Unable to enqueue audio");
                 }
-            }
-            Message::AdvanceInstructions(num_instructions) => {
-                self.engine.advance_amount(
-                    AdvanceAmount::Instructions(num_instructions),
-                    self.settings.clone(),
-                );
             }
             Message::SetRamPage(ram_page) => {
                 const BYTES_PER_PAGE: usize = 0x20 * 8;
@@ -535,12 +531,17 @@ impl Program {
                         button("OPEN ROM").on_press(Message::LoadRom),
                         button(if self.is_paused { "PLAY" } else { "PAUSE" })
                             .on_press(Message::ChangePaused(!self.is_paused)),
-                        button("NEW SAVESTATE").on_press(Message::CreateSavestate),
-                        button("LOAD SAVESTATE").on_press(Message::LoadSavestate),
+                        button("SAVE").on_press(Message::CreateSavestate),
+                        button("LOAD").on_press(Message::LoadSavestate),
                         button("RESET").on_press(Message::Reset),
-                        button("ADVANCE SCANLINE").on_press(Message::AdvanceInstructions(1364)),
-                        button("ADVANCE FRAME").on_press(Message::AdvanceFrames(1)),
-                        button("ADVANCE 500").on_press(Message::AdvanceInstructions(500))
+                        pick_list([
+                            AdvanceAmount::Instructions(1),
+                            AdvanceAmount::Frames(1),
+                            AdvanceAmount::StartVBlank,
+                            AdvanceAmount::EndVBlank
+                        ], Some(self.advance_amount.clone()),
+                            Message::SetAdvanceAmount),
+                        button("ADVANCE").on_press(Message::Advance)
                     ],
                     row![text(format!(
                         "Total master cycles: {:08}, total APU cycles {:08}, total instructions: {:08}",

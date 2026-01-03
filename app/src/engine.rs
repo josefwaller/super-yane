@@ -2,6 +2,7 @@ use derive_new::new;
 use log::*;
 use std::{
     collections::{BTreeMap, VecDeque},
+    fmt::Display,
     sync::mpsc::{self, Receiver, Sender},
     thread::{self},
     time::Duration,
@@ -24,11 +25,29 @@ pub struct AdvanceSettings {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdvanceAmount {
-    MasterCycles(u64),
+    MasterCycles(u32),
     Instructions(u32),
-    Frames(usize),
+    Frames(u32),
     StartVBlank,
     EndVBlank,
+}
+/// Adds an 's' to string if n is 0 or n > 1
+fn pluralize(string: &str, n: impl Into<u32>) -> String {
+    let n = n.into();
+    format!("{}{}", string, if n == 0 || n > 1 { "s" } else { "" })
+}
+
+impl Display for AdvanceAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AdvanceAmount::*;
+        match self {
+            MasterCycles(n) => write!(f, "{} {}", n, pluralize("master cycle", *n)),
+            Instructions(n) => write!(f, "{} {}", n, pluralize("instruction", *n)),
+            Frames(n) => write!(f, "{} {}", n, pluralize("frame", *n)),
+            StartVBlank => write!(f, "Start VBlank"),
+            EndVBlank => write!(f, "End VBlank"),
+        }
+    }
 }
 /// Command send to the emulation thread
 pub enum Command {
@@ -49,7 +68,6 @@ pub struct UpdateEmuPayload {
 }
 
 /// The Payload to send data back to the main thread after finishing emulation
-#[derive(new)]
 pub struct DoneEmuPayload {
     console: Console,
     disassembler: Disassembler,
@@ -119,7 +137,7 @@ impl Engine {
                             use AdvanceAmount::*;
                             match a {
                                 MasterCycles(n) => {
-                                    let goal_cycles = console.total_master_clocks() + n;
+                                    let goal_cycles = console.total_master_clocks() + n as u64;
                                     while *console.total_master_clocks() < goal_cycles {
                                         advance!();
                                     }
@@ -129,20 +147,29 @@ impl Engine {
                                         advance!();
                                     });
                                 }
+                                Frames(n) => (0..n).for_each(|_| {
+                                    let mut v = console.ppu().is_in_vblank();
+                                    while !(!v && console.ppu().is_in_vblank()) {
+                                        v = console.ppu().is_in_vblank();
+                                        advance!();
+                                    }
+                                }),
                                 StartVBlank => {
                                     let mut vblank = console.ppu().is_in_vblank();
-                                    while !vblank && console.ppu().is_in_vblank() {
+                                    while !(!vblank && console.ppu().is_in_vblank()) {
                                         vblank = console.ppu().is_in_vblank();
                                         advance!();
                                     }
-                                    stream_sender
-                                        .send(StreamPayload::new(
-                                            console.ppu().screen_data_rgb(),
-                                            console.apu_mut().sample_queue(),
-                                        ))
-                                        .expect("Unable to send frame data");
                                 }
-                                _ => todo!(),
+                                EndVBlank => {
+                                    let mut vblank = console.ppu().is_in_vblank();
+                                    while !(vblank && !console.ppu().is_in_vblank()) {
+                                        vblank = console.ppu().is_in_vblank();
+                                        advance!();
+                                    }
+                                }
+                                #[allow(unused)]
+                                _ => unimplemented!("Invalid advance amount {}", a),
                             }
                             emu_data_sender
                                 .send(DoneEmuPayload {
@@ -210,7 +237,7 @@ impl Engine {
     /// Advance the console by a given duration
     pub fn advance_dt(&mut self, dt: Duration, settings: AdvanceSettings) {
         let cycles =
-            (dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64).floor() as u64;
+            (dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64).floor() as u32;
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::Advance(AdvanceAmount::MasterCycles(cycles)),
