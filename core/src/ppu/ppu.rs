@@ -51,7 +51,7 @@ fn default_2bpp_cache() -> Box<[[u8; 8]; 0x10000 / 2]> {
     Box::new([[0; 8]; 0x10000 / 2])
 }
 
-fn default_oam_buffer() -> [[Option<u16>; 0x100]; 4] {
+fn default_oam_buffer() -> [[Option<(u16, bool)>; 0x100]; 4] {
     [[None; 0x100]; 4]
 }
 
@@ -112,7 +112,7 @@ pub struct Ppu {
     /// Buffers of sprite pixels for the current scanline.
     /// One for every sprite layer, ordered by priority
     #[serde(skip, default = "default_oam_buffer")]
-    oam_buffers: [[Option<u16>; 0x100]; 4],
+    oam_buffers: [[Option<(u16, bool)>; 0x100]; 4],
     pub color_blend_mode: ColorBlendMode,
     pub color_math_enable_backdrop: bool,
     pub color_math_enable_obj: bool,
@@ -926,8 +926,12 @@ impl Ppu {
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
                         let buf = &mut buffers[s.priority];
-                        buf[sx as usize] =
-                            buf[sx as usize].or(if p == 0 { None } else { Some(palette[p]) });
+                        let allow_color_math = s.palette_index > 3;
+                        buf[sx as usize] = buf[sx as usize].or(if p == 0 {
+                            None
+                        } else {
+                            Some((palette[p], allow_color_math))
+                        });
                     }
                 })
             }
@@ -1123,11 +1127,11 @@ impl Ppu {
                     macro_rules! spr {
                         ($index: expr) => {
                             (
-                                self.oam_buffers[$index][x],
+                                self.oam_buffers[$index][x].map(|(color, _)| color),
                                 self.obj_main_enable && !(sw && self.windows_enabled_obj_main),
                                 self.obj_subscreen_enable && !(sw && self.windows_enabled_obj_sub),
-                                // Todo: check if sprite is using palette 4-7
-                                false,
+                                self.color_math_enable_obj
+                                    && self.oam_buffers[$index][x].is_none_or(|(_, math)| math),
                             )
                         };
                     }
@@ -1212,7 +1216,7 @@ impl Ppu {
                         ($field: tt) => {{
                             in_order_pixels
                                 .iter()
-                                // todo can probably combine these two lines
+                                // TODO: can probably combine these two lines
                                 .find(|bg_pixel| bg_pixel.0.is_some() && bg_pixel.$field)
                                 .map_or(None, |b| Some((b.0.unwrap(), b.3)))
                         }};

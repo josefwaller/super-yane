@@ -476,8 +476,10 @@ impl Program {
             ]
             .into(),
             InfoDisplay::Oam => {
-                return table::<7usize, Message>(
-                    [" #", "( x, y)", "X", "Tile", "Name", "Size", "Sprite"],
+                return table::<8usize, Message>(
+                    [
+                        " #", "( x, y)", "X", "Tile", "Palette", "Name", "Size", "Sprite",
+                    ],
                     self.engine
                         .console()
                         .ppu()
@@ -491,6 +493,7 @@ impl Program {
                                 cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
                                 cell(format!("{}", u8::from(s.msb_x))).into(),
                                 cell(format!("{:02X}", s.tile_index)).into(),
+                                cell(format!("{:02X}", s.palette_index)).into(),
                                 cell(format!("{:01}", s.name_select)).into(),
                                 cell(format!("{:?}", size)).into(),
                                 canvas(Screen::new(
@@ -800,6 +803,7 @@ impl Program {
                 "{:04X}"
             ),
             ppu_val!("Color math SRC", color_math_src),
+            ppu_val!("Color math blend mode", color_blend_mode),
             ppu_val!("Fixed Color", fixed_color),
             table_row!("Window 0", self.engine.console().ppu().windows[0], "{}"),
             table_row!("Window 1", self.engine.console().ppu().windows[1], "{}"),
