@@ -64,176 +64,216 @@ fn default_screen_buffer() -> [u16; 256 * 240] {
     [0; 256 * 240]
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, new)]
 pub struct Ppu {
-    /// VBlank flag
+    /// VBlank flag value
+    #[new(value = "false")]
     pub vblank: bool,
+    /// Forced blanking flag value
+    #[new(value = "false")]
     pub forced_blanking: bool,
+    /// Brightness value
+    #[new(value = "0xF")]
     pub brightness: u32,
+    /// The current background mode
+    #[new(value = "0")]
     pub bg_mode: u32,
+    /// Whether BG3 is higher priority
+    #[new(value = "false")]
     pub bg3_prio: bool,
+    /// The backgrounds
+    #[new(default)]
     pub backgrounds: [Background; 4],
+    /// The mosaic size
+    #[new(value = "1")]
     pub mosaic_size: usize,
     /// Background H off latch
+    #[new(value = "0")]
     pub bg_h_off: u32,
     /// Background V off latch
+    #[new(value = "0")]
     pub bg_v_off: u32,
+    /// Whether objects are enabled on the main screen
+    #[new(value = "false")]
     pub obj_main_enable: bool,
+    /// Whether objects are enabled on the subscreen
+    #[new(value = "false")]
     pub obj_subscreen_enable: bool,
     /// Whether to apply windows to the main screen for OBJ layers
+    #[new(value = "false")]
     pub windows_enabled_obj_main: bool,
     /// Whether to apply windows to the subscreen for OBJ layers
+    #[new(value = "false")]
     pub windows_enabled_obj_sub: bool,
+    /// How much to increment the VRAM ADDR on every read or write
+    #[new(value = "1")]
     pub vram_increment_amount: usize,
+    /// The current increment mode
+    #[new(value = "VramIncMode::HighReadLowWrite")]
     pub vram_increment_mode: VramIncMode,
+    /// The VRAM ADDR.
+    /// References a VRAM word, not byte.
+    #[new(value = "0")]
     pub vram_addr: usize,
+    /// The VRAM address remap mode
+    #[new(value = "0")]
     pub vram_remap: u32,
     #[serde(with = "BigArray")]
+    /// The VRAM of the PPU
+    #[new(value = "[0; 0x10000]")]
     pub vram: [u8; 0x10000],
     // Cache of VRAM decoded in 2BPP format
     // Hopefully speeds things up a bit
     #[serde(skip, default = "default_2bpp_cache")]
+    #[new(value = "default_2bpp_cache()")]
     vram_cache_2bpp: Box<[[u8; 8]; 0x10000 / 2]>,
+    /// Low byte of the VRAM latch
+    #[new(value = "0")]
     vram_latch_low: u8,
+    /// High byte of the VRAM latch
+    #[new(value = "0")]
     vram_latch_high: u8,
+    /// CGRAM, or color ram.
     #[serde(with = "BigArray")]
+    #[new(value = "[0; 0x100]")]
     pub cgram: [u16; 0x100],
+    /// The CGRAM address value
+    #[new(value = "0")]
     pub cgram_addr: usize,
+    /// The CGRAM latch value
+    #[new(value = "None")]
     cgram_latch: Option<u8>,
     /// Screen buffer
     #[serde(skip, default = "default_screen_buffer")]
+    #[new(value = "default_screen_buffer()")]
     pub screen_buffer: [u16; 256 * 240],
-    /// This is not hte dot, should rename
+    /// This is not the dot, should rename
+    #[new(value = "0")]
     pub dot: usize,
+    /// The currently selected sizes of the OAM sprites
+    #[new(value = "[(8, 8), (16, 16)]")]
     pub oam_sizes: [(usize, usize); 2],
     // Internal OAM address
+    #[new(value = "0")]
     pub oam_addr: usize,
     /// OAM Priority rotation, controls which sprites are drawn on top of other sprites
+    #[new(value = "0")]
     pub oam_priority_rotation: usize,
+    /// The last value written to the OAM address.
+    /// Basically the OAM address but does not change on read/write.
+    /// OAMADDR is reset to this value once per frame
+    #[new(value = "0")]
     last_written_oam_addr: usize,
+    /// The OAM name address, i.e. where in VRAM sprite data starts
+    #[new(value = "0")]
     pub oam_name_addr: usize,
+    /// The OAM name select, i.e. how much of an offset there is between sprites
+    /// with name select 0 and 1
+    #[new(value = "0x1000")]
     pub oam_name_select: usize,
+    /// The OAM latch
+    #[new(value = "0")]
     pub oam_latch: u8,
+    /// The OAM data
     #[serde(with = "BigArray")]
+    #[new(value = "[Sprite::default(); 0x80]")]
     pub oam_sprites: [Sprite; 0x80],
     /// Buffer of OAM pixels for the scanline currently being rendered.
     /// Refreshed every HBlank
     #[serde(skip, default = "default_oam_buffer")]
+    #[new(value = "[None; 0x100]")]
     pub oam_buffer: [Option<PixelData>; 0x100],
+    /// The current color blend mode for color math
+    #[new(value = "ColorBlendMode::Add")]
     pub color_blend_mode: ColorBlendMode,
+    /// Whtether color math is enabled on the backdrop
+    #[new(value = "false")]
     pub color_math_enable_backdrop: bool,
+    /// Whtether color math is enabled on the OAM sprites
+    #[new(value = "false")]
     pub color_math_enable_obj: bool,
-    // RGB format
+    /// The fixed color
+    #[new(value = "[0; 3]")]
     pub fixed_color: [u16; 3],
+    /// The color math source
+    #[new(value = "ColorMathSource::Fixed")]
     pub color_math_src: ColorMathSource,
+    /// The window region where color math is applied on the main screen
+    #[new(value = "WindowRegion::Nowhere")]
     pub color_window_main_region: WindowRegion,
+    /// The window region where color math is applied on the main screen
+    #[new(value = "WindowRegion::Nowhere")]
     pub color_window_sub_region: WindowRegion,
+    /// The windows
+    #[new(value = "[Window::default(); 2]")]
     pub windows: [Window; 2],
+    /// The color window logic, i.e. how the two windows interact with
+    /// each other when masking color math
+    #[new(value = "WindowMaskLogic::And")]
     pub color_window_logic: WindowMaskLogic,
     #[serde(default)]
+    /// The sprite window logic, i.e. how the two windows interact with
+    /// each other when masking OAM sprites
+    #[new(value = "WindowMaskLogic::And")]
     pub sprite_window_logic: WindowMaskLogic,
+    /// Whether direct color is enabled
+    #[new(value = "false")]
     pub direct_color: bool,
+    /// Whether overscan is enabled
+    #[new(value = "false")]
     pub overscan: bool,
     // The matrix values (a, b, c, and d), some of which (a, b) are also used for the
     // multiplication result
+    #[new(value = "Matrix::default()")]
     pub matrix: Matrix,
     /// Mode 7 horizontal offset
+    #[new(value = "0")]
     pub m7_h_off: i16,
     /// Mode 7 vertical offset
+    #[new(value = "0")]
     pub m7_v_off: i16,
     /// Mode 7 latch
+    #[new(value = "0")]
     pub m7_latch: u8,
     /// Mode 7 tilemap repeat
+    #[new(value = "false")]
     pub m7_repeat: bool,
     /// Mode 7 tilemap fill (if not repeating)
+    #[new(value = "Mode7Fill::Transparent")]
     pub m7_fill: Mode7Fill,
     /// Mode 7 flip horizontal
+    #[new(value = "false")]
     pub m7_flip_h: bool,
     /// Mode 7 flip vertical
+    #[new(value = "false")]
     pub m7_flip_v: bool,
     /// Multiplication latch
+    #[new(value = "0")]
     pub multi_latch: u8,
     /// Multiplication result
+    #[new(value = "0")]
     pub multi_res: i32,
     /// Vertical count of the current mosaic block.
     /// Basically a countdown (or count up) until when to recompute the mosaic latches
+    #[new(value = "0")]
     mosaic_v_latch: usize,
     /// Interlace field, should be toggled every frame
+    #[new(value = "false")]
     pub interlace_field: bool,
     /// Last latched horizontal dot position
+    #[new(value = "0")]
     pub h_latch: usize,
     /// Last lateched vertical dot position
+    #[new(value = "0")]
     pub v_latch: usize,
     /// Latch to determine whether to return the high or low value from dot positions
+    #[new(value = "false")]
     pub ophct_latch: bool,
 }
 
 impl Default for Ppu {
     fn default() -> Self {
-        Ppu {
-            vblank: false,
-            forced_blanking: false,
-            brightness: 4,
-            bg_mode: 0,
-            bg3_prio: false,
-            backgrounds: core::array::from_fn(|_| Background::default()),
-            mosaic_size: 1,
-            bg_h_off: 0,
-            bg_v_off: 0,
-            obj_main_enable: false,
-            obj_subscreen_enable: false,
-            vram_increment_amount: 1,
-            vram_increment_mode: VramIncMode::HighReadLowWrite,
-            vram_remap: 0,
-            vram_addr: 0,
-            vram: [0; 0x10000],
-            vram_cache_2bpp: Box::new([[0; 8]; 0x10000 / 2]),
-            vram_latch_low: 0,
-            vram_latch_high: 0,
-            cgram: [0; 0x100],
-            cgram_addr: 0,
-            cgram_latch: None,
-            screen_buffer: [0; 256 * 240],
-            dot: 0,
-            oam_addr: 0,
-            oam_priority_rotation: 0,
-            last_written_oam_addr: 0,
-            oam_name_addr: 0,
-            oam_sizes: [(8, 8); 2],
-            oam_name_select: 0x1000,
-            oam_latch: 0,
-            oam_sprites: [Sprite::default(); 0x80],
-            oam_buffer: [None; 0x100],
-            windows: [Window::default(); 2],
-            windows_enabled_obj_main: false,
-            windows_enabled_obj_sub: false,
-            color_blend_mode: ColorBlendMode::Add,
-            color_math_enable_backdrop: false,
-            color_math_enable_obj: false,
-            fixed_color: [0; 3],
-            color_math_src: ColorMathSource::Fixed,
-            color_window_main_region: WindowRegion::Nowhere,
-            color_window_sub_region: WindowRegion::Nowhere,
-            color_window_logic: WindowMaskLogic::And,
-            sprite_window_logic: WindowMaskLogic::And,
-            direct_color: false,
-            overscan: false,
-            matrix: Matrix::default(),
-            m7_h_off: 0,
-            m7_v_off: 0,
-            m7_latch: 0,
-            m7_fill: Mode7Fill::Transparent,
-            m7_repeat: false,
-            m7_flip_v: false,
-            m7_flip_h: false,
-            multi_latch: 0,
-            multi_res: 0,
-            mosaic_v_latch: 0,
-            interlace_field: false,
-            h_latch: 0,
-            v_latch: 0,
-            ophct_latch: false,
-        }
+        Ppu::new()
     }
 }
 

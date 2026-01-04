@@ -474,7 +474,7 @@ impl Console {
                 apu_to_cpu_reg: [0; 4],
                 cartridge: Cartridge::from_data(cartridge_data),
                 input_ports: [InputPort::default_standard_controller(); 2],
-                ppu: Ppu::default(),
+                ppu: Ppu::new(),
                 dma_channels: core::array::from_fn(|_| DmaChannel::default()),
                 total_master_clocks: 0,
                 total_apu_clocks: 0,
