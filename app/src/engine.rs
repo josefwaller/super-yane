@@ -26,6 +26,7 @@ pub struct AdvanceSettings {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdvanceAmount {
     MasterCycles(u32),
+    Scanlines(u32),
     Instructions(u32),
     Frames(u32),
     StartVBlank,
@@ -42,6 +43,7 @@ impl Display for AdvanceAmount {
         use AdvanceAmount::*;
         match self {
             MasterCycles(n) => write!(f, "{} {}", n, pluralize("master cycle", *n)),
+            Scanlines(n) => write!(f, "{} {}", n, pluralize("scanline", *n)),
             Instructions(n) => write!(f, "{} {}", n, pluralize("instruction", *n)),
             Frames(n) => write!(f, "{} {}", n, pluralize("frame", *n)),
             StartVBlank => write!(f, "Start VBlank"),
@@ -142,6 +144,13 @@ impl Engine {
                                         advance!();
                                     }
                                 }
+                                Scanlines(n) => (0..n).for_each(|_| {
+                                    let mut hblank = console.ppu().is_in_hblank();
+                                    while !(hblank && !console.ppu().is_in_hblank()) {
+                                        hblank = console.ppu().is_in_hblank();
+                                        advance!();
+                                    }
+                                }),
                                 Instructions(instructions) => {
                                     (0..instructions).for_each(|_| {
                                         advance!();
@@ -168,8 +177,6 @@ impl Engine {
                                         advance!();
                                     }
                                 }
-                                #[allow(unused)]
-                                _ => unimplemented!("Invalid advance amount {}", a),
                             }
                             emu_data_sender
                                 .send(DoneEmuPayload {

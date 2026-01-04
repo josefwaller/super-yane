@@ -8,6 +8,7 @@ use crate::{
     },
     utils::rgb_to_color,
 };
+use derive_new::new;
 
 use crate::utils::{bit, color_to_rgb_bytes};
 use log::*;
@@ -32,12 +33,31 @@ pub enum Mode7Fill {
     Character = 1,
 }
 
+#[derive(Clone, Copy)]
+pub enum PixelSource {
+    Oam,
+    Background(usize),
+}
+
+/// The data for a rendered pixel
+#[derive(new, Clone, Copy)]
+pub struct PixelData {
+    /// The color of the pixel
+    color: u16,
+    /// The priority of the pixel
+    priority: u32,
+    /// Whether color math can be applied to the pixel
+    allow_color_math: bool,
+    /// Where the pixel came from, only used for debugging
+    source: PixelSource,
+}
+
 fn default_2bpp_cache() -> Box<[[u8; 8]; 0x10000 / 2]> {
     Box::new([[0; 8]; 0x10000 / 2])
 }
 
-fn default_oam_buffer() -> [[Option<(u16, bool)>; 0x100]; 4] {
-    [[None; 0x100]; 4]
+fn default_oam_buffer() -> [Option<PixelData>; 0x100] {
+    [None; 0x100]
 }
 
 fn default_screen_buffer() -> [u16; 256 * 240] {
@@ -94,10 +114,10 @@ pub struct Ppu {
     pub oam_latch: u8,
     #[serde(with = "BigArray")]
     pub oam_sprites: [Sprite; 0x80],
-    /// Buffers of sprite pixels for the current scanline.
-    /// One for every sprite layer, ordered by priority
+    /// Buffer of OAM pixels for the scanline currently being rendered.
+    /// Refreshed every HBlank
     #[serde(skip, default = "default_oam_buffer")]
-    oam_buffers: [[Option<(u16, bool)>; 0x100]; 4],
+    pub oam_buffer: [Option<PixelData>; 0x100],
     pub color_blend_mode: ColorBlendMode,
     pub color_math_enable_backdrop: bool,
     pub color_math_enable_obj: bool,
@@ -180,7 +200,7 @@ impl Default for Ppu {
             oam_name_select: 0x1000,
             oam_latch: 0,
             oam_sprites: [Sprite::default(); 0x80],
-            oam_buffers: [[None; 0x100]; 4],
+            oam_buffer: [None; 0x100],
             windows: [Window::default(); 2],
             windows_enabled_obj_main: false,
             windows_enabled_obj_sub: false,
@@ -861,8 +881,10 @@ impl Ppu {
         b.pixel_buffer.extend(&slices[offset..slices.len()]);
     }
     fn reset_oam_buffer(&mut self, y: usize) {
-        // Todo: Don't copy this every scanline
-        let mut buffers = [[None; 0x100]; 4];
+        // Reset old data
+        let mut oam_buffer = [None; 0x100];
+        // Add sprites
+        // TODO: Maybe find a way to avoid cloning [None; 0x100] every scanline
         self.oam_sprites.iter().for_each(|s| {
             let size = self.oam_sizes[s.size_select];
             if s.y <= y && s.y + size.1 > y {
@@ -910,18 +932,22 @@ impl Ppu {
                         };
                         let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
                         // Add this sprite's data to the scanline
-                        let buf = &mut buffers[s.priority];
                         let allow_color_math = s.palette_index > 3;
-                        buf[sx as usize] = buf[sx as usize].or(if p == 0 {
+                        oam_buffer[sx as usize] = oam_buffer[sx as usize].or(if p == 0 {
                             None
                         } else {
-                            Some((palette[p], allow_color_math))
+                            Some(PixelData::new(
+                                palette[p],
+                                s.priority as u32,
+                                allow_color_math,
+                                PixelSource::Oam,
+                            ))
                         });
                     }
                 })
             }
         });
-        self.oam_buffers = buffers;
+        self.oam_buffer = oam_buffer;
     }
     fn dot_xy(&self) -> (usize, usize) {
         // Note the visual picture starts at dot 88
@@ -1091,13 +1117,15 @@ impl Ppu {
                     };
                     // Get the pixel from a sprite layer with a given priority, or None
                     macro_rules! spr {
-                        ($index: expr) => {
+                        ($prio: expr) => {
                             (
-                                self.oam_buffers[$index][x].map(|(color, _)| color),
+                                self.oam_buffer[x]
+                                    .filter(|data| data.priority == $prio)
+                                    .map(|data| data.color),
                                 self.obj_main_enable && !(sw && self.windows_enabled_obj_main),
                                 self.obj_subscreen_enable && !(sw && self.windows_enabled_obj_sub),
                                 self.color_math_enable_obj
-                                    && self.oam_buffers[$index][x].is_none_or(|(_, math)| math),
+                                    && self.oam_buffer[x].is_none_or(|data| data.allow_color_math),
                             )
                         };
                     }
@@ -1246,9 +1274,6 @@ impl Ppu {
         } else {
             base_addr + 2 * self.oam_name_select + (BYTES_PER_SPRITE * tile_index) - 0x2000
         }
-        // let slice_addr =
-        //     2 * (self.oam_name_addr + s.name_select * self.oam_name_select) + 32 * tile_index;
-        // slice_addr
     }
     pub fn can_write_vram(&self) -> bool {
         // self.forced_blanking || self.is_in_vblank()

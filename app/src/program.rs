@@ -476,9 +476,9 @@ impl Program {
             ]
             .into(),
             InfoDisplay::Oam => {
-                return table::<8usize, Message>(
+                return table::<9usize, Message>(
                     [
-                        " #", "( x, y)", "X", "Tile", "Palette", "Name", "Size", "Sprite",
+                        " #", "( x, y)", "X", "Tile", "Palette", "NT", "Prio", "Size", "Sprite",
                     ],
                     self.engine
                         .console()
@@ -495,6 +495,7 @@ impl Program {
                                 cell(format!("{:02X}", s.tile_index)).into(),
                                 cell(format!("{:02X}", s.palette_index)).into(),
                                 cell(format!("{:01}", s.name_select)).into(),
+                                cell(format!("{:01}", s.priority)).into(),
                                 cell(format!("{:?}", size)).into(),
                                 canvas(Screen::new(
                                     self.oam_sprite_rgba_data[i][0..(size.0 * size.1)]
@@ -539,6 +540,7 @@ impl Program {
                         button("RESET").on_press(Message::Reset),
                         pick_list([
                             AdvanceAmount::Instructions(1),
+                            AdvanceAmount::Scanlines(1),
                             AdvanceAmount::Frames(1),
                             AdvanceAmount::StartVBlank,
                             AdvanceAmount::EndVBlank
