@@ -1,7 +1,7 @@
 use crate::Background;
 use crate::{
     ppu::{
-        Sprite,
+        Matrix, Sprite,
         background::{BackgroundPixel, WindowMaskLogic},
         color_math::{ColorBlendMode, ColorMathSource},
         window::{Window, WindowRegion},
@@ -16,21 +16,6 @@ use serde_big_array::BigArray;
 
 pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
-
-pub fn convert_8p8(value: u16) -> f32 {
-    // ((value as i16 >> 8) as f32) + (value & 0xFF) as i8 as f32 / 0x100 as f32
-    (value as i16 as f32) / 0x100 as f32
-}
-
-#[derive(Copy, Clone, Default, Serialize, Deserialize)]
-pub struct Matrix {
-    pub a: u16,
-    pub b: u16,
-    pub c: u16,
-    pub d: u16,
-    pub center_x: i16,
-    pub center_y: i16,
-}
 
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum VramIncMode {
@@ -994,31 +979,12 @@ impl Ppu {
                     };
                     let bg_pixels = {
                         if self.bg_mode == 7 {
-                            let a = [
-                                x as f32 - self.matrix.center_x as f32 + self.m7_h_off as f32,
-                                y as f32 - self.matrix.center_y as f32 + self.m7_v_off as f32,
-                                1.0,
-                            ];
-                            let mat = [
-                                [
-                                    convert_8p8(self.matrix.a),
-                                    convert_8p8(self.matrix.b),
-                                    self.matrix.center_x as f32,
-                                ],
-                                [
-                                    convert_8p8(self.matrix.c),
-                                    convert_8p8(self.matrix.d),
-                                    self.matrix.center_y as f32,
-                                ],
-                                [0.0, 0.0, 1.0],
-                            ];
-                            let res: [f32; 3] = core::array::from_fn(|i| {
-                                a.iter().enumerate().map(|(j, v)| mat[i][j] * *v).sum()
-                            });
-                            let [x, y, _] = res;
+                            let [x, y] = self.matrix.multiply([
+                                x as f32 + self.m7_h_off as f32,
+                                y as f32 + self.m7_v_off as f32,
+                            ]);
                             let slice = self.get_m7_background_slice(x, y);
-                            let x: [BackgroundPixel; 4] = [slice; 4];
-                            x
+                            [slice, None, None, None]
                         } else {
                             // Structured (background_number, bpp)
                             let backgrounds: &[(usize, usize)] = match self.bg_mode {
