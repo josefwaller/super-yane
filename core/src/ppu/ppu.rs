@@ -108,6 +108,8 @@ pub struct Ppu {
     pub oam_sizes: [(usize, usize); 2],
     // Internal OAM address
     pub oam_addr: usize,
+    /// OAM Priority rotation, controls which sprites are drawn on top of other sprites
+    pub oam_priority_rotation: usize,
     last_written_oam_addr: usize,
     pub oam_name_addr: usize,
     pub oam_name_select: usize,
@@ -194,6 +196,7 @@ impl Default for Ppu {
             screen_buffer: [0; 256 * 240],
             dot: 0,
             oam_addr: 0,
+            oam_priority_rotation: 0,
             last_written_oam_addr: 0,
             oam_name_addr: 0,
             oam_sizes: [(8, 8); 2],
@@ -350,11 +353,11 @@ impl Ppu {
             0x2102 => {
                 self.oam_addr = (self.oam_addr & 0x200) | (2 * value as usize);
                 self.last_written_oam_addr = self.oam_addr;
+                self.oam_priority_rotation = (self.oam_addr & 0xFE);
             }
             0x2103 => {
                 self.oam_addr = (self.oam_addr & 0x1FF) | (0x200 * (value as usize & 0x01));
                 self.last_written_oam_addr = self.oam_addr;
-                // TODO: OAM Priority bit
             }
             0x2104 => {
                 if self.oam_addr % 2 == 0 {
@@ -885,68 +888,76 @@ impl Ppu {
         let mut oam_buffer = [None; 0x100];
         // Add sprites
         // TODO: Maybe find a way to avoid cloning [None; 0x100] every scanline
-        self.oam_sprites.iter().for_each(|s| {
-            let size = self.oam_sizes[s.size_select];
-            if s.y <= y && s.y + size.1 > y {
-                let (fine_y, tile_y) = if s.flip_y {
-                    (7 - (y - s.y) % 8, (size.1 - 1 - (y - s.y)) / 8)
-                } else {
-                    ((y - s.y) % 8, (y - s.y) / 8)
-                };
-                let slice_addr = self.sprite_tile_slice_addr(s, tile_y);
-                let width = size.0;
-                // Todo: Optimize this so that we don't fetch all the tiles all the time
-                let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
-                    if i < width / 8 {
-                        self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y)
+        self.oam_sprites
+            .iter()
+            .chain(self.oam_sprites.iter())
+            // Shifted right by 1 because it is referencing the word address, and each sprite (4
+            // bytes) is made up of 2 words (2 16bit values)
+            .skip(self.oam_priority_rotation >> 1)
+            .skip(0)
+            .take(128)
+            .for_each(|s| {
+                let size = self.oam_sizes[s.size_select];
+                if s.y <= y && s.y + size.1 > y {
+                    let (fine_y, tile_y) = if s.flip_y {
+                        (7 - (y - s.y) % 8, (size.1 - 1 - (y - s.y)) / 8)
                     } else {
-                        [0; 8]
-                    }
-                });
-                let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| {
-                    if i < width / 8 {
-                        self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16)
-                    } else {
-                        [0; 8]
-                    }
-                });
-                let palette_index = 0x80 + 0x10 * s.palette_index;
-                let palette = &self.cgram[palette_index..(palette_index + 0x10)];
-                (0..width).for_each(|i| {
-                    // Check if the pixel at (sprite x + i) is on the screen
-                    let sx = if s.msb_x {
-                        s.x as i32 - 0x100
-                    } else {
-                        s.x as i32
-                    } + i as i32;
-                    if sx < 0x100 && sx > 0x00 {
-                        // Get slice to draw
-                        let (tile_low, tile_high, x) = if s.flip_x {
-                            (
-                                tile_lows[(size.0 - 1 - i) / 8],
-                                tile_highs[(size.0 - 1 - i) / 8],
-                                7 - i % 8,
-                            )
+                        ((y - s.y) % 8, (y - s.y) / 8)
+                    };
+                    let slice_addr = self.sprite_tile_slice_addr(s, tile_y);
+                    let width = size.0;
+                    // Todo: Optimize this so that we don't fetch all the tiles all the time
+                    let tile_lows: [[u8; 8]; 8] = core::array::from_fn(|i| {
+                        if i < width / 8 {
+                            self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y)
                         } else {
-                            (tile_lows[i / 8], tile_highs[i / 8], i % 8)
-                        };
-                        let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
-                        // Add this sprite's data to the scanline
-                        let allow_color_math = s.palette_index > 3;
-                        oam_buffer[sx as usize] = oam_buffer[sx as usize].or(if p == 0 {
-                            None
+                            [0; 8]
+                        }
+                    });
+                    let tile_highs: [[u8; 8]; 8] = core::array::from_fn(|i| {
+                        if i < width / 8 {
+                            self.get_2bpp_slice_at(slice_addr + 32 * i + 2 * fine_y + 16)
                         } else {
-                            Some(PixelData::new(
-                                palette[p],
-                                s.priority as u32,
-                                allow_color_math,
-                                PixelSource::Oam,
-                            ))
-                        });
-                    }
-                })
-            }
-        });
+                            [0; 8]
+                        }
+                    });
+                    let palette_index = 0x80 + 0x10 * s.palette_index;
+                    let palette = &self.cgram[palette_index..(palette_index + 0x10)];
+                    (0..width).for_each(|i| {
+                        // Check if the pixel at (sprite x + i) is on the screen
+                        let sx = if s.msb_x {
+                            s.x as i32 - 0x100
+                        } else {
+                            s.x as i32
+                        } + i as i32;
+                        if sx < 0x100 && sx > 0x00 {
+                            // Get slice to draw
+                            let (tile_low, tile_high, x) = if s.flip_x {
+                                (
+                                    tile_lows[(size.0 - 1 - i) / 8],
+                                    tile_highs[(size.0 - 1 - i) / 8],
+                                    7 - i % 8,
+                                )
+                            } else {
+                                (tile_lows[i / 8], tile_highs[i / 8], i % 8)
+                            };
+                            let p = tile_low[x] as usize + 4 * tile_high[x] as usize;
+                            // Add this sprite's data to the scanline
+                            let allow_color_math = s.palette_index > 3;
+                            oam_buffer[sx as usize] = oam_buffer[sx as usize].or(if p == 0 {
+                                None
+                            } else {
+                                Some(PixelData::new(
+                                    palette[p],
+                                    s.priority as u32,
+                                    allow_color_math,
+                                    PixelSource::Oam,
+                                ))
+                            });
+                        }
+                    })
+                }
+            });
         self.oam_buffer = oam_buffer;
     }
     fn dot_xy(&self) -> (usize, usize) {
