@@ -11,7 +11,11 @@ use crate::{
     engine::{AdvanceAmount, AdvanceSettings, Engine},
     table::{cell, table},
     utils::vram_to_rgba,
-    widgets::{background_table, screen::Screen, text_table, vertical_table},
+    widgets::{
+        background_table,
+        screen::{ConsoleDebugScreen, RgbaScreen},
+        text_table, vertical_table,
+    },
 };
 use iced::{
     Alignment::{self, Center},
@@ -24,8 +28,8 @@ use iced::{
         key::Key::{Character, Named},
     },
     widget::{
-        Column, Row, button, canvas, checkbox, column, container, pick_list, row, scrollable,
-        space::horizontal,
+        Column, Row, Stack, button, canvas, checkbox, column, container, pick_list, row,
+        scrollable, space::horizontal,
     },
     window,
 };
@@ -160,6 +164,7 @@ pub enum Message {
     ToggleLogApu(bool),
     Record(bool),
     OnClose(window::Id),
+    SetOamOutlineColor(Option<Color>),
 }
 
 #[derive(new)]
@@ -213,6 +218,8 @@ pub struct Program {
     settings: AdvanceSettings,
     #[new(value = "AdvanceAmount::Instructions(1)")]
     advance_amount: AdvanceAmount,
+    #[new(value = "None")]
+    oam_outline_color: Option<Color>,
 }
 
 impl Program {
@@ -379,6 +386,9 @@ impl Program {
                         .expect("Unable to enqueue audio");
                 }
             }
+            Message::SetOamOutlineColor(c) => {
+                self.oam_outline_color = c;
+            }
             Message::SetRamPage(ram_page) => {
                 const BYTES_PER_PAGE: usize = 0x20 * 8;
                 let bytes_per_tile = 8 * self.vram_bpp;
@@ -476,37 +486,49 @@ impl Program {
             ]
             .into(),
             InfoDisplay::Oam => {
-                return table::<9usize, Message>(
-                    [
-                        " #", "( x, y)", "X", "Tile", "Palette", "NT", "Prio", "Size", "Sprite",
+                return column![
+                    row![
+                        "Debug?",
+                        checkbox(self.oam_outline_color.is_some()).on_toggle(|value| if value {
+                            Message::SetOamOutlineColor(Some(color!(0xFF0000)))
+                        } else {
+                            Message::SetOamOutlineColor(None)
+                        })
                     ],
-                    self.engine
-                        .console()
-                        .ppu()
-                        .oam_sprites
-                        .iter()
-                        .enumerate()
-                        .map(|(i, s)| {
-                            let size = self.engine.console().ppu().oam_sizes[s.size_select];
-                            [
-                                cell(format!("{:02X}", i)).into(),
-                                cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
-                                cell(format!("{}", u8::from(s.msb_x))).into(),
-                                cell(format!("{:02X}", s.tile_index)).into(),
-                                cell(format!("{:02X}", s.palette_index)).into(),
-                                cell(format!("{:01}", s.name_select)).into(),
-                                cell(format!("{:01}", s.priority)).into(),
-                                cell(format!("{:?}", size)).into(),
-                                canvas(Screen::new(
-                                    self.oam_sprite_rgba_data[i][0..(size.0 * size.1)]
-                                        .as_flattened(),
-                                    size.0 as u32,
-                                    size.1 as u32,
-                                ))
-                                .into(),
-                            ]
-                        }),
-                )
+                    table::<9usize, Message>(
+                        [
+                            " #", "( x, y)", "X", "Tile", "Palette", "NT", "Prio", "Size",
+                            "Sprite",
+                        ],
+                        self.engine
+                            .console()
+                            .ppu()
+                            .oam_sprites
+                            .iter()
+                            .enumerate()
+                            .map(|(i, s)| {
+                                let size = self.engine.console().ppu().oam_sizes[s.size_select];
+                                [
+                                    cell(format!("{:02X}", i)).into(),
+                                    cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
+                                    cell(format!("{}", u8::from(s.msb_x))).into(),
+                                    cell(format!("{:02X}", s.tile_index)).into(),
+                                    cell(format!("{:02X}", s.palette_index)).into(),
+                                    cell(format!("{:01}", s.name_select)).into(),
+                                    cell(format!("{:01}", s.priority)).into(),
+                                    cell(format!("{:?}", size)).into(),
+                                    canvas(RgbaScreen::new(
+                                        self.oam_sprite_rgba_data[i][0..(size.0 * size.1)]
+                                            .as_flattened(),
+                                        size.0 as u32,
+                                        size.1 as u32,
+                                    ))
+                                    .into(),
+                                ]
+                            }),
+                    )
+                    .into()
+                ]
                 .into();
             }
         }
@@ -524,11 +546,20 @@ impl Program {
                     .spacing(0)
                 ],
                 container(column![
-                    canvas(Screen {
-                        rgba_data: self.engine.prev_frame_data.as_flattened(),
-                        width: 256,
-                        height: 240
-                    })
+                    Stack::with_children(
+                        [
+                            canvas(
+                                RgbaScreen::new(self.engine.prev_frame_data.as_flattened(), 256, 240)
+                            )
+                            .height(Length::Fill)
+                            .width(Length::Fill)
+                            .into(),
+                            canvas(ConsoleDebugScreen::new(self.engine.console(), self.oam_outline_color))
+                                .height(Length::Fill)
+                                .width(Length::Fill)
+                                .into(),
+                        ]
+                    )
                     .height(Length::Fill)
                     .width(Length::Fill),
                     row![
@@ -670,7 +701,7 @@ impl Program {
                                 .align_x(Alignment::Center)
                                 .into()
                         })),
-                        canvas(Screen {
+                        canvas(RgbaScreen {
                             rgba_data: self.vram_rgba_data.as_flattened(),
                             width: VRAM_IMAGE_WIDTH as u32,
                             height: VRAM_IMAGE_HEIGHT as u32,
