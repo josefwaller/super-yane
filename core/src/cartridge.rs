@@ -69,7 +69,7 @@ impl Cartridge {
     }
     pub fn transform_address(&self, address: usize) -> usize {
         match self.memory_map {
-            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0xFF_8000),
+            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x7F_8000),
             _ => 0,
         }
     }

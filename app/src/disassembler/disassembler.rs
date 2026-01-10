@@ -70,22 +70,20 @@ static ASCII_LOWER: [char; 16] = [
 fn get_label_name(prefix: &str, n: usize) -> String {
     let mut chars = Vec::new();
     (0..6).for_each(|i| chars.push(ASCII_LOWER[(n >> (4 * i)) & 0xF]));
-    // debug!("{} {:?}", n, chars);
     format!("{}{}", prefix, chars.into_iter().collect::<String>())
 }
 
 impl Disassembler {
     pub fn add_current_instruction(&mut self, console: &Console) {
         // Add the instruction if it is not already added
-        if !self.instructions.contains_key(&console.pc()) {
+        let key = console.cartridge().transform_address(console.pc());
+        if !self.instructions.contains_key(&key) {
             let inst = Instruction::from_console(&console);
-            self.instructions
-                .insert(console.cartridge().transform_address(console.pc()), inst);
+            self.instructions.insert(key, inst);
             if let Some(addr) = inst.get_jump_addr(console.pc()) {
-                self.labels.insert(
-                    console.cartridge().transform_address(addr),
-                    Label::Location(get_label_name("", addr)),
-                );
+                let addr = console.cartridge().transform_address(addr);
+                self.labels
+                    .insert(addr, Label::Location(get_label_name("", addr)));
             }
         }
     }

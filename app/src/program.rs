@@ -188,6 +188,9 @@ pub struct Program {
     /// Cached VRAM RGBA data for rendering
     #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT]")]
     vram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT],
+    /// Cached WRAM data as RGB data
+    #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_WIDTH]")]
+    wram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_WIDTH],
     /// Cached OAM sprite data for rendering
     #[new(value = "Box::new([[[0;4]; 64 * 64]; 128])")]
     oam_sprite_rgba_data: Box<[[[u8; 4]; 64 * 64]; 128]>,
@@ -408,6 +411,7 @@ impl Program {
             Message::ChangePaused(p) => {
                 if p {
                     self.pause();
+                    self.channel.clear();
                 } else {
                     self.is_paused = false;
                     self.channel.resume();
@@ -495,9 +499,9 @@ impl Program {
                             Message::SetOamOutlineColor(None)
                         })
                     ],
-                    table::<9usize, Message>(
+                    table::<10usize, Message>(
                         [
-                            " #", "( x, y)", "X", "Tile", "Palette", "NT", "Prio", "Size",
+                            " #", "( x, y)", "X", "Tile", "Addr", "Palette", "NT", "Prio", "Size",
                             "Sprite",
                         ],
                         self.engine
@@ -513,6 +517,11 @@ impl Program {
                                     cell(format!("({:02X}, {:02X})", s.x, s.y)).into(),
                                     cell(format!("{}", u8::from(s.msb_x))).into(),
                                     cell(format!("{:02X}", s.tile_index)).into(),
+                                    cell(format!(
+                                        "{:04X}",
+                                        self.engine.console().ppu().sprite_tile_slice_addr(s, 0)
+                                    ))
+                                    .into(),
                                     cell(format!("{:02X}", s.palette_index)).into(),
                                     cell(format!("{:01}", s.name_select)).into(),
                                     cell(format!("{:01}", s.priority)).into(),
@@ -572,6 +581,7 @@ impl Program {
                         pick_list([
                             AdvanceAmount::Instructions(1),
                             AdvanceAmount::Scanlines(1),
+                            AdvanceAmount::Scanlines(10),
                             AdvanceAmount::Frames(1),
                             AdvanceAmount::StartVBlank,
                             AdvanceAmount::EndVBlank
@@ -822,6 +832,11 @@ impl Program {
                 "VRAM INC mode",
                 self.engine.console().ppu().vram_increment_mode,
                 "{:?}"
+            ),
+            table_row!(
+                "VRAM remapping",
+                self.engine.console().ppu().vram_remap,
+                "{:X}"
             ),
             ppu_val!("OAM Nametable Addr (word)", oam_name_addr, "{:04X}"),
             table_row!(

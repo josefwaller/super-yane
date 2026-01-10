@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum Label {
     EntryPoint,
     Location(String),

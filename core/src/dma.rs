@@ -141,7 +141,7 @@ impl Channel {
                 match self.adjust_mode {
                     AddressAdjustMode::Increment => self.src_addr = self.src_addr.wrapping_add(1),
                     AddressAdjustMode::Decrement => self.src_addr = self.src_addr.wrapping_sub(1),
-                    _ => {}
+                    AddressAdjustMode::Fixed => {}
                 }
             }
         }

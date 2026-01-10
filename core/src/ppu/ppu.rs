@@ -18,6 +18,28 @@ use serde_big_array::BigArray;
 pub const PIXELS_PER_SCANLINE: usize = 341;
 pub const SCANLINES: usize = 262;
 
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
+pub enum TimerMode {
+    #[default]
+    Disabled,
+    Horizontal,
+    Vertical,
+    HorizontalVertical,
+}
+
+impl From<u8> for TimerMode {
+    fn from(value: u8) -> Self {
+        use TimerMode::*;
+        match value & 0x03 {
+            0 => Disabled,
+            1 => Horizontal,
+            2 => Vertical,
+            3 => HorizontalVertical,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
@@ -269,6 +291,16 @@ pub struct Ppu {
     /// Latch to determine whether to return the high or low value from dot positions
     #[new(value = "false")]
     pub ophct_latch: bool,
+    /// IRQ timer H target
+    #[new(value = "0")]
+    pub h_timer: u16,
+    /// IRQ timer V target
+    #[new(value = "0")]
+    pub v_timer: u16,
+    #[new(value = "false")]
+    pub trigger_irq: bool,
+    #[new(value = "TimerMode::Disabled")]
+    pub timer_mode: TimerMode,
 }
 
 impl Default for Ppu {
@@ -486,10 +518,12 @@ impl Ppu {
                     true => VramIncMode::LowReadHighWrite,
                 };
                 self.vram_remap = (value >> 2) as u32 & 0x03;
-                debug!(
-                    "VRAM REMAP {:04X} {:02X}",
-                    self.vram_remap, self.vram_increment_amount
-                );
+                if self.vram_remap != 0 {
+                    debug!(
+                        "VRAM REMAP {:04X} {:02X}",
+                        self.vram_remap, self.vram_increment_amount
+                    );
+                }
             }
             0x2116 => {
                 self.vram_addr = (self.vram_addr & 0x7F00) | (value as usize);
@@ -1002,8 +1036,8 @@ impl Ppu {
     }
     fn dot_xy(&self) -> (usize, usize) {
         // Note the visual picture starts at dot 88
-        let x = (self.dot / 4).wrapping_sub(22) % PIXELS_PER_SCANLINE;
-        let y = (self.dot / 4).wrapping_sub(22) / PIXELS_PER_SCANLINE;
+        let x = (self.dot / 4) % PIXELS_PER_SCANLINE;
+        let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
         (x, y)
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
@@ -1013,13 +1047,11 @@ impl Ppu {
                 let (x, y) = self.dot_xy();
                 // Todo: check if this timing is correct
                 if y == 0 && x == 0 {
-                    debug!("VBLANK END {}", self.bg_mode);
                     self.vblank = false;
                     self.interlace_field = !self.interlace_field;
                 }
                 let vblank_scanline = if self.overscan { 241 } else { 225 };
                 if y == vblank_scanline && x == 0 {
-                    debug!("VBLANK START");
                     self.vblank = true;
                     self.oam_addr = self.last_written_oam_addr;
                 }
@@ -1036,7 +1068,19 @@ impl Ppu {
                     // Update mosaic latch
                     self.mosaic_v_latch = (self.mosaic_v_latch + 1) % self.mosaic_size;
                 }
-                if x < 256 && y < 240 {
+
+                let (h, v) = (self.h_timer as usize == x, self.v_timer as usize == y);
+                self.trigger_irq = self.trigger_irq
+                    || match self.timer_mode {
+                        TimerMode::Disabled => false,
+                        TimerMode::Horizontal => h,
+                        TimerMode::Vertical => v && self.h_timer == 0,
+                        TimerMode::HorizontalVertical => h && v,
+                    };
+
+                if x >= 22 && x < 256 + 22 && y < 240 {
+                    let x = x - 22;
+
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
                         self.windows[i].left <= x && x <= self.windows[i].right
                     });

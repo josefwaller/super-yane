@@ -10,8 +10,10 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn step(&mut self, memory: &mut ExternalArchitecture) {
-        let current_dma =
-            (0..memory.dma_channels.len()).find(|i| memory.dma_channels[*i].is_executing);
+        // Prioritize HDMA
+        let current_dma = (0..memory.dma_channels.len())
+            .find(|i| memory.dma_channels[*i].is_executing && memory.dma_channels[*i].is_hdma())
+            .or((0..memory.dma_channels.len()).find(|i| memory.dma_channels[*i].is_executing));
         match current_dma {
             Some(i) => {
                 // Temporarily clone
@@ -23,8 +25,16 @@ impl Cpu {
                         [d.num_bytes_transferred as usize % d.transfer_pattern().len()]
                         as usize;
                 // Transfer
-                let v = memory.read(src);
-                memory.write(dest, v);
+                // Ignore the timing since DMA is always 8 cycles per byte
+                if d.direction {
+                    let v = memory.read_byte(dest).0;
+                    memory.write_byte(src, v);
+                } else {
+                    let v = memory.read_byte(src).0;
+                    memory.write_byte(dest, v);
+                }
+                // Advance 8 cycles per byte
+                memory.advance(8);
                 // Increment source address
                 d.inc_src_addr();
                 // Decrement byte counter

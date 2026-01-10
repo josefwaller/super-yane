@@ -218,7 +218,7 @@ impl Dsp {
                     let end_flag = bit(head, 0);
                     // Read and parse blocks
                     let sample_bytes: [[i16; 2]; 8] =
-                        core::array::from_fn(|i| ram[block_addr + 1 + i]).map(|v| {
+                        core::array::from_fn(|i| ram[(block_addr + 1 + i) % ram.len()]).map(|v| {
                             [v >> 4, v & 0xF].map(|v| {
                                 // If negative, flip all the other bits
                                 let v = if v > 0x07 {

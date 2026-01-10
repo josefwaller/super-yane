@@ -14,29 +14,6 @@ use paste::paste;
 pub const APU_CLOCK_SPEED_HZ: u64 = 3_072_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
-
-#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
-pub enum TimerMode {
-    #[default]
-    Disabled,
-    Horizontal,
-    Vertical,
-    HorizontalVertical,
-}
-
-impl From<u8> for TimerMode {
-    fn from(value: u8) -> Self {
-        use TimerMode::*;
-        match value & 0x03 {
-            0 => Disabled,
-            1 => Horizontal,
-            2 => Vertical,
-            3 => HorizontalVertical,
-            _ => unreachable!(),
-        }
-    }
-}
-
 // Contains everything except the processor(s)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ExternalArchitecture {
@@ -56,12 +33,6 @@ pub struct ExternalArchitecture {
     nmi_enabled: bool,
     /// Whether fast ROM access is enabled through MEMSEL
     fast_rom_enabled: bool,
-    /// IRQ timer mode
-    timer_mode: TimerMode,
-    /// IRQ timer H target
-    pub h_timer: u16,
-    /// IRQ timer V target
-    pub v_timer: u16,
     /// Timer flag
     pub timer_flag: bool,
 }
@@ -77,7 +48,7 @@ impl ExternalArchitecture {
     pub fn read_byte(&mut self, addr: usize) -> (u8, u32) {
         if (0x7E_0000..0x80_0000).contains(&addr) {
             (self.ram[addr - 0x7E_0000], 8)
-        } else if (addr % 0x80_0000) < 0x40_0000 {
+        } else if (addr % 0x80_0000) < 0x40_0000 && addr & 0xFFFF < 0x8000 {
             let a = addr & 0xFFFF;
             match a {
                 0x0000..0x2000 => (self.ram[a], 6),
@@ -88,7 +59,7 @@ impl ExternalArchitecture {
                 0x2100..0x2140 => (self.ppu.read_byte(a, self.open_bus_value), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
                 0x2180 => {
-                    warn!("Read from SWRAM");
+                    warn!("Read from S-WRAM");
                     (0, 6)
                 }
                 0x4002..0x4007 => (self.open_bus_value, 6),
@@ -205,6 +176,9 @@ impl ExternalArchitecture {
                 }
             }
         } else {
+            if (0x70_0000..0x7E_0000).contains(&addr) {
+                warn!("Read from SRAM");
+            }
             (
                 self.cartridge.read_byte(addr),
                 if addr > 0x80_0000 && self.fast_rom_enabled {
@@ -227,9 +201,6 @@ impl ExternalArchitecture {
             // Check for non-rom area
             if a < 0x40_0000 && a & 0xFFFF < 0x8000 {
                 let a = a % 0x8000;
-                if a == 0x03C1 {
-                    debug!("WRITE {:02X}", value);
-                }
                 match a {
                     (0..0x2000) => {
                         self.ram[a] = value;
@@ -248,26 +219,29 @@ impl ExternalArchitecture {
                         self.cpu_to_apu_reg[a % 4] = value;
                         6
                     }
+                    0x2180 => {
+                        warn!("Write to S-WRAM");
+                        6
+                    }
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
-                        self.timer_mode = TimerMode::from(value >> 4);
+                        self.ppu.timer_mode = crate::ppu::TimerMode::from(value >> 4);
                         6
                     }
                     0x4207 => {
-                        self.h_timer = (self.h_timer & 0x0100) | value as u16;
+                        self.ppu.h_timer = (self.ppu.h_timer & 0x0100) | value as u16;
                         6
                     }
                     0x4208 => {
-                        self.h_timer = ((value as u16 & 0x01) << 8) | (self.h_timer & 0xFF);
+                        self.ppu.h_timer = ((value as u16 & 0x01) << 8) | (self.ppu.h_timer & 0xFF);
                         6
                     }
                     0x4209 => {
-                        let v = self.v_timer;
-                        self.v_timer = (self.v_timer & 0x0100) | value as u16;
+                        self.ppu.v_timer = (self.ppu.v_timer & 0x0100) | value as u16;
                         6
                     }
                     0x420A => {
-                        self.v_timer = ((value as u16 & 0x01) << 8) | (self.v_timer & 0xFF);
+                        self.ppu.v_timer = ((value as u16 & 0x01) << 8) | (self.ppu.v_timer & 0xFF);
                         6
                     }
                     0x420B => {
@@ -275,16 +249,6 @@ impl ExternalArchitecture {
                             if (value >> i) & 0x01 != 0 {
                                 self.dma_channels[i].is_executing = true;
                                 self.dma_channels[i].num_bytes_transferred = 0;
-                                if i == 0 {
-                                    debug!(
-                                        "START DMA 0 {:02X} {:04X} -> {:04X} {:04X} (OAMADDR={:04X})",
-                                        self.dma_channels[1].src_bank,
-                                        self.dma_channels[i].src_addr,
-                                        self.dma_channels[i].dest_addr,
-                                        self.dma_channels[i].byte_counter,
-                                        self.ppu.oam_addr
-                                    );
-                                }
                             }
                         });
                         return 6;
@@ -482,9 +446,6 @@ impl Console {
                 nmi_enabled: false,
                 fast_rom_enabled: false,
                 math: Math::default(),
-                timer_mode: TimerMode::default(),
-                h_timer: 0,
-                v_timer: 0,
                 timer_flag: false,
             },
         };
@@ -505,8 +466,6 @@ impl Console {
             let vblank = self.ppu().is_in_vblank();
             let hblank = self.ppu().is_in_hblank() && !vblank;
             before_cpu_step(&self);
-            // Get PPU X/Y position before advancing
-            let (dx, dy) = (self.ppu().cursor_x(), self.ppu().cursor_y());
             self.cpu.step(&mut self.rest);
             if !vblank && self.ppu().is_in_vblank() {
                 // Trigger NMI
@@ -519,16 +478,8 @@ impl Console {
                     d.hdma_line_counter = 0;
                 });
             }
-            let h = self.ppu().cursor_x() >= self.rest.h_timer as usize
-                && (dx < self.rest.h_timer as usize || self.ppu().cursor_y() > dy);
-            let v = self.ppu().cursor_y() == self.rest.v_timer as usize;
-            let trigger_irq = match self.rest.timer_mode {
-                TimerMode::Disabled => false,
-                TimerMode::Horizontal => h,
-                TimerMode::Vertical => v && dx > self.ppu().cursor_x(),
-                TimerMode::HorizontalVertical => h && v,
-            };
-            if trigger_irq {
+            if self.ppu().trigger_irq {
+                self.ppu_mut().trigger_irq = false;
                 self.cpu.on_irq(&mut self.rest);
                 self.rest.timer_flag = true;
             }
