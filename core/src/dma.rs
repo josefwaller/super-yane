@@ -30,7 +30,7 @@ const TRANSFER_PATTERS: &[&[u8]] = &[
     &[0, 0, 1, 1],
 ];
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Channel {
     #[serde(default)]
     pub transfer_pattern_index: usize,

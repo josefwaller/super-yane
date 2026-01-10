@@ -1,3 +1,4 @@
+use derive_new::new;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_big_array::Array;
@@ -15,26 +16,42 @@ pub const APU_CLOCK_SPEED_HZ: u64 = 3_072_000;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 // Contains everything except the processor(s)
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, new)]
 pub struct ExternalArchitecture {
+    #[new(value = "Box::new(Array([0; WRAM_SIZE]))")]
     pub ram: Box<Array<u8, WRAM_SIZE>>,
+    #[new(value = "[0; 4]")]
     pub cpu_to_apu_reg: [u8; 4],
+    #[new(value = "[0; 4]")]
     pub apu_to_cpu_reg: [u8; 4],
     pub cartridge: Cartridge,
+    #[new(default)]
     pub ppu: Ppu,
     // Math module for multiplication and division
+    #[new(default)]
     pub math: Math,
     /// DMA Channels
+    #[new(value = "[DmaChannel::default(); 8]")]
     pub dma_channels: [DmaChannel; 8],
+    #[new(value = "[InputPort::default_standard_controller(); 2]")]
     pub input_ports: [InputPort; 2],
+    #[new(value = "0")]
     total_master_clocks: u64,
+    #[new(value = "0")]
     total_apu_clocks: u64,
+    #[new(value = "0")]
     open_bus_value: u8,
+    #[new(value = "false")]
     nmi_enabled: bool,
     /// Whether fast ROM access is enabled through MEMSEL
+    #[new(value = "false")]
     fast_rom_enabled: bool,
     /// Timer flag
+    #[new(value = "false")]
     pub timer_flag: bool,
+    /// Current S-WRAM address
+    #[new(value = "0")]
+    pub wram_addr: usize,
 }
 
 // Todo: move somewhere
@@ -58,9 +75,11 @@ impl ExternalArchitecture {
                 }
                 0x2100..0x2140 => (self.ppu.read_byte(a, self.open_bus_value), 6),
                 0x2140..0x2180 => (self.apu_to_cpu_reg[a % 4], 6),
+                // Read S-WRAM
                 0x2180 => {
-                    warn!("Read from S-WRAM");
-                    (0, 6)
+                    let v = self.ram[self.wram_addr % self.ram.len()];
+                    self.wram_addr = (self.wram_addr + 1) % 0x200;
+                    (v, 6)
                 }
                 0x4002..0x4007 => (self.open_bus_value, 6),
                 0x4210 => {
@@ -220,7 +239,22 @@ impl ExternalArchitecture {
                         6
                     }
                     0x2180 => {
-                        warn!("Write to S-WRAM");
+                        let i = self.wram_addr % self.ram.len();
+                        self.ram[i] = value;
+                        self.wram_addr = (self.wram_addr + 1) % 0x200;
+                        6
+                    }
+                    0x2181 => {
+                        self.wram_addr = (self.wram_addr & 0x1F0) | value as usize;
+                        6
+                    }
+                    0x2182 => {
+                        self.wram_addr = (self.wram_addr & 0x10F) | ((value as usize) << 8);
+                        6
+                    }
+                    0x2183 => {
+                        self.wram_addr =
+                            ((self.wram_addr & 0xFF) | ((value as usize) << 16)) & 0x1FF;
                         6
                     }
                     0x4200 => {
@@ -432,22 +466,7 @@ impl Console {
         let mut c = Console {
             cpu: Cpu::default(),
             apu: Apu::default(),
-            rest: ExternalArchitecture {
-                ram: Box::new(Array([0; WRAM_SIZE])),
-                cpu_to_apu_reg: [0; 4],
-                apu_to_cpu_reg: [0; 4],
-                cartridge: Cartridge::from_data(cartridge_data),
-                input_ports: [InputPort::default_standard_controller(); 2],
-                ppu: Ppu::new(),
-                dma_channels: core::array::from_fn(|_| DmaChannel::default()),
-                total_master_clocks: 0,
-                total_apu_clocks: 0,
-                open_bus_value: 0,
-                nmi_enabled: false,
-                fast_rom_enabled: false,
-                math: Math::default(),
-                timer_flag: false,
-            },
+            rest: ExternalArchitecture::new(Cartridge::from_data(cartridge_data)),
         };
         c.cpu.reset(&mut c.rest);
         debug!("Initialized PC to {:X}", c.cpu.core.pc);
