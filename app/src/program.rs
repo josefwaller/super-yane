@@ -655,8 +655,11 @@ impl Program {
                     Some(self.ram_display.clone()),
                     Message::SetRamDisplay,
                 ),
+                button("Prev 16 Page")
+                    .on_press(Message::SetRamPage(self.ram_page.saturating_sub(16))),
                 button("Prev Page").on_press(Message::SetRamPage(self.ram_page.saturating_sub(1))),
                 button("Next Page").on_press(Message::SetRamPage(self.ram_page + 1)),
+                button("Next 16 Page").on_press(Message::SetRamPage(self.ram_page + 16)),
                 tile_elements
             ]
             .spacing(10)
@@ -802,6 +805,7 @@ impl Program {
                 text(format!("{:04X}", self.engine.console().ppu().matrix.$field))
             };
         }
+        let ppu = self.engine.console().ppu();
         let values = vec![
             (
                 "Dot",
@@ -812,6 +816,7 @@ impl Program {
                 ))
                 .into(),
             ),
+            table_row!("IRQ timer position", (ppu.h_timer, ppu.v_timer), "{:?}"),
             ppu_val!("VBlank", vblank),
             ppu_val!("Forced VBlanking", forced_blanking),
             ppu_val!("Brightness", brightness, hex_fmt!()),

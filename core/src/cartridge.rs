@@ -1,17 +1,27 @@
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 enum MemoryMap {
     LoRom,
     HiRom,
     ExHiRom,
 }
 
+impl MemoryMap {
+    fn transform_address(&self, address: usize) -> usize {
+        match self {
+            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x7F_8000),
+            _ => todo!("{:?} memory mapping", self),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Cartridge {
     memory_map: MemoryMap,
     data: Vec<u8>,
+    sram: Vec<u8>,
 }
 
 impl Cartridge {
@@ -59,21 +69,34 @@ impl Cartridge {
             debug!("Checksum is {:X} {:X}", checksum, checksum ^ 0xFFFF);
             MemoryMap::LoRom
         };
+        let sram_len = {
+            let n = data[(memory_map.transform_address(0x00FFD8)) % data.len()];
+            (1 << n) * 1024
+        };
+        debug!("SRAM len: {}", sram_len);
         Cartridge {
             data: match memory_map {
                 MemoryMap::LoRom => data.to_vec(),
                 _ => vec![],
             },
+            sram: vec![0; sram_len],
             memory_map,
         }
     }
     pub fn transform_address(&self, address: usize) -> usize {
-        match self.memory_map {
-            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x7F_8000),
-            _ => 0,
+        self.memory_map.transform_address(address)
+    }
+    pub fn write_byte(&mut self, address: usize, value: u8) {
+        if (70_0000..0x7E_0000).contains(&(address % 0x80_0000)) && (address & 0xFFFF) < 0x8000 {
+            let i = address % self.sram.len();
+            self.sram[i] = value;
         }
     }
     pub fn read_byte(&self, address: usize) -> u8 {
-        self.data[self.transform_address(address) % self.data.len()]
+        if (70_0000..0x7E_0000).contains(&(address % 0x80_0000)) && (address & 0xFFFF) < 0x8000 {
+            self.sram[address % self.sram.len()]
+        } else {
+            self.data[self.transform_address(address) % self.data.len()]
+        }
     }
 }

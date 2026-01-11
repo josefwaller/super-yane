@@ -321,7 +321,7 @@ impl Ppu {
                 open_bus
             }
             0x2138 => {
-                warn!("Read from OAMDATA");
+                // warn!("Read from OAMDATA");
                 0
             }
             0x2139 => {
@@ -345,7 +345,7 @@ impl Ppu {
                     Some(_) => None,
                     None => Some(0),
                 };
-                warn!("Read from CGDATA READ");
+                // warn!("Read from CGDATA READ");
                 open_bus
             }
             0x213C => {
@@ -369,11 +369,11 @@ impl Ppu {
                 v
             }
             0x213E => {
-                warn!("Read from PPU STAT 1");
+                // warn!("Read from PPU STAT 1");
                 0
             }
             0x213F => {
-                warn!("Read from PPU STAT 2");
+                // warn!("Read from PPU STAT 2");
                 self.ophct_latch = false;
                 self.h_latch = 0;
                 self.v_latch = 0;

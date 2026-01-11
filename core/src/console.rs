@@ -195,9 +195,6 @@ impl ExternalArchitecture {
                 }
             }
         } else {
-            if (0x70_0000..0x7E_0000).contains(&addr) {
-                warn!("Read from SRAM");
-            }
             (
                 self.cartridge.read_byte(addr),
                 if addr > 0x80_0000 && self.fast_rom_enabled {
@@ -385,6 +382,7 @@ impl ExternalArchitecture {
                     }
                 }
             } else {
+                self.cartridge.write_byte(addr, value);
                 if addr >= 0x80_00_00 && self.fast_rom_enabled {
                     6
                 } else {
