@@ -325,8 +325,9 @@ impl Ppu {
                 open_bus
             }
             0x2138 => {
-                // warn!("Read from OAMDATA");
-                0
+                let value = self.read_oam_byte(self.oam_addr);
+                self.inc_oam_addr();
+                value
             }
             0x2139 => {
                 let val = self.vram_latch_low;
@@ -374,7 +375,6 @@ impl Ppu {
                 0
             }
             0x213F => {
-                // warn!("Read from PPU STAT 2");
                 self.ophct_latch = false;
                 self.h_latch = 0;
                 self.v_latch = 0;
@@ -426,7 +426,7 @@ impl Ppu {
             0x2102 => {
                 self.oam_addr = (self.oam_addr & 0x200) | (2 * value as usize);
                 self.last_written_oam_addr = self.oam_addr;
-                self.oam_priority_rotation = (self.oam_addr & 0xFE);
+                self.oam_priority_rotation = self.oam_addr & 0xFE;
             }
             0x2103 => {
                 self.oam_addr = (self.oam_addr & 0x1FF) | (0x200 * (value as usize & 0x01));
@@ -446,7 +446,7 @@ impl Ppu {
                     // Writes immediately
                     self.write_oam_byte(self.oam_addr, value);
                 }
-                self.oam_addr = (self.oam_addr + 1) % 0x4_0000;
+                self.inc_oam_addr();
             }
             0x2105 => {
                 // Copy background sizes
@@ -722,6 +722,9 @@ impl Ppu {
     pub fn get_2bpp_slice(&self, slice_index: usize) -> [u8; 8] {
         self.vram_cache_2bpp[slice_index % self.vram_cache_2bpp.len()]
     }
+    fn inc_oam_addr(&mut self) {
+        self.oam_addr = (self.oam_addr + 1) % 0x220;
+    }
     fn inc_cgram_addr(&mut self) {
         self.cgram_addr = (self.cgram_addr + 1) % self.cgram.len();
     }
@@ -757,6 +760,32 @@ impl Ppu {
             _ => unreachable!("Invalid VRAM REMAP value: {:X}", self.vram_remap),
         };
         addr & 0x7FFF
+    }
+    fn read_oam_byte(&mut self, addr: usize) -> u8 {
+        if addr < 0x200 {
+            let spr = self.oam_sprites[addr / 4];
+            match self.oam_addr % 4 {
+                0 => spr.x as u8,
+                1 => spr.y as u8,
+                2 => spr.tile_index as u8,
+                3 => {
+                    u8::from(spr.flip_y) * 0x80
+                        | u8::from(spr.flip_x) * 0x40
+                        | (spr.priority as u8 * 0x10)
+                        | (spr.palette_index as u8 * 0x02)
+                        | spr.name_select as u8
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            let index = (addr - 0x200) * 4;
+            (0..4)
+                .map(|i| {
+                    let spr = self.oam_sprites[index + i];
+                    (spr.size_select as u8 * 0x02 + u8::from(spr.msb_x)) << (2 * i)
+                })
+                .sum()
+        }
     }
     /// Write a single byte to OAM
     fn write_oam_byte(&mut self, addr: usize, value: u8) {
