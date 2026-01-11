@@ -163,8 +163,12 @@ pub struct Ppu {
     #[new(value = "0")]
     pub cgram_addr: usize,
     /// The CGRAM latch value
-    #[new(value = "None")]
-    cgram_latch: Option<u8>,
+    #[new(value = "0")]
+    cgram_latch: u8,
+    /// The CGRAM byte selection boolean (select either the high or low byte when reading/writing
+    /// CGRAM)
+    #[new(value = "false")]
+    cgram_byte: bool,
     /// Screen buffer
     #[serde(skip, default = "default_screen_buffer")]
     #[new(value = "default_screen_buffer()")]
@@ -341,12 +345,9 @@ impl Ppu {
                 val
             }
             0x213B => {
-                self.cgram_latch = match self.cgram_latch {
-                    Some(_) => None,
-                    None => Some(0),
-                };
-                // warn!("Read from CGDATA READ");
-                open_bus
+                let val = self.cgram[self.cgram_addr].to_le_bytes();
+                self.inc_cgram_addr();
+                if self.cgram_byte { val[1] } else { val[0] }
             }
             0x213C => {
                 let vals = (self.h_latch as u16).to_le_bytes();
@@ -589,16 +590,17 @@ impl Ppu {
             }
             0x2121 => {
                 self.cgram_addr = value as usize;
-                self.cgram_latch = None;
+                self.cgram_byte = false;
             }
-            0x2122 => match self.cgram_latch {
-                Some(data) => {
-                    self.cgram[self.cgram_addr] = (value as u16 * 0x100) + data as u16;
-                    self.cgram_latch = None;
-                    self.cgram_addr = (self.cgram_addr + 1) % self.cgram.len();
+            0x2122 => {
+                if self.cgram_byte {
+                    self.cgram[self.cgram_addr] = (value as u16 * 0x100) + self.cgram_latch as u16;
+                    self.inc_cgram_addr();
+                } else {
+                    self.cgram_latch = value;
                 }
-                None => self.cgram_latch = Some(value),
-            },
+                self.cgram_byte = !self.cgram_byte;
+            }
             0x2123 => window_settings!(0),
             0x2124 => window_settings!(2),
             0x2125 => {
@@ -719,6 +721,9 @@ impl Ppu {
     /// efficiency.
     pub fn get_2bpp_slice(&self, slice_index: usize) -> [u8; 8] {
         self.vram_cache_2bpp[slice_index % self.vram_cache_2bpp.len()]
+    }
+    fn inc_cgram_addr(&mut self) {
+        self.cgram_addr = (self.cgram_addr + 1) % self.cgram.len();
     }
     fn inc_vram_addr(&mut self) {
         self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
