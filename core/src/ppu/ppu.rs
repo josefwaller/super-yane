@@ -305,6 +305,8 @@ pub struct Ppu {
     pub trigger_irq: bool,
     #[new(value = "TimerMode::Disabled")]
     pub timer_mode: TimerMode,
+    #[new(value = "0")]
+    pub counter_latch: u8,
 }
 
 impl Default for Ppu {
@@ -318,10 +320,13 @@ impl Ppu {
         match addr {
             0x2134..=0x2136 => self.multi_res.to_le_bytes()[addr - 0x2134],
             0x2137 => {
-                let (x, y) = self.dot_xy();
-                // Update latches
-                self.h_latch = x;
-                self.v_latch = y;
+                if self.counter_latch == 0 {
+                    let (x, y) = self.dot_xy();
+                    // Update latches
+                    self.h_latch = x;
+                    self.v_latch = y;
+                }
+                self.counter_latch = 1;
                 open_bus
             }
             0x2138 => {
@@ -375,10 +380,10 @@ impl Ppu {
                 0
             }
             0x213F => {
+                let c = self.counter_latch;
+                self.counter_latch = 0;
                 self.ophct_latch = false;
-                self.h_latch = 0;
-                self.v_latch = 0;
-                u8::from(self.interlace_field) << 7
+                (u8::from(self.interlace_field) << 7) | (c << 6)
             }
             _ => {
                 debug!("Unknown read PPU register {:04X}", addr);
