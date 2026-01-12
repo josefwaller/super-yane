@@ -35,6 +35,9 @@ pub struct ExternalArchitecture {
     pub dma_channels: [DmaChannel; 8],
     #[new(value = "[InputPort::default_standard_controller(); 2]")]
     pub input_ports: [InputPort; 2],
+    /// The latched input ports, i.e. the states when the input was last latched
+    #[new(value = "[InputPort::default_standard_controller(); 2]")]
+    pub latched_input_port: [InputPort; 2],
     #[new(value = "0")]
     total_master_clocks: u64,
     #[new(value = "0")]
@@ -254,6 +257,13 @@ impl ExternalArchitecture {
                             ((self.wram_addr & 0xFF) | ((value as usize) << 16)) & 0x1FF;
                         6
                     }
+                    0x4016 => {
+                        // Latch controllers
+                        if value & 0x01 == 0x01 {
+                            self.latched_input_port = self.input_ports.clone();
+                        }
+                        6
+                    }
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
                         self.ppu.timer_mode = crate::ppu::TimerMode::from(value >> 4);
@@ -278,8 +288,9 @@ impl ExternalArchitecture {
                     0x420B => {
                         (0..8).for_each(|i| {
                             if (value >> i) & 0x01 != 0 {
-                                self.dma_channels[i].is_executing = true;
-                                self.dma_channels[i].num_bytes_transferred = 0;
+                                let d = &mut self.dma_channels[i];
+                                d.is_executing = true;
+                                d.num_bytes_transferred = 0;
                             }
                         });
                         return 6;
