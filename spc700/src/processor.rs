@@ -829,6 +829,10 @@ impl Processor {
             _ => panic!("Unimplemented SPC700 opcode: {:2X}", opcode),
         }
     }
+    pub fn reset(&mut self) {
+        self.pc = 0xFFC0;
+        self.psw = ProgramStatusWord::default()
+    }
 }
 
 impl Default for Processor {

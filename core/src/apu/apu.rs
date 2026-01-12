@@ -166,4 +166,15 @@ impl Apu {
         std::mem::swap(&mut self.rest.dsp.sample_queue, &mut s);
         s
     }
+
+    pub fn reset(&mut self) {
+        self.core.reset();
+        self.rest.expose_ipl_rom = true;
+        // Silence every channel
+        self.rest
+            .dsp
+            .channels
+            .iter_mut()
+            .for_each(|c| c.enabled = false);
+    }
 }

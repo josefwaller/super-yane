@@ -610,6 +610,7 @@ impl Console {
     /// Reset the console
     pub fn reset(&mut self) {
         self.cpu.reset(&mut self.rest);
+        self.apu.reset();
     }
     /// Read a byte in CPU space
     /// NOTE: Only reads from the cartridge
