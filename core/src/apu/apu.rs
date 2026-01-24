@@ -1,3 +1,4 @@
+use derive_new::new;
 use std::collections::VecDeque;
 
 use crate::{apu::Dsp, utils::bit};
@@ -13,13 +14,18 @@ pub const APU_RAM_SIZE: usize = 0x10000;
 /// Generate a new sample every 64 APU clocks (32 SPC700 clocks)
 pub const CLOCKS_PER_SAMPLE: usize = 96;
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, new)]
 pub struct ApuTimer {
+    #[new(value = "false")]
+    pub enabled: bool,
     // Set by program
+    #[new(value = "0")]
     pub timer_target: u8,
     // Automatically counts up
+    #[new(value = "0")]
     pub timer_value: u8,
     /// Really u4
+    #[new(value = "0")]
     pub counter: u8,
 }
 
@@ -72,7 +78,6 @@ impl ApuMemory {
                     self.dsp.generate_sample(self.ram.as_mut_slice());
                 }
             }
-            self.dsp.clock(self.total_clocks);
         });
     }
 }
@@ -80,10 +85,10 @@ impl ApuMemory {
 impl HasAddressBus for ApuMemory {
     fn io(&mut self) {
         // Advance by 2 cycles since the SPC700 is only clocked on every other clock
-        self.advance_apu_clocks(3);
+        self.advance_apu_clocks(2);
     }
     fn read(&mut self, address: usize) -> u8 {
-        self.advance_apu_clocks(3);
+        self.advance_apu_clocks(2);
         match address {
             0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr),
@@ -105,7 +110,7 @@ impl HasAddressBus for ApuMemory {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
-        self.advance_apu_clocks(3);
+        self.advance_apu_clocks(2);
         match address {
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
@@ -117,6 +122,9 @@ impl HasAddressBus for ApuMemory {
                     self.cpu_to_apu_reg[2] = 0x00;
                     self.cpu_to_apu_reg[3] = 0x00;
                 }
+                self.timers[0].enabled = value & 0x01 != 0;
+                self.timers[1].enabled = value & 0x02 != 0;
+                self.timers[2].enabled = value & 0x04 != 0;
             }
             0x00F2 => {
                 self.dsp_addr = (value & 0x7F) as usize;
@@ -170,6 +178,7 @@ impl Apu {
     pub fn reset(&mut self) {
         self.core.reset();
         self.rest.expose_ipl_rom = true;
+        self.rest.timers.iter_mut().for_each(|i| i.counter = 0);
         // Silence every channel
         self.rest
             .dsp

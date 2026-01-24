@@ -84,7 +84,7 @@ pub struct Voice {
 }
 
 impl Voice {
-    pub fn clock(&mut self, total_clocks: usize) {
+    pub fn clock(&mut self) {
         self.period_counter = if self.period_counter == 0 {
             0x77FF
         } else {

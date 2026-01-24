@@ -709,8 +709,6 @@ impl Processor {
                 bus.write(addr as usize, val);
             }
             MOVW_D_YA => {
-                // let addr = self.d(bus);
-                // self.write_u16(addr, ya!(), bus);
                 let [al, ah] = self.dw(bus);
                 bus.write(al, self.a);
                 bus.write(ah, self.y);
@@ -722,10 +720,6 @@ impl Processor {
                 self.a = low;
                 self.y = high;
                 self.set_nz_16le(self.a, self.y);
-                // let addr = self.d(bus);
-                // let [low, high] = self.read_u16(addr, bus).to_le_bytes();
-                // self.a = low;
-                // self.y = high;
             }
             MUL_YA => {
                 let res = self.y as u16 * self.a as u16;

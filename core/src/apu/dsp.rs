@@ -80,11 +80,13 @@ pub struct Dsp {
     /// The generated samples
     #[serde(skip)]
     pub(super) sample_queue: VecDeque<f32>,
+
+    pub echo_enabled: bool,
 }
 
 impl Dsp {
     pub fn write(&mut self, address: usize, value: u8) {
-        match address {
+        match address % 0x80 {
             0x0D => self.echo_feedback = value as i8,
             0x2C => self.echo_volume[0] = value as i8,
             0x3C => self.echo_volume[1] = value as i8,
@@ -95,7 +97,8 @@ impl Dsp {
                     .skip(1)
                     .for_each(|(i, c)| c.pitch_mod_enabled = bit(value, i));
             }
-            0x3D => {
+            0x4D => {
+                debug!("Write 4D {:02X}", value);
                 self.channels
                     .iter_mut()
                     .enumerate()
@@ -125,7 +128,13 @@ impl Dsp {
             }
             0x6D => self.echo_addr = (value as usize) << 8,
             0x7D => self.echo_size = 512 * value as usize,
-            0x6C => {}
+            0x6C => {
+                // Combined mute and reset
+                if value & 0xC0 != 0 {
+                    self.channels.iter_mut().for_each(|c| c.enabled = false);
+                }
+                self.echo_enabled = bit(value, 5);
+            }
             reg if address & 0x0F < 0x0A => {
                 let channel_index = (reg / 0x10) & 0x0F;
                 if channel_index < self.channels.len() {
@@ -174,16 +183,39 @@ impl Dsp {
             }
             _ => {
                 // Ignore for now
-                // debug!("Unknown DSP register {address:04X} value={value:02X}");
+                debug!("Unknown DSP register {address:04X} value={value:02X}");
             }
         }
     }
-    pub fn clock(&mut self, total_clocks: usize) {
-        // self.channels.iter_mut().for_each(|c| c.clock(total_clocks));
-    }
     pub fn read(&mut self, address: usize) -> u8 {
-        debug!("APU read {address:04X}");
-        0
+        match address % 0x80 {
+            0x2C => self.echo_volume[0] as u8,
+            0x3C => self.echo_volume[1] as u8,
+            0x4D => self
+                .channels
+                .iter()
+                .enumerate()
+                .map(|(i, c)| u8::from(c.echo_enabled) << i)
+                .sum(),
+            0x6D => (self.echo_addr >> 8) as u8,
+            0x7D => (self.echo_size / 512) as u8,
+            reg if address & 0x0F < 0x0A => {
+                let channel_index = (reg / 0x10) & 0x0F;
+                if channel_index < self.channels.len() {
+                    let c = &mut self.channels[channel_index];
+                    match reg & 0x0F {
+                        0 => c.volume[0] as u8,
+                        1 => c.volume[1] as u8,
+                        2 => (c.sample_pitch & 0xFF) as u8,
+                        3 => (c.sample_pitch >> 8) as u8,
+                        _ => todo!(),
+                    }
+                } else {
+                    0
+                }
+            }
+            _ => todo!(),
+        }
     }
     pub fn generate_sample(&mut self, ram: &mut [u8]) {
         let mut prev_pitch: i32 = 0;
@@ -191,7 +223,7 @@ impl Dsp {
         let voices: [[i32; 2]; 8] = core::array::from_fn(|i| {
             let c = &mut self.channels[i];
             if c.enabled {
-                c.clock(0);
+                c.clock();
                 // Add sample pitch to counter
                 let (counter, o) = c.counter.overflowing_add(if c.pitch_mod_enabled {
                     ((c.sample_pitch as i32 * ((prev_pitch >> 4) + 0x400)) >> 10)
@@ -308,55 +340,70 @@ impl Dsp {
         let new_echo_value = voices
             .iter()
             .enumerate()
-            .filter(|(i, _)| self.channels[*i].echo_enabled)
+            .filter(|(i, _)| self.channels[*i].echo_enabled && self.echo_enabled)
             .fold([0, 0], |acc, (_, v)| [acc[0] + v[0], acc[1] + v[1]]);
 
-        // Read echo value
-        if self.echo_size != 0 {
-            // Read 4 bytes
-            let values: [u8; 4] =
-                core::array::from_fn(|i| ram[(self.echo_addr + self.echo_index + i) % ram.len()]);
-            // Transform into 2 LE 16bit values
-            self.fir_cache[self.fir_index] =
-                core::array::from_fn(|i| i16::from_le_bytes([values[2 * i], values[2 * i + 1]]));
-        }
-        // Compute echo value
-        let echo_val: i16 = (0..8)
-            .map(|i| {
-                // TODO: There shouldn't be 0 in this line
-                ((self.fir_coeffs[i] as i32
-                    * self.fir_cache[(self.fir_index + 7 - i) % 8][0] as i32)
-                    >> 6) as i16
-            })
-            .sum();
-        // Get the sample
+        // Do for left/right
         let echo_out: [i16; 2] = core::array::from_fn(|i| {
-            (voices.iter().map(|arr| arr[i]).sum::<i32>() / self.channels.len() as i32
-                + ((echo_val as i32 * self.echo_volume[i] as i32) >> 7)) as i16
-        });
-        let echo_in: [i16; 2] = core::array::from_fn(|i| {
-            // (voices.iter().map(|arr| arr[i]).sum::<i32>() / self.channels.len() as i32
-            //     + ((echo_val as i32 * self.echo_feedback as i32) >> 7)) as i16
-            new_echo_value.map(|v| ((v * self.echo_feedback as i32) >> 7) as i16)[i]
+            if self.echo_enabled {
+                // Read echo value
+                if self.echo_size != 0 {
+                    // Read 4 bytes
+                    let values: [u8; 4] = core::array::from_fn(|i| {
+                        ram[(self.echo_addr + self.echo_index + i) % ram.len()]
+                    });
+                    // Transform into 2 LE 16bit values
+                    self.fir_cache[self.fir_index] = core::array::from_fn(|i| {
+                        i16::from_le_bytes([values[2 * i], values[2 * i + 1]])
+                    });
+                }
+                // Compute echo value
+                let echo_val: i16 = (0..8)
+                    .map(|j| {
+                        ((self.fir_coeffs[j] as i32
+                            * self.fir_cache[(self.fir_index + 7 - j) % 8][i] as i32)
+                            >> 6) as i16
+                    })
+                    .sum();
+                // Get the combined echo value
+                let echo_in: [i16; 2] = core::array::from_fn(|i| {
+                    new_echo_value.map(|v| ((v * self.echo_feedback as i32) >> 7) as i16)[i]
+                });
+                // Calculate output before writing back
+                let output = (voices
+                    .iter()
+                    .enumerate()
+                    .map(|(_, arr)| arr[i])
+                    .sum::<i32>()
+                    / self.channels.len() as i32
+                    + ((echo_val as i32 * self.echo_volume[i] as i32) >> 7))
+                    as i16;
+
+                // Go to next cache value
+                self.fir_index = if self.fir_index == 0 {
+                    self.fir_cache.len() - 1
+                } else {
+                    self.fir_index - 1
+                };
+                // Write value to memory
+                if self.echo_size == 0 {
+                    self.fir_cache[self.fir_index][i] = output;
+                } else {
+                    [echo_in[0].to_le_bytes(), echo_in[1].to_le_bytes()]
+                        .as_flattened()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, v)| {
+                            ram[(self.echo_addr + self.echo_index + i) % ram.len()] = *v
+                        });
+                    self.echo_index = (self.echo_index + 4) % self.echo_size;
+                }
+                output
+            } else {
+                (voices.iter().map(|arr| arr[i]).sum::<i32>() / self.channels.len() as i32) as i16
+            }
         });
 
-        // Go to next cache value
-        self.fir_index = if self.fir_index == 0 {
-            self.fir_cache.len() - 1
-        } else {
-            self.fir_index - 1
-        };
-        // Write value to memory
-        if self.echo_size == 0 {
-            self.fir_cache[self.fir_index] = echo_out;
-        } else {
-            [echo_in[0].to_le_bytes(), echo_in[1].to_le_bytes()]
-                .as_flattened()
-                .iter()
-                .enumerate()
-                .for_each(|(i, v)| ram[(self.echo_addr + self.echo_index + i) % ram.len()] = *v);
-            self.echo_index = (self.echo_index + 4) % self.echo_size;
-        }
         let s = (echo_out[0] + echo_out[1]) as f32 / 2.0 / 0x3FFF as f32;
         if s > 1.0 || s < -1.0 {
             error!("Invalid audio sample generated: {}", s);
