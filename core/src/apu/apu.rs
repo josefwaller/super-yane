@@ -32,13 +32,13 @@ pub struct ApuTimer {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Apu {
     pub core: Spc700Processor,
-    rest: ApuMemory,
+    pub rest: ApuMemory,
 }
 
 // Internal struct used to advance the APU core
 #[derive(Clone, Derivative, Serialize, Deserialize)]
 #[derivative(Default)]
-struct ApuMemory {
+pub struct ApuMemory {
     #[derivative(Default(value = "Box::new(Array([0; APU_RAM_SIZE]))"))]
     pub ram: Box<Array<u8, APU_RAM_SIZE>>,
     pub cpu_to_apu_reg: [u8; 4],
