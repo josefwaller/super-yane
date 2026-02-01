@@ -485,8 +485,9 @@ impl Program {
             InfoDisplay::General => column![
                 self.cpu_data().into(),
                 self.apu_data().into(),
+                self.dsp_data().into(),
                 self.ppu_data().into(),
-                self.dma_data()
+                self.dma_data(),
             ]
             .into(),
             InfoDisplay::Oam => {
@@ -965,7 +966,7 @@ impl Program {
         column![
             text("APU").color(COLORS[4]),
             values.into(),
-            port_reads.into()
+            port_reads.into(),
         ]
     }
     fn dma_data(&self) -> Column<'_, Message> {
@@ -997,6 +998,50 @@ impl Program {
                 .into()
             },
         ))
+    }
+    fn dsp_data(&self) -> impl Into<Element<'_, Message>> {
+        let dsp = &self.engine.console().apu().rest.dsp;
+        Column::with_children(
+            [
+                row![text("DSP").color(COLORS[4])],
+                row![text("Sample Dir"), text(format!("{:04X}", dsp.sample_dir))],
+                row![text("FIR COEF"), text(format!("{:02X?}", dsp.fir_coeffs))],
+                row![text("Echo Size"), text(format!("{:04X}", dsp.echo_size))],
+                row![text("Echo addr"), text(format!("{:04X}", dsp.echo_addr))],
+                row![
+                    text("Echo feedback"),
+                    text(format!("{:02X}", dsp.echo_feedback))
+                ],
+                row![
+                    text("Echo volume"),
+                    text(format!("{:02X?}", dsp.echo_volume))
+                ],
+                row![text("Echo enabled"), text(format!("{}", dsp.echo_enabled))],
+            ]
+            .into_iter()
+            .chain(
+                dsp.channels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        [
+                            row![text(format!("Voice {}", i)).color(COLORS[4])],
+                            row![text("Enabled"), text(format!("{}", c.enabled))],
+                            row![text("Volume"), text(format!("{:02X?}", c.volume))],
+                            row![
+                                text("Sample pitch"),
+                                text(format!("{:04X}", c.sample_pitch))
+                            ],
+                            row![text("Sample source"), text(format!("{:X}", c.sample_src))],
+                            row![text("ADSR enabled"), text(format!("{}", c.adsr_enabled))],
+                            row![text("Echo enabled"), text(format!("{}", c.echo_enabled))],
+                        ]
+                        .into_iter()
+                    })
+                    .flatten(),
+            )
+            .map(|r| r.spacing(10).into()),
+        )
     }
     fn disassembly(&self) -> impl Into<Element<Message>> {
         let console_pc = self

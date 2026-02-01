@@ -221,9 +221,6 @@ impl Dsp {
         let mut prev_pitch: i32 = 0;
 
         let voices: [[i32; 2]; 8] = core::array::from_fn(|i| {
-            if ![0, 4].contains(&i) {
-                return [0; 2];
-            }
             let c = &mut self.channels[i];
             if c.enabled {
                 c.clock();
@@ -364,10 +361,6 @@ impl Dsp {
                 let output = (fir_val.floor() as i32 + echo_in) as i16;
 
                 // Write value to memory
-                // debug!(
-                //     "FIR index {:02X} echo addr {:02X} echo index {:02X} echo size {:02X}",
-                //     self.fir_index, self.echo_addr, self.echo_index, self.echo_size
-                // );
                 if self.echo_size == 0 {
                     self.fir_cache[self.fir_index][side] = output;
                 } else {
@@ -396,8 +389,9 @@ impl Dsp {
         // Go to next cache value
         self.fir_index = (self.fir_index + 1) % self.fir_cache.len();
 
-        let final_out: [f32; 2] =
-            core::array::from_fn(|side| echo_out[side] as f32 + voice_out[side] as f32);
+        let final_out: [f32; 2] = core::array::from_fn(|side| {
+            (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0) + voice_out[side] as f32
+        });
 
         // debug!(
         //     "Voices {:02X} echo {:02X} final {}",
