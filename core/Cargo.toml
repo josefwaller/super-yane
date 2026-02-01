@@ -14,6 +14,7 @@ derivative = "2.2.0"
 serde = {version = "1.0.228", features = ["derive"]}
 serde-big-array = "0.5.1"
 derive-new = "0.7.0"
+seeded-random = "0.6.0"
 
 [dev-dependencies]
 insta = "1.43.1"

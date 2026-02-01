@@ -1035,6 +1035,7 @@ impl Program {
                             row![text("Sample source"), text(format!("{:X}", c.sample_src))],
                             row![text("ADSR enabled"), text(format!("{}", c.adsr_enabled))],
                             row![text("Echo enabled"), text(format!("{}", c.echo_enabled))],
+                            row![text("Noise enabled"), text(format!("{}", c.noise_enabled))],
                         ]
                         .into_iter()
                     })

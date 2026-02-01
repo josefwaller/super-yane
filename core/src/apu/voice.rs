@@ -67,6 +67,8 @@ pub struct Voice {
     pub gain_rate: usize,
     pub gain_mode: GainMode,
     pub echo_enabled: bool,
+    /// End of block flag
+    pub end_flag: bool,
     /// Current address of the block being played
     pub(super) block_addr: Option<usize>,
     /// Decoded samples from the BRR block
@@ -81,6 +83,8 @@ pub struct Voice {
     pub(super) envelope: u16,
     /// Internal period counter value
     period_counter: usize,
+    /// Replace the outut of the voice with noise
+    pub noise_enabled: bool,
 }
 
 impl Voice {

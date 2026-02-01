@@ -1,12 +1,13 @@
 use crate::{
     apu::{
         Voice,
-        voice::{AdsrStage, ENVELOPE_MAX_VALUE, GainMode},
+        voice::{AdsrStage, ENVELOPE_MAX_VALUE, GainMode, PERIOD_TABLE},
     },
     utils::bit,
 };
 use derivative::Derivative;
 use log::*;
+use seeded_random::{Random, Seed};
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, ops::Shr};
 
@@ -74,6 +75,10 @@ pub struct Dsp {
     pub echo_feedback: i8,
     /// Echo volumes, left then right
     pub echo_volume: [i8; 2],
+    /// Noise frequency
+    pub noise_frequency: usize,
+    /// Noise index
+    noise_index: usize,
     /// Index of head of fir cache
     fir_index: usize,
     /// Index of the echo sample about to be read
@@ -90,7 +95,6 @@ impl Dsp {
         match address % 0x80 {
             0x0D => self.echo_feedback = value as i8,
             0x2C => self.echo_volume[0] = value as i8,
-            0x3C => self.echo_volume[1] = value as i8,
             0x2D => {
                 self.channels
                     .iter_mut()
@@ -98,6 +102,8 @@ impl Dsp {
                     .skip(1)
                     .for_each(|(i, c)| c.pitch_mod_enabled = bit(value, i));
             }
+            0x3C => self.echo_volume[1] = value as i8,
+            0x3D => (0..8).for_each(|i| self.channels[i].noise_enabled = bit(value, i)),
             0x4D => {
                 self.channels
                     .iter_mut()
@@ -126,15 +132,16 @@ impl Dsp {
             0x5D => {
                 self.sample_dir = (value as usize) << 8;
             }
-            0x6D => self.echo_addr = (value as usize) << 8,
-            0x7D => self.echo_size = 512 * value as usize,
             0x6C => {
                 // Combined mute and reset
                 if value & 0xC0 != 0 {
                     self.channels.iter_mut().for_each(|c| c.enabled = false);
                 }
                 self.echo_enabled = !bit(value, 5);
+                self.noise_frequency = PERIOD_TABLE[(value & 0x1F) as usize]
             }
+            0x6D => self.echo_addr = (value as usize) << 8,
+            0x7D => self.echo_size = 512 * value as usize,
             reg if address & 0x0F < 0x0A => {
                 let channel_index = (reg / 0x10) & 0x0F;
                 if channel_index < self.channels.len() {
@@ -198,6 +205,12 @@ impl Dsp {
                 .map(|(i, c)| u8::from(c.echo_enabled) << i)
                 .sum(),
             0x6D => (self.echo_addr >> 8) as u8,
+            0x7C => self
+                .channels
+                .iter()
+                .enumerate()
+                .map(|(i, v)| u8::from(v.end_flag) >> (7 - i))
+                .sum(),
             0x7D => (self.echo_size / 512) as u8,
             reg if address & 0x0F < 0x0A => {
                 let channel_index = (reg / 0x10) & 0x0F;
@@ -224,6 +237,12 @@ impl Dsp {
             let c = &mut self.channels[i];
             if c.enabled {
                 c.clock();
+                // Clock noise
+                self.noise_index = if self.noise_frequency == 0 {
+                    0
+                } else {
+                    (self.noise_index + 1) % self.noise_frequency
+                };
                 // Add sample pitch to counter
                 let (counter, o) = c.counter.overflowing_add(if c.pitch_mod_enabled {
                     ((c.sample_pitch as i32 * ((prev_pitch >> 4) + 0x400)) >> 10)
@@ -246,7 +265,7 @@ impl Dsp {
                     // Low nibble
                     let filter = (head >> 2) & 0x03;
                     let loop_flag = bit(head, 1);
-                    let end_flag = bit(head, 0);
+                    c.end_flag = bit(head, 0);
                     // Read and parse blocks
                     let sample_bytes: [[i16; 2]; 8] =
                         core::array::from_fn(|i| ram[(block_addr + 1 + i) % ram.len()]).map(|v| {
@@ -286,7 +305,7 @@ impl Dsp {
                     c.samples.copy_from_slice(&samples);
 
                     // Get next block address
-                    c.block_addr = if end_flag {
+                    c.block_addr = if c.end_flag {
                         if loop_flag {
                             // Point to loop address
                             let addr = self.sample_dir + c.sample_src + 2;
@@ -330,7 +349,12 @@ impl Dsp {
 
             prev_pitch = sample;
 
-            let s = (sample * c.envelope as i32) / ENVELOPE_MAX_VALUE as i32;
+            let s = if c.noise_enabled {
+                Random::from_seed(Seed::unsafe_new(self.noise_index as u64)).i32() & 0xFFFF
+            } else {
+                sample
+            } * c.envelope as i32
+                / ENVELOPE_MAX_VALUE as i32;
 
             core::array::from_fn(|i| ((s * c.volume[i] as i32) >> 7) as i32)
         });
