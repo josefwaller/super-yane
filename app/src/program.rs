@@ -1020,7 +1020,7 @@ impl Program {
             ]
             .into_iter()
             .chain(
-                dsp.channels
+                dsp.voices
                     .iter()
                     .enumerate()
                     .map(|(i, c)| {

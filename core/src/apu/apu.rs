@@ -179,10 +179,10 @@ impl Apu {
         self.core.reset();
         self.rest.expose_ipl_rom = true;
         self.rest.timers.iter_mut().for_each(|i| i.counter = 0);
-        // Silence every channel
+        // Silence every voice
         self.rest
             .dsp
-            .channels
+            .voices
             .iter_mut()
             .for_each(|c| c.enabled = false);
     }
