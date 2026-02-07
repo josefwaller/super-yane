@@ -366,23 +366,24 @@ impl Dsp {
         // Do for left/right
         let echo_out: [i16; 2] = core::array::from_fn(|side| {
             if self.echo_enabled {
-                // Compute FIR value
+                // Compute value of FIR taps
                 let fir_val: f32 = (0..8)
                     .map(|j| {
                         (self.fir_coeffs[j] as f32 / 128.0)
                             * self.fir_cache[(self.fir_index + j) % self.fir_cache.len()][side]
                                 as f32
                     })
-                    .sum();
+                    .sum::<f32>();
                 // Compute value of voices with echo enabled
-                let echo_in: i32 = voices
+                let echo_voices: i32 = voices
                     .iter()
                     .enumerate()
                     .filter(|(i, _)| self.channels[*i].echo_enabled)
                     .map(|(_, v)| v[side])
-                    .sum();
-                // Calculate output before writing back
-                let output = (fir_val.floor() as i32 + echo_in) as i16;
+                    .sum::<i32>();
+                // Multiply FIR tap by feedback value before adding voices
+                let output = ((fir_val * self.echo_feedback as f32 / 128.0).floor() as i32
+                    + echo_voices) as i16;
 
                 // Write value to memory
                 if self.echo_size == 0 {
@@ -393,8 +394,7 @@ impl Dsp {
                     let ram_val = i16::from_le_bytes([ram[index], ram[(index + 1) % ram.len()]]);
                     self.fir_cache[self.fir_index][side] = ram_val;
                     // Write current output to RAM
-                    let to_write =
-                        (output as f32 * self.echo_feedback as f32 / 128.0).floor() as i16;
+                    let to_write = output as i16;
                     to_write
                         .to_le_bytes()
                         .iter()
@@ -405,7 +405,7 @@ impl Dsp {
                     // Increment by 2 since we added 2 bytes
                     self.echo_index = (self.echo_index + 2) % self.echo_size;
                 }
-                output
+                output / 128
             } else {
                 0
             }
@@ -416,11 +416,6 @@ impl Dsp {
         let final_out: [f32; 2] = core::array::from_fn(|side| {
             (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0) + voice_out[side] as f32
         });
-
-        // debug!(
-        //     "Voices {:02X} echo {:02X} final {}",
-        //     voice_out[0], echo_out[0], final_out[0]
-        // );
 
         let s = (final_out[0] + final_out[1]) / 2.0 / 0x3FFF as f32;
         if s > 1.0 || s < -1.0 {
