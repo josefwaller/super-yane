@@ -1027,6 +1027,10 @@ impl Program {
                         [
                             row![text(format!("Voice {}", i)).color(COLORS[4])],
                             row![text("Enabled"), text(format!("{}", c.enabled))],
+                            row![
+                                text("Pitch Mod Enabled"),
+                                text(format!("{}", c.pitch_mod_enabled))
+                            ],
                             row![text("Volume"), text(format!("{:02X?}", c.volume))],
                             row![
                                 text("Sample pitch"),
@@ -1034,6 +1038,7 @@ impl Program {
                             ],
                             row![text("Sample source"), text(format!("{:X}", c.sample_src))],
                             row![text("ADSR enabled"), text(format!("{}", c.adsr_enabled))],
+                            row![text("ADSR stage"), text(c.adsr_stage.to_string())],
                             row![text("Echo enabled"), text(format!("{}", c.echo_enabled))],
                             row![text("Noise enabled"), text(format!("{}", c.noise_enabled))],
                         ]

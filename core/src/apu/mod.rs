@@ -1,4 +1,5 @@
 mod apu;
+mod constants;
 mod dsp;
 mod voice;
 

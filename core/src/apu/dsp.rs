@@ -1,15 +1,12 @@
 use crate::{
-    apu::{
-        Voice,
-        voice::{AdsrStage, ENVELOPE_MAX_VALUE, GainMode, PERIOD_TABLE},
-    },
+    apu::{Voice, constants::PERIOD_TABLE, voice::AdsrStage},
     utils::bit,
 };
 use derivative::Derivative;
 use log::*;
 use seeded_random::{Random, Seed};
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, ops::Shr};
+use std::collections::VecDeque;
 
 /// The DSP
 #[derive(Clone, Derivative, Serialize, Deserialize)]
@@ -72,10 +69,9 @@ impl Dsp {
                     if bit(value, i) {
                         c.enabled = true;
                         // If we are not using ADSR, we don't want to reset the envelope
-                        if c.adsr_enabled {
-                            c.adsr_stage = AdsrStage::Attack;
-                            c.envelope = 0;
-                        }
+                        c.adsr_stage = AdsrStage::Attack;
+                        c.envelope = 0;
+                        c.block_addr = None
                     }
                 });
             }
@@ -102,40 +98,7 @@ impl Dsp {
             reg if address & 0x0F < 0x0A => {
                 let channel_index = (reg / 0x10) & 0x0F;
                 if channel_index < self.voices.len() {
-                    let c = &mut self.voices[channel_index];
-                    match reg & 0x0F {
-                        0 => c.volume[0] = value as i8,
-                        1 => c.volume[1] = value as i8,
-                        2 => {
-                            c.sample_pitch = (c.sample_pitch & 0x3F00) | (value as u16);
-                        }
-                        3 => {
-                            c.sample_pitch =
-                                ((value & 0x3F) as u16 * 0x100) | (c.sample_pitch & 0xFF);
-                        }
-                        4 => {
-                            c.sample_src = (value as usize) * 0x04;
-                        }
-                        5 => {
-                            c.adsr_enabled = bit(value, 7);
-                            c.decay_rate = 0x2 * ((value >> 4) as usize & 0x07) + 0x10;
-                            c.attack_rate = 0x2 * (value as usize & 0xF) + 1;
-                        }
-                        6 => {
-                            c.sustain_rate = (value & 0x1F) as usize;
-                            c.sustain_level = ((value >> 5) as u32 + 1) * 0x100;
-                        }
-                        7 => {
-                            if !bit(value, 7) {
-                                c.envelope = (value as u16 & 0x7F) * 0x10;
-                                c.gain_mode = GainMode::Fixed;
-                            } else {
-                                c.gain_rate = (value & 0x1F) as usize;
-                                c.gain_mode = GainMode::from(value >> 5);
-                            }
-                        }
-                        _ => {}
-                    }
+                    self.voices[channel_index].write_byte(address, value);
                 }
             }
             v if address & 0x0F == 0x0F => {
@@ -170,16 +133,9 @@ impl Dsp {
                 .sum(),
             0x7D => (self.echo_size / 512) as u8,
             reg if address & 0x0F < 0x0A => {
-                let channel_index = (reg / 0x10) & 0x0F;
-                if channel_index < self.voices.len() {
-                    let c = &mut self.voices[channel_index];
-                    match reg & 0x0F {
-                        0 => c.volume[0] as u8,
-                        1 => c.volume[1] as u8,
-                        2 => (c.sample_pitch & 0xFF) as u8,
-                        3 => (c.sample_pitch >> 8) as u8,
-                        _ => todo!(),
-                    }
+                let index = (reg / 0x10) & 0x0F;
+                if index < self.voices.len() {
+                    self.voices[index].read(address)
                 } else {
                     0
                 }
