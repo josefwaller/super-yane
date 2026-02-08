@@ -1,5 +1,9 @@
 use crate::{
-    apu::{Voice, constants::PERIOD_TABLE, voice::AdsrStage},
+    apu::{
+        Voice,
+        constants::{LEFT, PERIOD_TABLE, RIGHT},
+        voice::AdsrStage,
+    },
     utils::bit,
 };
 use derivative::Derivative;
@@ -12,6 +16,8 @@ use std::collections::VecDeque;
 #[derive(Clone, Derivative, Serialize, Deserialize)]
 #[derivative(Default)]
 pub struct Dsp {
+    /// The volume
+    pub volume: [i8; 2],
     /// The voices, or sound channels
     pub voices: [Voice; 8],
     /// Sample directory
@@ -47,6 +53,8 @@ pub struct Dsp {
 impl Dsp {
     pub fn write(&mut self, address: usize, value: u8) {
         match address % 0x80 {
+            0x0C => self.volume[LEFT] = value as i8,
+            0x1C => self.volume[RIGHT] = value as i8,
             0x0D => self.echo_feedback = value as i8,
             0x2C => self.echo_volume[0] = value as i8,
             0x2D => {
@@ -109,7 +117,7 @@ impl Dsp {
             }
             _ => {
                 // Ignore for now
-                debug!("Unknown DSP register {address:04X} value={value:02X}");
+                debug!("Unknown DSP register {address:02X} value={value:02X}");
             }
         }
     }
@@ -213,9 +221,10 @@ impl Dsp {
         self.fir_index = (self.fir_index + 1) % self.fir_cache.len();
 
         let final_out: [f32; 2] = core::array::from_fn(|side| {
-            (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0) + voice_out[side] as f32
+            (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0)
+                + (voice_out[side] as f32 * self.volume[side] as f32 / 128.0)
         });
-
+        // For right now, just average the left/right sides
         let s = (final_out[0] + final_out[1]) / 2.0 / 0x3FFF as f32;
         if s > 1.0 || s < -1.0 {
             error!("Invalid audio sample generated: {}", s);
