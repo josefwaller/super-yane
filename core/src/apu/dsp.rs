@@ -106,7 +106,7 @@ impl Dsp {
             reg if address & 0x0F < 0x0A => {
                 let channel_index = (reg / 0x10) & 0x0F;
                 if channel_index < self.voices.len() {
-                    self.voices[channel_index].write_byte(address, value);
+                    self.voices[channel_index].write(address, value);
                 }
             }
             v if address & 0x0F == 0x0F => {

@@ -94,7 +94,7 @@ pub struct Voice {
 }
 
 impl Voice {
-    pub fn write_byte(&mut self, addr: usize, value: u8) {
+    pub fn write(&mut self, addr: usize, value: u8) {
         match addr & 0x0F {
             0 => self.volume[LEFT] = value as i8,
             1 => self.volume[RIGHT] = value as i8,
