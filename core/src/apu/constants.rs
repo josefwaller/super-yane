@@ -1,7 +1,7 @@
 /// Index used for the left channel
 pub const LEFT: usize = 0;
 /// Index used for the right channel
-pub const RIGHT: usize = 0;
+pub const RIGHT: usize = 1;
 
 pub const ENVELOPE_MAX_VALUE: u16 = 0x7FF;
 

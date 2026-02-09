@@ -129,7 +129,7 @@ impl Voice {
         }
     }
     pub fn read(&self, addr: usize) -> u8 {
-        match addr & 0xF0 {
+        match addr & 0x0F {
             0 => self.volume[LEFT] as u8,
             1 => self.volume[RIGHT] as u8,
             2 => self.sample_pitch.to_le_bytes()[0],
@@ -166,7 +166,7 @@ impl Voice {
                     if self.get_period_elapsed(self.decay_rate) {
                         let v = self.envelope.saturating_sub(1);
                         let v = v.saturating_sub((v >> 8) + 1);
-                        if v & 0xE0 == (self.sustain_level & 0xE0) as u16 {
+                        if v <= self.sustain_level as u16 {
                             self.adsr_stage = Sustain;
                         }
                         v

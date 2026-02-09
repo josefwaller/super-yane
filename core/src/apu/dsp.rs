@@ -76,10 +76,12 @@ impl Dsp {
                 self.voices.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
                         c.enabled = true;
-                        // If we are not using ADSR, we don't want to reset the envelope
                         c.adsr_stage = AdsrStage::Attack;
-                        c.envelope = 0;
-                        c.block_addr = None
+                        c.block_addr = None;
+                        // If we are not using ADSR, we don't want to reset the envelope
+                        if c.adsr_enabled {
+                            c.envelope = 0;
+                        }
                     }
                 });
             }
