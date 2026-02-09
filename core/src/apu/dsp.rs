@@ -156,13 +156,13 @@ impl Dsp {
     pub fn generate_sample(&mut self, ram: &mut [u8]) {
         let mut prev_pitch: i32 = 0;
         // Clock noise
-        self.noise_index = if self.noise_frequency == 0 {
-            0
-        } else {
-            (self.noise_index + 1) % self.noise_frequency
-        };
+        self.noise_index = self.noise_index.wrapping_add(1);
         // Generate noise value
-        let noise_val = Random::from_seed(Seed::unsafe_new(self.noise_index as u64)).i32() & 0xFFFF;
+        let noise_val = Random::from_seed(Seed::unsafe_new(
+            (self.noise_index / self.noise_frequency.max(1)) as u64,
+        ))
+        .i32()
+            & 0xFFFF;
 
         let voices: [[i32; 2]; 8] = core::array::from_fn(|i| {
             self.voices[i].generate_sample(self.sample_dir, &mut prev_pitch, &ram, noise_val)
