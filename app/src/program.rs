@@ -556,6 +556,7 @@ impl Program {
                     .spacing(0)
                 ],
                 container(column![
+                    container(text(self.engine.console().cartridge().title()).center()).center_x(Length::Fill),
                     Stack::with_children(
                         [
                             canvas(

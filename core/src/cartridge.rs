@@ -99,4 +99,10 @@ impl Cartridge {
             self.data[self.transform_address(address) % self.data.len()]
         }
     }
+    // TBD: Should there just be a `header` method that returns a custom struct?
+    pub fn title(&self) -> String {
+        (0..21)
+            .map(|i| self.read_byte(0xFFC0 + i) as char)
+            .collect()
+    }
 }
