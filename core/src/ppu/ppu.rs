@@ -273,6 +273,12 @@ pub struct Ppu {
     /// Mode 7 flip vertical
     #[new(value = "false")]
     pub m7_flip_v: bool,
+    /// Multiplication value
+    #[new(value = "0")]
+    pub multi_value: i16,
+    /// Multiplication factor
+    #[new(value = "0")]
+    pub multi_factor: i8,
     /// Multiplication latch
     #[new(value = "0")]
     pub multi_latch: u8,
@@ -376,7 +382,7 @@ impl Ppu {
                 v
             }
             0x213E => {
-                // warn!("Read from PPU STAT 1");
+                warn!("Read from PPU STAT 1");
                 0
             }
             0x213F => {
@@ -386,7 +392,7 @@ impl Ppu {
                 (u8::from(self.interlace_field) << 7) | (c << 6)
             }
             _ => {
-                debug!("Unknown read PPU register {:04X}", addr);
+                warn!("Unknown read PPU register {:04X}", addr);
                 open_bus
             }
         }
@@ -568,8 +574,14 @@ impl Ppu {
             0x211B..=0x2120 => {
                 let v = ((value as u16) << 8) | self.multi_latch as u16;
                 match addr & 0xFF {
-                    0x1B => self.matrix.a = v,
-                    0x1C => self.matrix.b = v,
+                    0x1B => {
+                        self.matrix.a = v;
+                        self.multi_value = v as i16;
+                    }
+                    0x1C => {
+                        self.matrix.b = v;
+                        self.multi_factor = value as i8;
+                    }
                     0x1D => self.matrix.c = v,
                     0x1E => self.matrix.d = v,
                     0x1F => {
@@ -690,13 +702,12 @@ impl Ppu {
                 self.overscan = bit(value, 2);
                 warn!("Write to PPU SETINI {:02X}", value);
             }
-            _ => debug!("Unknown PPU register: {:04X} {:02X}", addr, value),
+            _ => warn!("Unknown PPU register: {:04X} {:02X}", addr, value),
         }
     }
     /// Refresh the multiplication result value
     fn refresh_multi_res(&mut self) {
-        // Only the lower byte of B is used for the multiplication
-        self.multi_res = (self.matrix.a as i16) as i32 * (self.matrix.b & 0xFF) as i32;
+        self.multi_res = self.multi_value as i32 * self.multi_factor as i32;
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
         if self.can_write_vram() {
@@ -1113,7 +1124,7 @@ impl Ppu {
                     || match self.timer_mode {
                         TimerMode::Disabled => false,
                         TimerMode::Horizontal => h,
-                        TimerMode::Vertical => v && self.h_timer == 0,
+                        TimerMode::Vertical => v && x == 0,
                         TimerMode::HorizontalVertical => h && v,
                     };
 

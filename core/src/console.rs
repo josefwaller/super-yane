@@ -81,7 +81,7 @@ impl ExternalArchitecture {
                 // Read S-WRAM
                 0x2180 => {
                     let v = self.ram[self.wram_addr % self.ram.len()];
-                    self.wram_addr = (self.wram_addr + 1) % 0x200;
+                    self.wram_addr = (self.wram_addr + 1) % 0x20000;
                     (v, 6)
                 }
                 0x4002..0x4007 => (self.open_bus_value, 6),
@@ -239,22 +239,23 @@ impl ExternalArchitecture {
                         6
                     }
                     0x2180 => {
+                        debug!("Write WRAM {:02X}", value);
                         let i = self.wram_addr % self.ram.len();
                         self.ram[i] = value;
-                        self.wram_addr = (self.wram_addr + 1) % 0x200;
+                        self.wram_addr = (self.wram_addr + 1) % 0x20000;
                         6
                     }
                     0x2181 => {
-                        self.wram_addr = (self.wram_addr & 0x1F0) | value as usize;
+                        self.wram_addr = (self.wram_addr & 0x1FF00) | value as usize;
                         6
                     }
                     0x2182 => {
-                        self.wram_addr = (self.wram_addr & 0x10F) | ((value as usize) << 8);
+                        self.wram_addr = (self.wram_addr & 0x100FF) | ((value as usize) << 8);
                         6
                     }
                     0x2183 => {
                         self.wram_addr =
-                            ((self.wram_addr & 0xFF) | ((value as usize) << 16)) & 0x1FF;
+                            ((self.wram_addr & 0xFFFF) | ((value as usize) << 16)) & 0x1FFFF;
                         6
                     }
                     0x4016 => {
