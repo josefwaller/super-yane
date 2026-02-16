@@ -1,7 +1,7 @@
 use crate::disassembler::Label;
 use log::*;
 use std::collections::BTreeMap;
-use super_yane::Console;
+use super_yane::{Cartridge, Console, cartridge::MemoryMap};
 use wdc65816::{OpcodeData, format_address_mode, opcode_data};
 
 #[derive(Clone, Copy)]
@@ -16,7 +16,7 @@ pub struct Instruction {
 impl Instruction {
     pub fn from_console(value: &Console) -> Self {
         Instruction {
-            pc: value.cartridge().transform_address(value.pc()),
+            pc: value.pc(),
             opcode: value.opcode(),
             operands: core::array::from_fn(|i| value.read_byte_cpu(value.pc() + i + 1)),
             a: value.cpu().p.a_is_16bit(),
@@ -27,7 +27,11 @@ impl Instruction {
         let data = opcode_data(self.opcode, self.a, self.xy);
         let operands = self
             .get_jump_addr(self.pc)
-            .map(|addr| labels.get(&(addr & 0x7FFF)).map(|l| l.to_string()))
+            .map(|addr| {
+                labels
+                    .get(&(MemoryMap::LoRom.transform_address(addr)))
+                    .map(|l| l.to_string())
+            })
             .flatten()
             .unwrap_or(format_address_mode(
                 data.addr_mode,
@@ -52,7 +56,7 @@ impl Instruction {
         // Absolute address
         } else if [JMP_A, JSR_A].contains(&self.opcode) {
             Some(u16::from_le_bytes(core::array::from_fn(|i| self.operands()[i])) as usize)
-        } else if [JMP_AL].contains(&self.opcode) {
+        } else if [JMP_AL, JSL].contains(&self.opcode) {
             Some(u32::from_le_bytes(core::array::from_fn(|i| {
                 if i < self.operands.len() {
                     self.operands[i]
