@@ -2,14 +2,14 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
-enum MemoryMap {
+pub enum MemoryMap {
     LoRom,
     HiRom,
     ExHiRom,
 }
 
 impl MemoryMap {
-    fn transform_address(&self, address: usize) -> usize {
+    pub fn transform_address(&self, address: usize) -> usize {
         match self {
             MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x7F_8000),
             _ => todo!("{:?} memory mapping", self),
@@ -74,6 +74,10 @@ impl Cartridge {
             (1 << n) * 1024
         };
         debug!("SRAM len: {}", sram_len);
+        debug!(
+            "Country is {}",
+            data[memory_map.transform_address(0x00FFD9) % data.len()]
+        );
         Cartridge {
             data: match memory_map {
                 MemoryMap::LoRom => data.to_vec(),

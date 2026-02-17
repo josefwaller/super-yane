@@ -15,7 +15,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-pub const PIXELS_PER_SCANLINE: usize = 341;
+pub const PIXELS_PER_SCANLINE: usize = 1364 / 4;
 pub const SCANLINES: usize = 262;
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
@@ -173,9 +173,9 @@ pub struct Ppu {
     #[serde(skip, default = "default_screen_buffer")]
     #[new(value = "default_screen_buffer()")]
     pub screen_buffer: [u16; 256 * 240],
-    /// This is not the dot, should rename
+    /// The number of master cycles that have passed, used to track the dot
     #[new(value = "0")]
-    pub dot: usize,
+    pub master_cycles: usize,
     /// The currently selected sizes of the OAM sprites
     #[new(value = "[(8, 8), (16, 16)]")]
     pub oam_sizes: [(usize, usize); 2],
@@ -302,10 +302,10 @@ pub struct Ppu {
     #[new(value = "false")]
     pub ophct_latch: bool,
     /// IRQ timer H target
-    #[new(value = "0")]
+    #[new(value = "0x1FF")]
     pub h_timer: u16,
     /// IRQ timer V target
-    #[new(value = "0")]
+    #[new(value = "0x1FF")]
     pub v_timer: u16,
     #[new(value = "false")]
     pub trigger_irq: bool,
@@ -573,6 +573,7 @@ impl Ppu {
             }
             0x211B..=0x2120 => {
                 let v = ((value as u16) << 8) | self.multi_latch as u16;
+                self.multi_latch = value;
                 match addr & 0xFF {
                     0x1B => {
                         self.matrix.a = v;
@@ -602,7 +603,6 @@ impl Ppu {
                     }
                     _ => unreachable!(),
                 }
-                self.multi_latch = value;
                 self.refresh_multi_res();
             }
             0x2121 => {
@@ -1084,22 +1084,23 @@ impl Ppu {
             });
         self.oam_buffer = oam_buffer;
     }
-    fn dot_xy(&self) -> (usize, usize) {
-        // Note the visual picture starts at dot 88
-        let x = (self.dot / 4) % PIXELS_PER_SCANLINE;
-        let y = (self.dot / 4) / PIXELS_PER_SCANLINE;
+    /// Calculate the dot position based on the master cycles
+    pub fn dot_xy(&self) -> (usize, usize) {
+        let x = (self.master_cycles / 4) % PIXELS_PER_SCANLINE;
+        let y = (self.master_cycles / 4) / PIXELS_PER_SCANLINE;
         (x, y)
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
-            self.dot = (self.dot + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
-            if self.dot % 4 == 0 {
+            self.master_cycles = (self.master_cycles + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
+            if self.master_cycles % 4 == 0 {
                 let (x, y) = self.dot_xy();
-                // Todo: check if this timing is correct
+                // Clear VBlank flag
                 if y == 0 && x == 0 {
                     self.vblank = false;
                     self.interlace_field = !self.interlace_field;
                 }
+                // Trigger VBlank
                 let vblank_scanline = if self.overscan { 241 } else { 225 };
                 if y == vblank_scanline && x == 0 {
                     self.vblank = true;
@@ -1128,6 +1129,8 @@ impl Ppu {
                         TimerMode::HorizontalVertical => h && v,
                     };
 
+                // Check if we are in the rendering area
+                // Note that the rendering starts at x = 22
                 if x >= 22 && x < 256 + 22 && y < 240 {
                     let x = x - 22;
 

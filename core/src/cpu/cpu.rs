@@ -10,6 +10,12 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn step(&mut self, memory: &mut ExternalArchitecture) {
+        let x = memory.ppu.dot_xy().0;
+        if x > 134 && x < 144 {
+            // Pause for 40 cycles
+            memory.advance(40);
+            return;
+        }
         // Prioritize HDMA
         let current_dma = (0..memory.dma_channels.len())
             .find(|i| memory.dma_channels[*i].is_executing && memory.dma_channels[*i].is_hdma())

@@ -1,4 +1,4 @@
-mod cartridge;
+pub mod cartridge;
 mod console;
 mod cpu;
 mod input_port;

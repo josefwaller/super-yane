@@ -239,7 +239,6 @@ impl ExternalArchitecture {
                         6
                     }
                     0x2180 => {
-                        debug!("Write WRAM {:02X}", value);
                         let i = self.wram_addr % self.ram.len();
                         self.ram[i] = value;
                         self.wram_addr = (self.wram_addr + 1) % 0x20000;
@@ -263,7 +262,11 @@ impl ExternalArchitecture {
                         if value & 0x01 == 0x01 {
                             self.latched_input_port = self.input_ports.clone();
                         }
-                        6
+                        12
+                    }
+                    0x4017 => {
+                        warn!("Serial data port");
+                        12
                     }
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
