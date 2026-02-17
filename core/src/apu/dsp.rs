@@ -88,6 +88,7 @@ impl Dsp {
             0x5C => {
                 self.voices.iter_mut().enumerate().for_each(|(i, c)| {
                     if bit(value, i) {
+                        c.adsr_enabled = true;
                         c.adsr_stage = AdsrStage::Release;
                     }
                 });
@@ -150,7 +151,7 @@ impl Dsp {
                     0
                 }
             }
-            _ => todo!(),
+            _ => 0, // _ => todo!(),
         }
     }
     pub fn generate_sample(&mut self, ram: &mut [u8]) {

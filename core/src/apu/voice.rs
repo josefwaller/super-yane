@@ -223,8 +223,8 @@ impl Voice {
         ram: &[u8],
         noise_value: i32,
     ) -> [i32; 2] {
+        self.clock();
         if self.enabled {
-            self.clock();
             // Add sample pitch to counter
             let (counter, o) = self.counter.overflowing_add(if self.pitch_mod_enabled {
                 ((self.sample_pitch as i32 * ((*prev_pitch >> 4) + 0x400)) >> 10)
