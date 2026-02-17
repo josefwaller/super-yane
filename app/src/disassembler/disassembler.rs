@@ -95,7 +95,7 @@ impl Disassembler {
     }
     // Merge all of the values of the other disassembler into this one.
     // This will remove all of the values out of other
-    pub fn merge(&mut self, other: &mut Disassembler) {
+    pub fn consume(&mut self, other: &mut Disassembler) {
         self.instructions.append(&mut other.instructions);
         self.labels.append(&mut other.labels);
     }

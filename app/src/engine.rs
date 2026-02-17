@@ -14,6 +14,7 @@ const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 use crate::{
     disassembler::{self, Disassembler},
     instruction_snapshot::InstructionSnapshot,
+    profiler::Profiler,
 };
 
 /// Misc settings for advancing the emulator
@@ -73,6 +74,7 @@ pub struct UpdateEmuPayload {
 pub struct DoneEmuPayload {
     console: Console,
     disassembler: Disassembler,
+    profiler: Profiler,
 }
 
 /// The payload sent every frame from the emulator thread containing output information
@@ -87,6 +89,7 @@ pub struct StreamPayload {
 pub struct Engine {
     console: Console,
     pub disassembler: Disassembler,
+    pub profiler: Profiler,
     sender: Sender<UpdateEmuPayload>,
     emu_data_receiver: Receiver<DoneEmuPayload>,
     stream_receiver: Receiver<StreamPayload>,
@@ -113,17 +116,20 @@ impl Engine {
                 loop {
                     let payload = receiver.recv().unwrap();
                     let mut disassembler = Disassembler::new();
+                    let mut profiler = Profiler::new();
                     console.input_ports_mut()[0] = payload.input[0];
                     /// Advance by 1 instruction
                     macro_rules! advance {
                         () => {
                             let vblank = console.ppu().is_in_vblank();
+                            let before_master_cycles = *console.total_master_clocks();
                             console.advance_instructions(1);
                             if payload.settings.log_cpu {
                                 let inst = InstructionSnapshot::from(&console);
                                 info!("{}", inst);
                             }
                             disassembler.add_current_instruction(&console);
+                            profiler.add_current_state(&console, before_master_cycles);
                             if vblank && !console.ppu().is_in_vblank() {
                                 stream_sender
                                     .send(StreamPayload::new(
@@ -181,6 +187,7 @@ impl Engine {
                             emu_data_sender
                                 .send(DoneEmuPayload {
                                     console: console.clone(),
+                                    profiler,
                                     disassembler,
                                 })
                                 .expect("Unable to send console to main thread");
@@ -193,6 +200,7 @@ impl Engine {
                                 .send(DoneEmuPayload {
                                     console: console.clone(),
                                     disassembler,
+                                    profiler,
                                 })
                                 .expect("Unable to send console to main thread");
                         }
@@ -213,6 +221,7 @@ impl Engine {
             stream_receiver,
             emu_data_receiver,
             disassembler: Disassembler::new(),
+            profiler: Profiler::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 4]; 256 * 240],
             samples: VecDeque::new(),
@@ -279,7 +288,8 @@ impl Engine {
         match self.emu_data_receiver.try_recv() {
             Ok(mut d) => {
                 self.console = d.console;
-                self.disassembler.merge(&mut d.disassembler);
+                self.disassembler.consume(&mut d.disassembler);
+                self.profiler.consume(&mut d.profiler);
             }
             Err(_) => {}
         }

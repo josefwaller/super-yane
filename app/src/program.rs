@@ -5,6 +5,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+use wdc65816::{OpcodeData, opcode_data};
 
 use crate::{
     disassembler::Label,
@@ -29,7 +30,7 @@ use iced::{
     },
     widget::{
         Column, Row, Stack, button, canvas, checkbox, column, container, pick_list, row,
-        scrollable, space::horizontal,
+        scrollable, space, space::horizontal,
     },
     window,
 };
@@ -38,7 +39,7 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use sdl2::audio::AudioQueue;
+use sdl2::{audio::AudioQueue, sys::SDL_HapticLeftRight};
 use super_yane::{
     Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8, utils::color_to_rgb_bytes,
 };
@@ -105,24 +106,6 @@ impl Display for RamDisplay {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum InstDisplay {
-    Cpu,
-    Apu,
-}
-impl Display for InstDisplay {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use InstDisplay::*;
-        write!(
-            f,
-            "{}",
-            match self {
-                Cpu => "CPU",
-                Apu => "APU",
-            }
-        )
-    }
-}
 #[derive(Default, PartialEq, Debug, Clone)]
 pub enum InfoDisplay {
     #[default]
@@ -142,6 +125,48 @@ impl Display for InfoDisplay {
         )
     }
 }
+#[derive(Default, PartialEq, Debug, Clone, Copy)]
+pub enum ProfilerDisplay {
+    #[default]
+    OpcodeCycles,
+    ProgramCounterCycles,
+}
+
+impl Display for ProfilerDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ProfilerDisplay::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                OpcodeCycles => "Cycles per Opcode",
+                ProgramCounterCycles => "Cycles per PC",
+            }
+        )
+    }
+}
+
+#[derive(Default, PartialEq, Debug, Clone)]
+pub enum RightPanelDisplay {
+    #[default]
+    Disassembler,
+    Profiler(ProfilerDisplay),
+}
+
+impl Display for RightPanelDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RightPanelDisplay::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Disassembler => "Disassembler",
+                Profiler(_) => "Profiler",
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     NewFrame(),
@@ -154,8 +179,8 @@ pub enum Message {
     SetVramBpp(usize),
     SetVramPalette(usize),
     SetVramDirectColor(bool),
-    SetInstDisplay(InstDisplay),
     SetInfoDisplay(InfoDisplay),
+    SetRightPanelDisplay(RightPanelDisplay),
     LoadRom,
     LoadSavestate,
     CreateSavestate,
@@ -188,22 +213,15 @@ pub struct Program {
     /// Cached VRAM RGBA data for rendering
     #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT]")]
     vram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_HEIGHT],
-    /// Cached WRAM data as RGB data
-    #[new(value = "[[0; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_WIDTH]")]
-    wram_rgba_data: [[u8; 4]; VRAM_IMAGE_WIDTH * VRAM_IMAGE_WIDTH],
     /// Cached OAM sprite data for rendering
     #[new(value = "Box::new([[[0;4]; 64 * 64]; 128])")]
     oam_sprite_rgba_data: Box<[[[u8; 4]; 64 * 64]; 128]>,
     #[new(value = "0")]
     total_instructions: u32,
-    #[new(value = "VecDeque::new()")]
-    previous_instruction_snapshots: VecDeque<InstructionSnapshot>,
-    #[new(value = "VecDeque::new()")]
-    previous_apu_snapshots: VecDeque<ApuSnapshot>,
-    #[new(value = "InstDisplay::Cpu")]
-    inst_display: InstDisplay,
     #[new(value = "InfoDisplay::General")]
     info_display: InfoDisplay,
+    #[new(default)]
+    right_panel_display: RightPanelDisplay,
     #[new(value = "false")]
     log_apu: bool,
     #[new(value = "false")]
@@ -470,13 +488,13 @@ impl Program {
             }
             Message::SetVramPalette(palette) => self.vram_palette = palette,
             Message::SetVramDirectColor(dc) => self.vram_direct_color = dc,
-            Message::SetInstDisplay(d) => self.inst_display = d,
             Message::ToggleLogApu(v) => self.log_apu = v,
             Message::ToggleLogCpu(v) => self.settings.log_cpu = v,
             Message::Record(v) => {
                 self.record = v;
             }
             Message::SetInfoDisplay(v) => self.info_display = v,
+            Message::SetRightPanelDisplay(v) => self.right_panel_display = v,
         };
         Task::none()
     }
@@ -602,7 +620,16 @@ impl Program {
                     iced::Background::Color(Color::BLACK)
                 )),
                 column![
-                    container(self.disassembly()).height(Length::Fill),
+                        pick_list(
+                            [RightPanelDisplay::Disassembler, RightPanelDisplay::Profiler(ProfilerDisplay::OpcodeCycles)],
+                            Some(self.right_panel_display.clone()),
+                            Message::SetRightPanelDisplay,
+                        ),
+                    container(match self.right_panel_display {
+                        RightPanelDisplay::Disassembler => self.disassembly().into(),
+                        RightPanelDisplay::Profiler(d) => self.profiler(d).into()
+                    }
+                    ).height(Length::Fill),
                     row![
                         text("Log CPU"),
                         checkbox(self.settings.log_cpu).on_toggle(Message::ToggleLogCpu),
@@ -1051,6 +1078,57 @@ impl Program {
             )
             .map(|r| r.spacing(10).into()),
         )
+    }
+    fn profiler(&self, display: ProfilerDisplay) -> impl Into<Element<Message>> {
+        scrollable(column![
+            pick_list(
+                [
+                    ProfilerDisplay::OpcodeCycles,
+                    ProfilerDisplay::ProgramCounterCycles
+                ],
+                Some(display),
+                |d| Message::SetRightPanelDisplay(RightPanelDisplay::Profiler(d)),
+            ),
+            match display {
+                ProfilerDisplay::OpcodeCycles => {
+                    Column::from_iter(
+                        (0..=0xFF)
+                            .map(|i| (i, self.engine.profiler.opcode_cycles[i as usize]))
+                            .sorted_by(|(_, c1), (_, c2)| c2.cmp(c1))
+                            .map(|(op, c)| {
+                                let data = opcode_data(op, false, false);
+                                row![
+                                    text(data.name),
+                                    space().width(Length::Fill),
+                                    text(format!("{}", c))
+                                ]
+                                .into()
+                            }),
+                    )
+                }
+                ProfilerDisplay::ProgramCounterCycles => {
+                    Column::from_iter(
+                        self.engine
+                            .profiler
+                            .pc_count
+                            .iter()
+                            .sorted_by(|(_, (c1, _)), (_, (c2, _))| c2.cmp(c1))
+                            .take(40)
+                            .map(|(pc, (count, inst))| {
+                                row![
+                                    text(format!("{:06X} ", pc)),
+                                    text(inst.data().name.to_string()),
+                                    space().width(Length::Fill),
+                                    text(format!("{}", count))
+                                ]
+                                .into()
+                            }),
+                    )
+                }
+            }
+        ])
+        .spacing(10)
+        .width(Length::Fill)
     }
     fn disassembly(&self) -> impl Into<Element<Message>> {
         let console_pc = self

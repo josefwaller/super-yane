@@ -16,6 +16,7 @@ mod engine;
 mod widgets;
 use program::Program;
 mod disassembler;
+mod profiler;
 mod table;
 
 fn initial_state() -> Program {

@@ -82,7 +82,7 @@ impl ExternalArchitecture {
                 0x2180 => {
                     let v = self.ram[self.wram_addr % self.ram.len()];
                     self.wram_addr = (self.wram_addr + 1) % 0x20000;
-                    (v, 6)
+                    (v, 8)
                 }
                 0x4002..0x4007 => (self.open_bus_value, 6),
                 0x4210 => {
@@ -102,7 +102,7 @@ impl ExternalArchitecture {
                     (v, 6)
                 }
                 0x4213 => {
-                    warn!("Read from RDIO");
+                    // warn!("Read from RDIO");
                     (0, 6)
                 }
                 0x4214..0x4218 => (self.math.read_byte(a), 6),
@@ -223,7 +223,7 @@ impl ExternalArchitecture {
                 match a {
                     (0..0x2000) => {
                         self.ram[a] = value;
-                        8
+                        6
                     }
                     (0x2000..0x2100) => {
                         // Open bus?
@@ -246,7 +246,7 @@ impl ExternalArchitecture {
                     }
                     0x2181 => {
                         self.wram_addr = (self.wram_addr & 0x1FF00) | value as usize;
-                        6
+                        8
                     }
                     0x2182 => {
                         self.wram_addr = (self.wram_addr & 0x100FF) | ((value as usize) << 8);
