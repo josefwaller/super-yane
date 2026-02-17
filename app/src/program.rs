@@ -181,6 +181,7 @@ pub enum Message {
     SetVramDirectColor(bool),
     SetInfoDisplay(InfoDisplay),
     SetRightPanelDisplay(RightPanelDisplay),
+    ClearProfiler,
     LoadRom,
     LoadSavestate,
     CreateSavestate,
@@ -495,6 +496,7 @@ impl Program {
             }
             Message::SetInfoDisplay(v) => self.info_display = v,
             Message::SetRightPanelDisplay(v) => self.right_panel_display = v,
+            Message::ClearProfiler => self.engine.profiler.clear(),
         };
         Task::none()
     }
@@ -1089,6 +1091,7 @@ impl Program {
                 Some(display),
                 |d| Message::SetRightPanelDisplay(RightPanelDisplay::Profiler(d)),
             ),
+            button("Clear").on_press(Message::ClearProfiler),
             match display {
                 ProfilerDisplay::OpcodeCycles => {
                     Column::from_iter(

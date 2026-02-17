@@ -43,4 +43,8 @@ impl Profiler {
         });
         *other = Profiler::new()
     }
+    pub fn clear(&mut self) {
+        self.opcode_cycles = [0; 0x100];
+        self.pc_count = BTreeMap::new();
+    }
 }
