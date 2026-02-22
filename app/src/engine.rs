@@ -114,8 +114,8 @@ impl Engine {
                 use Command::*;
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
                 loop {
+                    let mut disassembler = Disassembler::new(&console);
                     let payload = receiver.recv().unwrap();
-                    let mut disassembler = Disassembler::new();
                     let mut profiler = Profiler::new();
                     console.input_ports_mut()[0] = payload.input[0];
                     /// Advance by 1 instruction
@@ -195,7 +195,6 @@ impl Engine {
                         LoadRom(bytes) => {
                             console = Console::with_cartridge(&bytes);
                             disassembler.add_current_instruction(&console);
-                            disassembler.add_entrypoint(&console);
                             emu_data_sender
                                 .send(DoneEmuPayload {
                                     console: console.clone(),
@@ -215,12 +214,14 @@ impl Engine {
             })
             .expect("Unable to spawn thread");
 
+        let console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
+        let disassembler = Disassembler::new(&console);
         Engine {
-            console: Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc")),
+            console,
             sender,
             stream_receiver,
             emu_data_receiver,
-            disassembler: Disassembler::new(),
+            disassembler,
             profiler: Profiler::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 4]; 256 * 240],
@@ -236,7 +237,8 @@ impl Engine {
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread");
-        self.disassembler = Disassembler::new();
+        // Todo: Tidy this up
+        self.disassembler = Disassembler::new(&Console::with_cartridge(bytes));
     }
     pub fn load_savestate(&mut self, bytes: &[u8]) {
         let mut console: Console = serde_brief::from_slice(bytes).unwrap();

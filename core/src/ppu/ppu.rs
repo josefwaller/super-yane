@@ -707,7 +707,8 @@ impl Ppu {
     }
     /// Refresh the multiplication result value
     fn refresh_multi_res(&mut self) {
-        self.multi_res = self.multi_value as i32 * self.multi_factor as i32;
+        self.multi_res =
+            (self.multi_value as i32 * self.multi_factor as i32).clamp(-8_388_608, 8_388_607);
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
         if self.can_write_vram() {
@@ -1177,8 +1178,11 @@ impl Ppu {
                                 }
                             }
                             let bg_pixels: [BackgroundPixel; 4] = core::array::from_fn(|i| {
+                                if i >= backgrounds.len() {
+                                    return None;
+                                }
                                 // Should be impossible to there to be no pixels right now
-                                let b = &mut self.backgrounds[i];
+                                let b = &mut self.backgrounds[backgrounds[i].0];
                                 if b.main_screen_enable || b.sub_screen_enable {
                                     // Get next pixel in the buffer
                                     let v = b.pixel_buffer.pop_front().unwrap();

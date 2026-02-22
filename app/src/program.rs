@@ -1180,10 +1180,7 @@ impl Program {
                                     .disassembler
                                     .labels()
                                     .get(pc)
-                                    .map(|l| match l {
-                                        Label::EntryPoint => "entry_point:".to_string(),
-                                        Label::Location(name) => format!("{}:", name),
-                                    })
+                                    .map(|l| l.to_string())
                                     .unwrap_or("".to_string())
                             )),
                             text(inst.to_string(self.engine.disassembler.labels()))

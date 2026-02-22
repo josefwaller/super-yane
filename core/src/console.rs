@@ -511,6 +511,7 @@ impl Console {
                 });
             }
             if self.ppu().trigger_irq {
+                debug!("INT IRQ");
                 self.ppu_mut().trigger_irq = false;
                 self.cpu.on_irq(&mut self.rest);
                 self.rest.timer_flag = true;

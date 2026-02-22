@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use itertools::Itertools;
 use log::*;
 use super_yane::Console;
 use wdc65816::opcodes::*;
@@ -54,13 +55,11 @@ impl<'a> Iterator for LinesIterator<'a> {
 }
 
 /// Contains all the information required to disassemble the machine code into ASM
-#[derive(new)]
+#[derive(Clone)]
 pub struct Disassembler {
     /// The instructions in the disassembly
-    #[new(value = "BTreeMap::new()")]
     instructions: BTreeMap<usize, Instruction>,
     /// The labels (i.e. locations that are jumped/branched to)
-    #[new(value = "BTreeMap::new()")]
     labels: BTreeMap<usize, Label>,
 }
 static ASCII_LOWER: [char; 16] = [
@@ -87,11 +86,32 @@ impl Disassembler {
             }
         }
     }
-    pub fn add_entrypoint(&mut self, console: &Console) {
-        self.labels.insert(
-            console.cartridge().transform_address(console.pc()),
-            Label::EntryPoint,
+    pub fn new(console: &Console) -> Disassembler {
+        let instructions = BTreeMap::new();
+        macro_rules! vector {
+            ($addr: expr) => {
+                console
+                    .cartridge()
+                    .transform_address(u16::from_le_bytes(core::array::from_fn(|i| {
+                        console.cartridge().read_byte($addr + i)
+                    })) as usize)
+            };
+        }
+        let labels = BTreeMap::from_iter(
+            [
+                (vector!(0x00FFFC), Label::Reset),
+                (vector!(0x00FFFE), Label::IrqEmu),
+                (vector!(0x00FFEE), Label::IrqNative),
+                (vector!(0x00FFFA), Label::NmiEmu),
+                (vector!(0x00FFEA), Label::NmiNative),
+            ]
+            .into_iter()
+            .unique_by(|(addr, _)| *addr),
         );
+        Disassembler {
+            instructions,
+            labels,
+        }
     }
     // Merge all of the values of the other disassembler into this one.
     // This will remove all of the values out of other
