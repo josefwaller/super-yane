@@ -358,8 +358,14 @@ impl Ppu {
             }
             0x213B => {
                 let val = self.cgram[self.cgram_addr].to_le_bytes();
-                self.inc_cgram_addr();
-                if self.cgram_byte { val[1] } else { val[0] }
+                let v = if self.cgram_byte {
+                    self.inc_cgram_addr();
+                    val[1]
+                } else {
+                    val[0]
+                };
+                self.cgram_byte = !self.cgram_byte;
+                v
             }
             0x213C => {
                 let vals = (self.h_latch as u16).to_le_bytes();
