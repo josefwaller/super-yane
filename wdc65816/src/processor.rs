@@ -529,7 +529,6 @@ impl Processor {
     /// Break to a given address
     fn break_to(&mut self, memory: &mut impl HasAddressBus, addr_n: u16, addr_e: u16, set_b: bool) {
         if self.p.e {
-            // Since we already incremented the PC by 1 we want to just add 1
             self.push_u16(self.pc, true, memory);
             // Clone processor register to set B flag
             let mut p = self.p.clone();
@@ -605,6 +604,7 @@ impl Processor {
         memory.io();
         memory.io();
         self.pc = self.pull_u16(self.p.e, memory).wrapping_add(1);
+        memory.io();
     }
     /// ReTurn from subroutine Long (RTL)
     fn rtl(&mut self, memory: &mut impl HasAddressBus) {
@@ -748,19 +748,26 @@ impl Processor {
         u24::from(self.dbr, addr)
     }
     // Utility offset function for absolute indexed function
-    fn a_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
+    fn a_off(&mut self, memory: &mut impl HasAddressBus, register: u16, always_io: bool) -> u24 {
         let addr = read_u16(memory, u24::from(self.pbr, self.pc));
-        memory.io();
+        // IO on page cross
+        if addr.wrapping_add(register) < addr || always_io {
+            memory.io();
+        }
         self.pc = self.pc.wrapping_add(2);
         u24::from(self.dbr, addr).wrapping_add(register)
     }
     /// Absolute X Indexed addressing
     fn ax(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        self.a_off(memory, self.x())
+        self.a_off(memory, self.x(), false)
+    }
+    /// Absolute X Indexed addressing for RMW (no page cross)
+    fn ax_rmw(&mut self, memory: &mut impl HasAddressBus) -> u24 {
+        self.a_off(memory, self.x(), true)
     }
     /// Absolute Y Indexed addressing
     fn ay(&mut self, memory: &mut impl HasAddressBus) -> u24 {
-        self.a_off(memory, self.y())
+        self.a_off(memory, self.y(), false)
     }
     /// Absolute Long addressing
     fn al(&mut self, memory: &mut impl HasAddressBus) -> u24 {
@@ -784,15 +791,15 @@ impl Processor {
     }
     // Direct addressing with offset
     fn d_off(&mut self, memory: &mut impl HasAddressBus, register: u16) -> u24 {
-        memory.io();
         if self.p.e && self.dl == 0 {
-            memory.io();
             let offset = read_u8(memory, u24::from(self.pbr, self.pc));
+            memory.io();
             self.pc = self.pc.wrapping_add(1);
             u24::from_le_bytes([offset.wrapping_add(register as u8), self.dh, 0x00])
         } else {
             // TODO: Maybe: This should always have bank 0, so when loading two banks it should wrap around the page boundary
             let addr = self.d(memory);
+            memory.io();
             addr.wrapping_add(register).with_bank(0x00)
         }
     }
@@ -865,7 +872,9 @@ impl Processor {
     /// Direct Indirect Y Indexed addressing
     fn diy(&mut self, memory: &mut impl HasAddressBus) -> u24 {
         let addr = self.di(memory);
-        memory.io();
+        if self.dl != 0 {
+            memory.io();
+        }
         addr.wrapping_add(self.y())
     }
     /// Direct Indirect Long addressing
@@ -931,6 +940,7 @@ impl Processor {
             ($f_8: ident, $addr: ident) => {{
                 let addr = self.$addr(memory);
                 self.$f_8(memory.read(addr.into()));
+                memory.read(addr.wrapping_add(1u32).into());
             }};
         }
         macro_rules! write_func {
@@ -1056,6 +1066,7 @@ impl Processor {
                 self.p.n = $sh > 0x7F;
                 self.p.z = ($sl | $sh) == 0;
                 self.force_registers();
+                memory.io();
             }};
             // Source Low/High, dest low/high, flag
             ($sl: expr, $sh: expr, $dl: expr, $dh: expr, $flag: ident) => {{
@@ -1067,6 +1078,7 @@ impl Processor {
                     self.p.z = $sl == 0;
                 }
                 self.force_registers();
+                memory.io();
             }};
             // Transfer 2 u8s into a u16
             ($le: expr, $r: ident) => {{
@@ -1074,6 +1086,7 @@ impl Processor {
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
                 self.force_registers();
+                memory.io();
             }};
             // Transfer a u16 into 2 u8s
             ($r: ident, $le: expr) => {{
@@ -1081,6 +1094,7 @@ impl Processor {
                 self.p.n = self.$r > 0x7FFF;
                 self.p.z = self.$r == 0;
                 self.force_registers();
+                memory.io();
             }};
         }
         macro_rules! block_func {
@@ -1141,7 +1155,7 @@ impl Processor {
             ASL_ACC => acc_func!(asl_8, asl_16),
             ASL_A => read_write_func!(asl_8, asl_16, a, a_is_8bit),
             ASL_D => read_write_func!(asl_8, asl_16, d, a_is_8bit),
-            ASL_AX => read_write_func!(asl_8, asl_16, ax, a_is_8bit),
+            ASL_AX => read_write_func!(asl_8, asl_16, ax_rmw, a_is_8bit),
             ASL_DX => read_write_func!(asl_8, asl_16, dx, a_is_8bit),
             BCC => branch_if!(c, false),
             BCS => branch_if!(c, true),
@@ -1167,6 +1181,7 @@ impl Processor {
             }
             BRK => {
                 // Signature byte
+                let _ = read_u8(memory, u24::from(self.pbr, self.pc));
                 self.pc = self.pc.wrapping_add(1);
                 self.break_to(memory, 0xFFE6, 0xFFFE, true);
             }
@@ -1199,6 +1214,7 @@ impl Processor {
             COP => {
                 // Signature byte
                 self.pc = self.pc.wrapping_add(1);
+                memory.io();
                 self.break_to(memory, 0xFFE4, 0xFFF4, false);
             }
             CPX_I => read_func_i!(cpx_8, cpx_16, xy_is_8bit),
@@ -1210,7 +1226,7 @@ impl Processor {
             DEC_ACC => acc_func!(dec_8, dec_16),
             DEC_A => read_write_func!(dec_8, dec_16, a, a_is_8bit),
             DEC_D => read_write_func!(dec_8, dec_16, d, a_is_8bit),
-            DEC_AX => read_write_func!(dec_8, dec_16, ax, a_is_8bit),
+            DEC_AX => read_write_func!(dec_8, dec_16, ax_rmw, a_is_8bit),
             DEC_DX => read_write_func!(dec_8, dec_16, dx, a_is_8bit),
             DEX => x_func!(dec_8, dec_16),
             DEY => y_func!(dec_8, dec_16),
@@ -1232,7 +1248,7 @@ impl Processor {
             INC_ACC => acc_func!(inc_8, inc_16),
             INC_A => read_write_func!(inc_8, inc_16, a, a_is_8bit),
             INC_D => read_write_func!(inc_8, inc_16, d, a_is_8bit),
-            INC_AX => read_write_func!(inc_8, inc_16, ax, a_is_8bit),
+            INC_AX => read_write_func!(inc_8, inc_16, ax_rmw, a_is_8bit),
             INC_DX => read_write_func!(inc_8, inc_16, dx, a_is_8bit),
             INX => x_func!(inc_8, inc_16),
             INY => y_func!(inc_8, inc_16),
@@ -1252,7 +1268,6 @@ impl Processor {
                     read_u8(memory, u24::from(self.pbr, self.pc.wrapping_add(2))),
                     read_u16(memory, u24::from(self.pbr, self.pc)),
                 );
-                memory.io();
             }
             JMP_AIL => {
                 let addr = read_u16(memory, u24::from(self.pbr, self.pc));
@@ -1306,7 +1321,7 @@ impl Processor {
             LSR_ACC => acc_func!(lsr_8, lsr_16),
             LSR_A => read_write_func!(lsr_8, lsr_16, a, a_is_8bit),
             LSR_D => read_write_func!(lsr_8, lsr_16, d, a_is_8bit),
-            LSR_AX => read_write_func!(lsr_8, lsr_16, ax, a_is_8bit),
+            LSR_AX => read_write_func!(lsr_8, lsr_16, ax_rmw, a_is_8bit),
             LSR_DX => read_write_func!(lsr_8, lsr_16, dx, a_is_8bit),
             MVN => block_func!(inc_16),
             MVP => block_func!(dec_16),
@@ -1351,7 +1366,12 @@ impl Processor {
             PHA => push_reg!(a, b, self.p.e, a_is_16bit),
             PHB => push_reg!(self.dbr, self.p.e),
             // Custom for 16-bit value
-            PHD => self.push_u16(self.dr(), false, memory),
+            PHD => {
+                if self.p.a_is_16bit() {
+                    memory.io();
+                }
+                self.push_u16(self.dr(), false, memory)
+            }
             PHK => push_reg!(self.pbr, self.p.e),
             PHP => push_reg!(self.p.to_byte(true), self.p.e),
             PHX => push_reg!(xl, xh, self.p.e, xy_is_16bit),
@@ -1363,11 +1383,14 @@ impl Processor {
                 self.p.z = self.dbr == 0;
             }
             PLD => {
+                memory.io();
                 [self.dl, self.dh] = self.pull_u16(false, memory).to_le_bytes();
                 self.p.n = self.dr() > 0x7FFF;
                 self.p.z = self.dr() == 0;
             }
             PLP => {
+                memory.io();
+                memory.io();
                 self.p = StatusRegister::from_byte(self.pull_u8(true, memory), self.p.e);
                 self.force_registers();
             }
@@ -1377,12 +1400,12 @@ impl Processor {
             ROL_ACC => acc_func!(rol_8, rol_16),
             ROL_A => read_write_func!(rol_8, rol_16, a, a_is_8bit),
             ROL_D => read_write_func!(rol_8, rol_16, d, a_is_8bit),
-            ROL_AX => read_write_func!(rol_8, rol_16, ax, a_is_8bit),
+            ROL_AX => read_write_func!(rol_8, rol_16, ax_rmw, a_is_8bit),
             ROL_DX => read_write_func!(rol_8, rol_16, dx, a_is_8bit),
             ROR_ACC => acc_func!(ror_8, ror_16),
             ROR_A => read_write_func!(ror_8, ror_16, a, a_is_8bit),
             ROR_D => read_write_func!(ror_8, ror_16, d, a_is_8bit),
-            ROR_AX => read_write_func!(ror_8, ror_16, ax, a_is_8bit),
+            ROR_AX => read_write_func!(ror_8, ror_16, ax_rmw, a_is_8bit),
             ROR_DX => read_write_func!(ror_8, ror_16, dx, a_is_8bit),
             RTI => self.rti(memory),
             RTL => self.rtl(memory),
@@ -1440,6 +1463,7 @@ impl Processor {
                 // This one done manually since transferring to S does not set any flags
                 self.s = u16::from_le_bytes([self.a, self.b]);
                 self.force_registers();
+                memory.io();
             }
             TDC => trans_reg!(self.dl, self.dh, self.a, self.b),
             TRB_A => read_write_func!(trb_8, trb_16, a, a_is_16bit),
@@ -1456,6 +1480,7 @@ impl Processor {
                 // This one dones manually since it does not set any flags
                 self.s = u16::from_le_bytes([self.xl, self.xh]);
                 self.force_registers();
+                memory.io();
             }
             TXY => trans_reg!(self.xl, self.xh, self.yl, self.yh, xy_is_16bit),
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
@@ -1478,6 +1503,7 @@ impl Processor {
             XCE => {
                 std::mem::swap(&mut self.p.c, &mut self.p.e);
                 self.force_registers();
+                memory.io();
             }
             _ => panic!("Unknown opcode: {:#04x}", opcode),
         }
