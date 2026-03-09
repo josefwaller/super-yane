@@ -20,6 +20,7 @@ pub fn background_table(background: &Background) -> impl Into<Element<'_, Messag
         ("# V Tilemaps", b.num_vert_tilemaps),
         ("Windows enabled main", b.windows_enabled_main.into()),
         ("Windows enabled sub", b.windows_enabled_sub.into()),
+        ("Color math enabled", b.color_math_enable.into()),
     ];
     text_table(
         rows.into_iter()

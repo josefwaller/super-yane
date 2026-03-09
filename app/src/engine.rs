@@ -7,7 +7,7 @@ use std::{
     thread::{self},
     time::Duration,
 };
-use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTION};
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
@@ -80,7 +80,7 @@ pub struct DoneEmuPayload {
 /// The payload sent every frame from the emulator thread containing output information
 #[derive(new)]
 pub struct StreamPayload {
-    screen_data: [[u8; 3]; 256 * 240],
+    screen_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
     samples: VecDeque<f32>,
 }
 
@@ -95,7 +95,7 @@ pub struct Engine {
     stream_receiver: Receiver<StreamPayload>,
     pub input_ports: [InputPort; 2],
     /// The RGB data from the previous fully rendered frame
-    pub prev_frame_data: [[u8; 4]; 256 * 240],
+    pub prev_frame_data: [[u8; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
     /// Audio sample queue
     samples: VecDeque<f32>,
 }
@@ -224,7 +224,7 @@ impl Engine {
             disassembler,
             profiler: Profiler::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
-            prev_frame_data: [[0; 4]; 256 * 240],
+            prev_frame_data: [[0; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
             samples: VecDeque::new(),
         }
     }

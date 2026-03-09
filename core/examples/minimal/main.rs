@@ -19,7 +19,7 @@ use sdl3::{
 };
 use super_yane::{
     Console, InputPort, MASTER_CLOCK_SPEED_HZ,
-    ppu::{PIXELS_PER_SCANLINE, SCANLINES},
+    ppu::{DOTS_PER_SCANLINE, SCANLINES, SCREEN_RESOLUTION},
     utils::color_to_rgb,
 };
 
@@ -105,7 +105,7 @@ fn main() {
             }
         }
         // Gather pixel data
-        let mut pixel_data: [[u8; 4]; 256 * 240] = console
+        let mut pixel_data: [[u8; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] = console
             .ppu()
             .screen_data_rgb()
             // SDL defaults to BGR

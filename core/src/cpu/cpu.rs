@@ -14,7 +14,6 @@ impl Cpu {
         if x > 134 && x < 144 {
             // Pause for 40 cycles
             memory.advance(40);
-            return;
         }
         // Prioritize HDMA
         let current_dma = (0..memory.dma_channels.len())

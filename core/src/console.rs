@@ -283,10 +283,12 @@ impl ExternalArchitecture {
                     }
                     0x4209 => {
                         self.ppu.v_timer = (self.ppu.v_timer & 0x0100) | value as u16;
+                        debug!("Write V Timer L {:02X}", value);
                         6
                     }
                     0x420A => {
                         self.ppu.v_timer = ((value as u16 & 0x01) << 8) | (self.ppu.v_timer & 0xFF);
+                        debug!("Write V Timer H {:02X}", value);
                         6
                     }
                     0x420B => {
@@ -502,6 +504,7 @@ impl Console {
             if !vblank && self.ppu().is_in_vblank() {
                 // Trigger NMI
                 if self.rest.nmi_enabled {
+                    debug!("NMI {}", self.rest.total_master_clocks);
                     self.cpu.on_nmi(&mut self.rest);
                 }
                 // Disable all HDMA channels
@@ -511,7 +514,11 @@ impl Console {
                 });
             }
             if self.ppu().trigger_irq {
-                debug!("INT IRQ");
+                debug!(
+                    "Trigger IRQ {:?} {}",
+                    self.ppu().dot_xy(),
+                    self.rest.total_master_clocks
+                );
                 self.ppu_mut().trigger_irq = false;
                 self.cpu.on_irq(&mut self.rest);
                 self.rest.timer_flag = true;

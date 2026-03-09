@@ -15,7 +15,9 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-pub const PIXELS_PER_SCANLINE: usize = 1364 / 4;
+pub const SCREEN_RESOLUTION: [usize; 2] = [256, 224];
+pub const MASTER_CYCLES_PER_DOT: usize = 4;
+pub const DOTS_PER_SCANLINE: usize = 1364 / 4;
 pub const SCANLINES: usize = 262;
 
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
@@ -82,8 +84,8 @@ fn default_oam_buffer() -> [Option<PixelData>; 0x100] {
     [None; 0x100]
 }
 
-fn default_screen_buffer() -> [u16; 256 * 240] {
-    [0; 256 * 240]
+fn default_screen_buffer() -> [u16; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
+    [0; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]
 }
 
 #[derive(Clone, Serialize, Deserialize, new)]
@@ -172,7 +174,7 @@ pub struct Ppu {
     /// Screen buffer
     #[serde(skip, default = "default_screen_buffer")]
     #[new(value = "default_screen_buffer()")]
-    pub screen_buffer: [u16; 256 * 240],
+    pub screen_buffer: [u16; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
     /// The number of master cycles that have passed, used to track the dot
     #[new(value = "0")]
     pub master_cycles: usize,
@@ -873,7 +875,7 @@ impl Ppu {
                 return if palette_byte == 0 {
                     None
                 } else {
-                    Some((self.cgram[palette_byte as usize & 0x7F], true))
+                    Some((self.cgram[palette_byte as usize & 0x7F], false))
                 };
             }
         };
@@ -1093,14 +1095,15 @@ impl Ppu {
     }
     /// Calculate the dot position based on the master cycles
     pub fn dot_xy(&self) -> (usize, usize) {
-        let x = (self.master_cycles / 4) % PIXELS_PER_SCANLINE;
-        let y = (self.master_cycles / 4) / PIXELS_PER_SCANLINE;
+        let x = (self.master_cycles / MASTER_CYCLES_PER_DOT) % DOTS_PER_SCANLINE;
+        let y = (self.master_cycles / MASTER_CYCLES_PER_DOT) / DOTS_PER_SCANLINE;
         (x, y)
     }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
-            self.master_cycles = (self.master_cycles + 1) % (4 * (PIXELS_PER_SCANLINE * SCANLINES));
-            if self.master_cycles % 4 == 0 {
+            self.master_cycles = (self.master_cycles + 1)
+                % (MASTER_CYCLES_PER_DOT * (DOTS_PER_SCANLINE * SCANLINES));
+            if self.master_cycles % MASTER_CYCLES_PER_DOT == 0 {
                 let (x, y) = self.dot_xy();
                 // Clear VBlank flag
                 if y == 0 && x == 0 {
@@ -1108,8 +1111,7 @@ impl Ppu {
                     self.interlace_field = !self.interlace_field;
                 }
                 // Trigger VBlank
-                let vblank_scanline = if self.overscan { 241 } else { 225 };
-                if y == vblank_scanline && x == 0 {
+                if y == self.vblank_scanline() && x == 0 {
                     self.vblank = true;
                     self.oam_addr = self.last_written_oam_addr;
                 }
@@ -1138,7 +1140,7 @@ impl Ppu {
 
                 // Check if we are in the rendering area
                 // Note that the rendering starts at x = 22
-                if x >= 22 && x < 256 + 22 && y < 240 {
+                if x >= 22 && x < SCREEN_RESOLUTION[0] + 22 && y < SCREEN_RESOLUTION[1] {
                     let x = x - 22;
 
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
@@ -1376,7 +1378,7 @@ impl Ppu {
                     // Evaluate subscreen value
                     let subscreen_val = get_pixel!(2);
                     let mainscreen_val = get_pixel!(1);
-                    // Can be none if if the color window makes the sub screen transparent
+                    // Can be none if the color window makes the sub screen transparent
                     let color_math_source =
                         if self.color_window_sub_region.compute(color_window_value) {
                             None
@@ -1417,7 +1419,7 @@ impl Ppu {
                             })
                     };
                     // Set screen pixel
-                    self.screen_buffer[256 * y + x] = p & 0x7FFF;
+                    self.screen_buffer[SCREEN_RESOLUTION[0] * y + x] = p & 0x7FFF;
                 }
             }
         })
@@ -1437,12 +1439,16 @@ impl Ppu {
         // self.forced_blanking || self.is_in_vblank()
         true
     }
+    /// Returns the index of the first scanline in VBlank
+    fn vblank_scanline(&self) -> usize {
+        if self.overscan { 241 } else { 225 }
+    }
     /// Returns [`true`] if the PPU is currently in the VBlank period, and [`false`] otherwise.
     /// Note that this is independant of the VBlank flag, which is cleared on read.
     /// This method will always return [`true`] if the PPU is in the VBlank period, regardless of
     /// whether the flag is set.
     pub fn is_in_vblank(&self) -> bool {
-        self.cursor_y() > if self.overscan { 240 } else { 225 }
+        self.cursor_y() >= self.vblank_scanline()
     }
     /// Returns [`true`] if the PPU is currently in HBlank.
     pub fn is_in_hblank(&self) -> bool {
@@ -1460,7 +1466,7 @@ impl Ppu {
     fn fixed_color_value(&self) -> u16 {
         rgb_to_color(self.fixed_color)
     }
-    pub fn screen_data_rgb(&self) -> [[u8; 3]; 256 * 240] {
+    pub fn screen_data_rgb(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
         core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i]))
     }
 }

@@ -41,7 +41,9 @@ use iced::widget::text;
 use rfd::FileDialog;
 use sdl2::{audio::AudioQueue, sys::SDL_HapticLeftRight};
 use super_yane::{
-    Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::convert_8p8, utils::color_to_rgb_bytes,
+    Console, InputPort, MASTER_CLOCK_SPEED_HZ,
+    ppu::{SCREEN_RESOLUTION, convert_8p8},
+    utils::color_to_rgb_bytes,
 };
 use wavers::{Samples, write};
 
@@ -580,7 +582,7 @@ impl Program {
                     Stack::with_children(
                         [
                             canvas(
-                                RgbaScreen::new(self.engine.prev_frame_data.as_flattened(), 256, 240)
+                                RgbaScreen::new(self.engine.prev_frame_data.as_flattened(), SCREEN_RESOLUTION[0] as u32, SCREEN_RESOLUTION[1] as u32)
                             )
                             .height(Length::Fill)
                             .width(Length::Fill)

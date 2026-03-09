@@ -7,7 +7,7 @@ use iced::{
         image::{FilterMethod, Handle},
     },
 };
-use super_yane::Console;
+use super_yane::{Console, ppu::SCREEN_RESOLUTION};
 
 /// Renders some abstract RGBA data to a canvas
 #[derive(new)]
@@ -20,8 +20,8 @@ pub struct RgbaScreen<'a> {
 impl<'a> RgbaScreen<'a> {
     fn render_to_frame(&self, frame: &mut canvas::Frame, bounds: iced::Rectangle) {
         let image = Image::new(Handle::from_rgba(
-            self.width,
-            self.height,
+            self.width as u32,
+            self.height as u32,
             self.rgba_data.to_vec(),
         ))
         .filter_method(FilterMethod::Nearest);
@@ -71,7 +71,10 @@ impl<Message> canvas::Program<Message> for ConsoleDebugScreen<'_> {
         _cursor: Cursor,
     ) -> Vec<canvas::Geometry<Renderer>> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let pixel_size = (bounds.size().width / 256.0, bounds.size().height / 240.0);
+        let pixel_size = (
+            bounds.size().width / SCREEN_RESOLUTION[0] as f32,
+            bounds.size().height / SCREEN_RESOLUTION[1] as f32,
+        );
         match self.oam_outline_color {
             None => {}
             Some(color) => {
