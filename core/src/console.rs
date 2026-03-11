@@ -49,9 +49,6 @@ pub struct ExternalArchitecture {
     /// Whether fast ROM access is enabled through MEMSEL
     #[new(value = "false")]
     fast_rom_enabled: bool,
-    /// Timer flag
-    #[new(value = "false")]
-    pub timer_flag: bool,
     /// Current S-WRAM address
     #[new(value = "0")]
     pub wram_addr: usize,
@@ -91,8 +88,8 @@ impl ExternalArchitecture {
                     return (v | (self.open_bus_value & 0x70), 6);
                 }
                 0x4211 => {
-                    let v = (u8::from(self.timer_flag) << 7) | (self.open_bus_value & 0x7F);
-                    self.timer_flag = false;
+                    let v = (u8::from(self.ppu.trigger_irq) << 7) | (self.open_bus_value & 0x7F);
+                    self.ppu.trigger_irq = false;
                     (v, 6)
                 }
                 0x4212 => {
@@ -519,9 +516,7 @@ impl Console {
                     self.ppu().dot_xy(),
                     self.rest.total_master_clocks
                 );
-                self.ppu_mut().trigger_irq = false;
                 self.cpu.on_irq(&mut self.rest);
-                self.rest.timer_flag = true;
             }
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
             if vblank && !self.ppu().is_in_vblank() {

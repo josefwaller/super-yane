@@ -309,6 +309,8 @@ pub struct Ppu {
     /// IRQ timer V target
     #[new(value = "0x1FF")]
     pub v_timer: u16,
+    /// The /IRQ line, which actually triggers an IRQ
+    /// Only cleared on read of $4211
     #[new(value = "false")]
     pub trigger_irq: bool,
     #[new(value = "TimerMode::Disabled")]
