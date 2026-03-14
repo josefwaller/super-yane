@@ -20,7 +20,7 @@ impl MemoryMap {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Cartridge {
     memory_map: MemoryMap,
-    data: Vec<u8>,
+    pub data: Vec<u8>,
     sram: Vec<u8>,
 }
 

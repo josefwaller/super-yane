@@ -53,7 +53,7 @@ use crate::{
 };
 use derive_new::new;
 
-pub const VOLUME: f32 = 5.0;
+pub const VOLUME: f32 = 0.0;
 pub fn with_indent<'a, Message: 'a>(
     e: impl Into<Element<'a, Message>>,
 ) -> impl Into<Element<'a, Message>> {
@@ -91,6 +91,8 @@ pub enum RamDisplay {
     /// Display VRAM as an image
     VideoRamTiles,
     ColorRam,
+    // Cartridge Data
+    Cartridge,
 }
 impl Display for RamDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,11 +101,13 @@ impl Display for RamDisplay {
             f,
             "{}",
             match self {
-                WorkRam => "WRAM".to_string(),
-                VideoRamHex => "VRAM (Hex)".to_string(),
-                VideoRamTiles => format!("VRAM (Tiles)"),
-                ColorRam => "CGRAM".to_string(),
+                WorkRam => "WRAM",
+                VideoRamHex => "VRAM (Hex)",
+                VideoRamTiles => "VRAM (Tiles)",
+                ColorRam => "CGRAM",
+                Cartridge => "Cartridge",
             }
+            .to_string()
         )
     }
 }
@@ -427,6 +431,9 @@ impl Program {
                     RamDisplay::VideoRamTiles => {
                         self.engine.console().ppu().vram.len() / bytes_per_tile / TILES_PER_PAGE
                     }
+                    RamDisplay::Cartridge => {
+                        self.engine.console().cartridge().data.len() / BYTES_PER_PAGE
+                    }
                 });
             }
             Message::ChangePaused(p) => {
@@ -684,6 +691,7 @@ impl Program {
                         RamDisplay::VideoRamTiles,
                         RamDisplay::WorkRam,
                         RamDisplay::ColorRam,
+                        RamDisplay::Cartridge
                     ],
                     Some(self.ram_display.clone()),
                     Message::SetRamDisplay,
@@ -718,6 +726,15 @@ impl Program {
                 .into(),
                 RamDisplay::VideoRamHex => ram(
                     &self.engine.console().ppu().vram,
+                    self.ram_page,
+                    COLORS[3],
+                    Color::WHITE,
+                    color!(0xAAAAAA),
+                    0,
+                )
+                .into(),
+                RamDisplay::Cartridge => ram(
+                    &self.engine.console().cartridge().data,
                     self.ram_page,
                     COLORS[3],
                     Color::WHITE,
@@ -1023,7 +1040,7 @@ impl Program {
                             ),
                             table_row!("Bytes Remaining", d.byte_counter, "{:04X}"),
                             table_row!("Indirect data address", d.indirect_data_addr, "{:04X}"),
-                            table_row!("HDMA Table addr", d.hdma_table_addr, "{:04X}")
+                            table_row!("HDMA Table addr", d.current_hdma_table_addr(0), "{:04X}")
                         ],
                         150.0,
                         0,
