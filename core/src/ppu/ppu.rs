@@ -722,6 +722,7 @@ impl Ppu {
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
         if self.can_write_vram() {
+            debug!("Write VRAM {:04X} {:02X}", addr, value);
             self.vram[addr] = value;
             // Update cache
             let cache_addr = (addr / 2) * 2;
@@ -766,7 +767,7 @@ impl Ppu {
     fn read_vram_byte(&self, byte_addr: usize) -> u8 {
         self.vram[byte_addr % self.vram.len()]
     }
-    fn remapped_vram_addr(&self) -> usize {
+    pub fn remapped_vram_addr(&self) -> usize {
         let addr = match self.vram_remap {
             0 => self.vram_addr,
             1 => {
@@ -938,21 +939,33 @@ impl Ppu {
             }
         };
         // Calculate what tile we are drawing
-        let tile_x = x / 8;
-        let tile_y = y / 8;
+        let tile_x = x / b.tile_size as usize;
+        let tile_y = y / b.tile_size as usize;
         // 2 bytes/tile, 32 tiles/row
         // Note that there's always 2 bytes per tile of the TILEMAP, regardless of how many bpp the tile will use
         let addr = 2 * (32 * tile_y + tile_x);
-        // Load the tile
+        // Load the tile index
         let tile_addr = 2 * tilemap_addr + addr;
         let tile_low = self.vram[tile_addr % self.vram.len()];
         let tile_high = self.vram[(tile_addr + 1) % self.vram.len()];
-        let tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
+        let base_tile_index = tile_low as usize + 0x100 * (tile_high as usize & 0x03);
+        // Load the tile details
         let palette_index = (tile_high as usize & 0x1C) >> 2;
         let priority = tile_high & 0x20 != 0;
         let flip_x = tile_high & 0x40 != 0;
         let flip_y = tile_high & 0x80 != 0;
-
+        // Calculate the final tile index, accounting for 16x16 tiles
+        let tile_index = match b.tile_size {
+            8 => base_tile_index,
+            16 => {
+                // Check if we are not in the top left corner (need to add an offset)
+                // XOR with the flip values since they switch which corner we need to fetch
+                let x_off = if (x % 16 < 8) ^ flip_x { 0 } else { 1 };
+                let y_off = if (y % 16 < 8) ^ flip_y { 0 } else { 1 };
+                base_tile_index + x_off + 16 * y_off
+            }
+            _ => unreachable!("Invalid tile size: {}", b.tile_size),
+        };
         let fine_y = if flip_y { 7 - y % 8 } else { y % 8 };
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();

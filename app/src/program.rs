@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use std::{
-    collections::VecDeque,
     fmt::Display,
     path::Path,
     time::{Duration, Instant},
@@ -8,7 +7,6 @@ use std::{
 use wdc65816::{OpcodeData, opcode_data};
 
 use crate::{
-    disassembler::Label,
     engine::{AdvanceAmount, AdvanceSettings, Engine},
     table::{cell, table},
     utils::vram_to_rgba,
@@ -53,7 +51,7 @@ use crate::{
 };
 use derive_new::new;
 
-pub const VOLUME: f32 = 0.0;
+pub const VOLUME: f32 = 5.0;
 pub fn with_indent<'a, Message: 'a>(
     e: impl Into<Element<'a, Message>>,
 ) -> impl Into<Element<'a, Message>> {
