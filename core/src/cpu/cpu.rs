@@ -32,10 +32,10 @@ impl Cpu {
                 // Transfer
                 // Ignore the timing since DMA is always 8 cycles per byte
                 if d.direction {
-                    let v = memory.read_byte(dest).0;
+                    let (v, _) = memory.read_byte(dest);
                     memory.write_byte(src, v);
                 } else {
-                    let v = memory.read_byte(src).0;
+                    let (v, _) = memory.read_byte(src);
                     memory.write_byte(dest, v);
                 }
                 // Advance 8 cycles per byte

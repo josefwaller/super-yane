@@ -9,6 +9,7 @@ use crate::{
     apu::Apu,
     dma::{AddressAdjustMode as DmaAddressAdjustMode, Channel as DmaChannel},
     math::Math,
+    utils::bit,
 };
 use paste::paste;
 
@@ -280,12 +281,10 @@ impl ExternalArchitecture {
                     }
                     0x4209 => {
                         self.ppu.v_timer = (self.ppu.v_timer & 0x0100) | value as u16;
-                        debug!("Write V Timer L {:02X}", value);
                         6
                     }
                     0x420A => {
                         self.ppu.v_timer = ((value as u16 & 0x01) << 8) | (self.ppu.v_timer & 0xFF);
-                        debug!("Write V Timer H {:02X}", value);
                         6
                     }
                     0x420B => {
@@ -300,10 +299,7 @@ impl ExternalArchitecture {
                     }
                     0x420C => {
                         (0..8).for_each(|i| {
-                            if (value >> i) & 0x01 != 0 {
-                                let d = &mut self.dma_channels[i];
-                                d.hdma_enable = true;
-                            }
+                            self.dma_channels[i].hdma_enable = bit(value, i);
                         });
                         6
                     }
@@ -511,11 +507,6 @@ impl Console {
                 });
             }
             if self.ppu().trigger_irq {
-                debug!(
-                    "Trigger IRQ {:?} {}",
-                    self.ppu().dot_xy(),
-                    self.rest.total_master_clocks
-                );
                 self.cpu.on_irq(&mut self.rest);
             }
             // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
@@ -542,7 +533,9 @@ impl Console {
                             0 => {
                                 // Read next byte
                                 match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
-                                    0 => d.hdma_enable = false,
+                                    0 => {
+                                        d.hdma_enable = false;
+                                    }
                                     lc => {
                                         // Get line counter
                                         match lc {

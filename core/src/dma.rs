@@ -103,6 +103,8 @@ impl Channel {
     pub fn inc_table_addr(&mut self) {
         self.current_hdma_table_addr += if self.indirect {
             3
+        } else if self.hdma_repeat {
+            1 + self.hdma_line_counter as u16 * self.transfer_pattern().len() as u16
         } else {
             1 + self.transfer_pattern().len() as u16
         };
@@ -113,7 +115,7 @@ impl Channel {
         } else {
             self.src_bank
         } as usize
-            * 0x10000
+            * 0x1_0000
             + if self.indirect {
                 self.indirect_data_addr
             } else {

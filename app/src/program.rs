@@ -1040,7 +1040,15 @@ impl Program {
                             ),
                             table_row!("Bytes Remaining", d.byte_counter, "{:04X}"),
                             table_row!("Indirect data address", d.indirect_data_addr, "{:04X}"),
-                            table_row!("HDMA Table addr", d.current_hdma_table_addr(0), "{:04X}")
+                            table_row!("HMDA Table Bank", d.hdma_table_bank, "{:02X}"),
+                            table_row!("HDMA Table addr", d.hdma_table_addr, "{:04X}"),
+                            table_row!("HDMA Line Conuter", d.hdma_line_counter, "{:02X}"),
+                            table_row!("HMDA Repeat", d.hdma_repeat, "{}"),
+                            table_row!(
+                                "HDMA Current Table Address",
+                                d.current_hdma_table_addr(0),
+                                "{:04X}"
+                            )
                         ],
                         150.0,
                         0,

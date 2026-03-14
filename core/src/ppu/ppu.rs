@@ -1377,7 +1377,7 @@ impl Ppu {
                                 .map_or(None, |b| Some((b.0.unwrap(), b.3)))
                         }};
                     }
-                    // Evaluate subscreen value
+                    // Evaluate main and subscreen value
                     let subscreen_val = get_pixel!(2);
                     let mainscreen_val = get_pixel!(1);
                     // Can be none if the color window makes the sub screen transparent
