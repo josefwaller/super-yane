@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use derive_new::new;
 use super_yane::Console;
 
-use crate::instruction_snapshot::InstructionSnapshot;
+use crate::cpu_snapshot::CpuSnapshot;
 
 #[derive(new)]
 pub struct Profiler {
     #[new(value = "[0; 0x100]")]
     pub opcode_cycles: [u64; 0x100],
     #[new(value = "BTreeMap::new()")]
-    pub pc_count: BTreeMap<usize, (u32, InstructionSnapshot)>,
+    pub pc_count: BTreeMap<usize, (u32, CpuSnapshot)>,
 }
 
 impl Profiler {
@@ -24,10 +24,8 @@ impl Profiler {
             .get(&console.pc())
             .map(|(count, _)| count)
             .unwrap_or(&0);
-        self.pc_count.insert(
-            console.pc(),
-            (count + 1, InstructionSnapshot::from(console)),
-        );
+        self.pc_count
+            .insert(console.pc(), (count + 1, CpuSnapshot::from(console)));
     }
     /// Merges `other` into this [`Profiler`] and reset `other`
     pub fn consume(&mut self, other: &mut Profiler) {

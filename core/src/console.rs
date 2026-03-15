@@ -584,13 +584,16 @@ impl Console {
     pub fn step_apu(&mut self) {
         self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
     }
+    // Returns whether the APU is "behind" the CPU, i.e. it has advanced fewer master cycles
+    pub fn apu_is_behind(&self) -> bool {
+        (*self.apu.total_clocks() as f64 / APU_CLOCK_SPEED_HZ as f64)
+            < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
+    }
     /// Advance a given number of instructions
     pub fn advance_instructions(&mut self, num_instructions: u32) {
         (0..num_instructions).for_each(|_| {
             self.step_cpu();
-            while (*self.apu.total_clocks() as f64 / APU_CLOCK_SPEED_HZ as f64)
-                < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
-            {
+            while self.apu_is_behind() {
                 // Catch up the APU
                 self.step_apu();
             }

@@ -3,15 +3,15 @@ use super_yane::Console;
 use wdc65816::{OpcodeData, format_address_mode, opcode_data};
 
 #[derive(Clone)]
-pub struct InstructionSnapshot {
+pub struct CpuSnapshot {
     pub cpu: wdc65816::Processor,
     pub opcode: u8,
     pub operands: [u8; 3],
 }
 
-impl InstructionSnapshot {
+impl CpuSnapshot {
     pub fn from(console: &Console) -> Self {
-        InstructionSnapshot {
+        CpuSnapshot {
             cpu: console.cpu().clone(),
             opcode: console.opcode(),
             operands: core::array::from_fn(|i| console.read_byte_cpu(console.pc() + 1 + i)),
@@ -25,7 +25,7 @@ impl InstructionSnapshot {
         )
     }
 }
-impl Display for InstructionSnapshot {
+impl Display for CpuSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.data();
         write!(

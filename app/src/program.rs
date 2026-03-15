@@ -37,18 +37,15 @@ use log::*;
 use iced::widget::text;
 
 use rfd::FileDialog;
-use sdl2::{audio::AudioQueue, sys::SDL_HapticLeftRight};
+use sdl2::audio::AudioQueue;
 use super_yane::{
     Console, InputPort, MASTER_CLOCK_SPEED_HZ,
     ppu::{SCREEN_RESOLUTION, convert_8p8},
-    utils::color_to_rgb_bytes,
 };
 use wavers::{Samples, write};
 
 use crate::utils::utils::{hex_fmt, table_row};
-use crate::{
-    apu_snapshot::ApuSnapshot, instruction_snapshot::InstructionSnapshot, widgets::ram::ram,
-};
+use crate::widgets::ram::ram;
 use derive_new::new;
 
 pub const VOLUME: f32 = 5.0;
@@ -227,8 +224,6 @@ pub struct Program {
     info_display: InfoDisplay,
     #[new(default)]
     right_panel_display: RightPanelDisplay,
-    #[new(value = "false")]
-    log_apu: bool,
     #[new(value = "false")]
     record: bool,
     #[new(value = "Vec::new()")]
@@ -496,7 +491,7 @@ impl Program {
             }
             Message::SetVramPalette(palette) => self.vram_palette = palette,
             Message::SetVramDirectColor(dc) => self.vram_direct_color = dc,
-            Message::ToggleLogApu(v) => self.log_apu = v,
+            Message::ToggleLogApu(v) => self.settings.log_apu = v,
             Message::ToggleLogCpu(v) => self.settings.log_cpu = v,
             Message::Record(v) => {
                 self.record = v;
@@ -643,7 +638,7 @@ impl Program {
                         text("Log CPU"),
                         checkbox(self.settings.log_cpu).on_toggle(Message::ToggleLogCpu),
                         text("Log APU"),
-                        checkbox(self.log_apu).on_toggle(Message::ToggleLogApu),
+                        checkbox(self.settings.log_apu).on_toggle(Message::ToggleLogApu),
                         text("Record"),
                         checkbox(self.record).on_toggle(Message::Record)
                     ]

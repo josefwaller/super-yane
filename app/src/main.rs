@@ -4,11 +4,10 @@ use iced::{Font, Settings};
 use log::*;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
-use super_yane::Console;
 
 mod apu_snapshot;
+mod cpu_snapshot;
 mod emu_state;
-mod instruction_snapshot;
 mod program;
 #[macro_use]
 mod utils;

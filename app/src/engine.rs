@@ -12,8 +12,7 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTI
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::{
-    disassembler::{self, Disassembler},
-    instruction_snapshot::InstructionSnapshot,
+    apu_snapshot::ApuSnapshot, cpu_snapshot::CpuSnapshot, disassembler::Disassembler,
     profiler::Profiler,
 };
 
@@ -22,6 +21,8 @@ use crate::{
 pub struct AdvanceSettings {
     /// Whether to log the CPU state after every instruction
     pub log_cpu: bool,
+    /// Whether to log the APU state after every instruction
+    pub log_apu: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -123,13 +124,21 @@ impl Engine {
                         () => {
                             let vblank = console.ppu().is_in_vblank();
                             let before_master_cycles = *console.total_master_clocks();
-                            console.advance_instructions(1);
+                            console.step_cpu();
                             if payload.settings.log_cpu {
-                                let inst = InstructionSnapshot::from(&console);
+                                let inst = CpuSnapshot::from(&console);
                                 info!("{}", inst);
+                            }
+                            while console.apu_is_behind() {
+                                console.step_apu();
+                                if payload.settings.log_apu {
+                                    let inst = ApuSnapshot::from(&console);
+                                    info!("{}", inst);
+                                }
                             }
                             disassembler.add_current_instruction(&console);
                             profiler.add_current_state(&console, before_master_cycles);
+
                             if vblank && !console.ppu().is_in_vblank() {
                                 stream_sender
                                     .send(StreamPayload::new(
