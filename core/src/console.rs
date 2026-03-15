@@ -480,79 +480,70 @@ impl Console {
         debug!("Initialized PC to {:X}", c.cpu.core.pc);
         c
     }
-    pub fn advance_instructions(&mut self, num_instructions: u32) {
-        self.advance_instructions_with_hooks(num_instructions, &mut |_| {}, &mut |_| {});
-    }
-    pub fn advance_instructions_with_hooks(
-        &mut self,
-        num_instructions: u32,
-        before_cpu_step: &mut dyn FnMut(&Console),
-        before_apu_step: &mut dyn FnMut(&Console),
-    ) {
-        (0..num_instructions).for_each(|_| {
-            let vblank = self.ppu().is_in_vblank();
-            let hblank = self.ppu().is_in_hblank() && !vblank;
-            before_cpu_step(&self);
-            self.cpu.step(&mut self.rest);
-            if !vblank && self.ppu().is_in_vblank() {
-                // Trigger NMI
-                if self.rest.nmi_enabled {
-                    debug!("NMI {}", self.rest.total_master_clocks);
-                    self.cpu.on_nmi(&mut self.rest);
+    pub fn step_cpu(&mut self) {
+        let vblank = self.ppu().is_in_vblank();
+        let hblank = self.ppu().is_in_hblank() && !vblank;
+        self.cpu.step(&mut self.rest);
+        if !vblank && self.ppu().is_in_vblank() {
+            // Trigger NMI
+            if self.rest.nmi_enabled {
+                debug!("NMI {}", self.rest.total_master_clocks);
+                self.cpu.on_nmi(&mut self.rest);
+            }
+            // Disable all HDMA channels
+            self.rest.dma_channels.iter_mut().for_each(|d| {
+                d.hdma_enable = false;
+                d.hdma_line_counter = 0;
+            });
+        }
+        if self.ppu().trigger_irq {
+            self.cpu.on_irq(&mut self.rest);
+        }
+        // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
+        if vblank && !self.ppu().is_in_vblank() {
+            (0..self.rest.dma_channels.len()).for_each(|i| {
+                macro_rules! d {
+                    () => {
+                        self.rest.dma_channels[i]
+                    };
                 }
-                // Disable all HDMA channels
-                self.rest.dma_channels.iter_mut().for_each(|d| {
-                    d.hdma_enable = false;
-                    d.hdma_line_counter = 0;
-                });
-            }
-            if self.ppu().trigger_irq {
-                self.cpu.on_irq(&mut self.rest);
-            }
-            // the timing here is maybe a little bit off, but if we just exited vblank, set up the hblank DMA registers
-            if vblank && !self.ppu().is_in_vblank() {
-                (0..self.rest.dma_channels.len()).for_each(|i| {
-                    macro_rules! d {
-                        () => {
-                            self.rest.dma_channels[i]
-                        };
-                    }
-                    // Set line counter to 0 (will trigger an HDMA at scanline 0 if the channel is enabled)
-                    d!().hdma_line_counter = 0;
-                    // Copy table address
-                    d!().current_hdma_table_addr = d!().hdma_table_addr;
-                });
-            }
-            // I we just entered HBlank outside of VBlank
-            if !vblank && !hblank && self.ppu().is_in_hblank() {
-                // Trigger HDMAs
-                (0..self.rest.dma_channels.len()).for_each(|i| {
-                    let mut d = self.rest.dma_channels[i].clone();
-                    if d.hdma_enable {
-                        match d.hdma_line_counter {
-                            0 => {
-                                // Read next byte
-                                match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
-                                    0 => {
-                                        d.hdma_enable = false;
-                                    }
-                                    lc => {
-                                        // Get line counter
-                                        match lc {
-                                            0 => unreachable!(),
-                                            0x01..=0x80 => {
-                                                d.hdma_repeat = false;
-                                                d.hdma_line_counter = lc;
-                                            }
-                                            0x81..=0xFF => {
-                                                d.hdma_repeat = true;
-                                                d.hdma_line_counter = lc - 0x80;
-                                            }
+                // Set line counter to 0 (will trigger an HDMA at scanline 0 if the channel is enabled)
+                d!().hdma_line_counter = 0;
+                // Copy table address
+                d!().current_hdma_table_addr = d!().hdma_table_addr;
+            });
+        }
+        // I we just entered HBlank outside of VBlank
+        if !vblank && !hblank && self.ppu().is_in_hblank() {
+            // Trigger HDMAs
+            (0..self.rest.dma_channels.len()).for_each(|i| {
+                let mut d = self.rest.dma_channels[i].clone();
+                if d.hdma_enable {
+                    match d.hdma_line_counter {
+                        0 => {
+                            // Read next byte
+                            match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
+                                0 => {
+                                    d.hdma_enable = false;
+                                }
+                                lc => {
+                                    // Get line counter
+                                    match lc {
+                                        0 => unreachable!(),
+                                        0x01..=0x80 => {
+                                            d.hdma_repeat = false;
+                                            d.hdma_line_counter = lc;
                                         }
-                                        // Get data address
-                                        if d.indirect {
-                                            d.indirect_data_addr =
-                                                u16::from_le_bytes([
+                                        0x81..=0xFF => {
+                                            d.hdma_repeat = true;
+                                            d.hdma_line_counter = lc - 0x80;
+                                        }
+                                    }
+                                    // Get data address
+                                    if d.indirect {
+                                        d.indirect_data_addr =
+                                            u16::from_le_bytes(
+                                                [
                                                     self.rest
                                                         .read_byte(
                                                             d.current_hdma_table_addr(1) as usize
@@ -563,37 +554,45 @@ impl Console {
                                                             d.current_hdma_table_addr(2) as usize
                                                         )
                                                         .0,
-                                                ]);
-                                        } else {
-                                            d.src_addr = d.current_hdma_table_addr(1) as u16;
-                                        }
-                                        d.inc_table_addr();
-                                        // Trigger DMA
-                                        d.is_executing = true;
-                                        d.num_bytes_transferred = 0;
-                                        // Since we just went over a scanline here, dec line counter
-                                        d.hdma_line_counter -= 1;
+                                                ],
+                                            );
+                                    } else {
+                                        d.src_addr = d.current_hdma_table_addr(1) as u16;
                                     }
-                                }
-                            }
-                            _ => {
-                                d.hdma_line_counter -= 1;
-                                if d.hdma_repeat {
+                                    d.inc_table_addr();
+                                    // Trigger DMA
                                     d.is_executing = true;
                                     d.num_bytes_transferred = 0;
+                                    // Since we just went over a scanline here, dec line counter
+                                    d.hdma_line_counter -= 1;
                                 }
                             }
                         }
+                        _ => {
+                            d.hdma_line_counter -= 1;
+                            if d.hdma_repeat {
+                                d.is_executing = true;
+                                d.num_bytes_transferred = 0;
+                            }
+                        }
                     }
-                    self.rest.dma_channels[i] = d;
-                })
-            }
+                }
+                self.rest.dma_channels[i] = d;
+            })
+        }
+    }
+    pub fn step_apu(&mut self) {
+        self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
+    }
+    /// Advance a given number of instructions
+    pub fn advance_instructions(&mut self, num_instructions: u32) {
+        (0..num_instructions).for_each(|_| {
+            self.step_cpu();
             while (*self.apu.total_clocks() as f64 / APU_CLOCK_SPEED_HZ as f64)
                 < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
             {
                 // Catch up the APU
-                before_apu_step(&self);
-                self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
+                self.step_apu();
             }
         });
     }

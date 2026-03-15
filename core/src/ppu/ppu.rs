@@ -722,7 +722,6 @@ impl Ppu {
     }
     fn write_vram(&mut self, addr: usize, value: u8) {
         if self.can_write_vram() {
-            debug!("Write VRAM {:04X} {:02X}", addr, value);
             self.vram[addr] = value;
             // Update cache
             let cache_addr = (addr / 2) * 2;
