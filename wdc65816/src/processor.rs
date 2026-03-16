@@ -44,6 +44,8 @@ pub struct Processor {
     pub dbr: u8,
     /// Stack Pointer
     pub s: u16,
+    /// Whether the processor is waiting for an interrupt
+    is_waiting: bool,
 }
 
 impl Default for Processor {
@@ -62,6 +64,7 @@ impl Default for Processor {
             dh: 0,
             dbr: 0,
             s: 0x01FF,
+            is_waiting: false,
         }
     }
 }
@@ -1118,6 +1121,12 @@ impl Processor {
                 }
             }};
         }
+
+        if self.is_waiting {
+            // Advance everything a bit
+            memory.io();
+            return;
+        }
         let opcode = read_u8(memory, u24::from(self.pbr, self.pc));
         self.pc = self.pc.wrapping_add(1);
 
@@ -1486,7 +1495,7 @@ impl Processor {
             TYA => trans_reg!(self.yl, self.yh, self.a, self.b, a_is_16bit),
             TYX => trans_reg!(self.yl, self.yh, self.xl, self.xh, xy_is_16bit),
             WAI => {
-                debug!("WAI")
+                self.is_waiting = true;
             }
             WDM => {
                 // Read and ignore next byte
@@ -1515,11 +1524,14 @@ impl Processor {
         self.dbr = 0;
         self.dl = 0;
         self.dh = 0;
+        self.is_waiting = false;
     }
     pub fn on_nmi(&mut self, memory: &mut impl HasAddressBus) {
+        self.is_waiting = false;
         self.break_to(memory, 0xFFEA, 0xFFFA, true)
     }
     pub fn on_irq(&mut self, memory: &mut impl HasAddressBus) {
+        self.is_waiting = false;
         if !self.p.i {
             self.break_to(memory, 0xFFEE, 0xFFFE, false);
         }
