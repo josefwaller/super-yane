@@ -1481,6 +1481,6 @@ impl Ppu {
         rgb_to_color(self.fixed_color)
     }
     pub fn screen_data_rgb(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i]))
+        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i], self.brightness as u8))
     }
 }

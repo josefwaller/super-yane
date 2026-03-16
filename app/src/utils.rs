@@ -74,6 +74,7 @@ pub fn vram_to_rgba(
                         } else {
                             let c = color_to_rgb_bytes(
                                 console.ppu().cgram[colors_per_palette * palette + s as usize],
+                                0xF,
                             );
                             [c[0], c[1], c[2], 0xFF]
                         }
