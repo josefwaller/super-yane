@@ -52,7 +52,7 @@ pub struct Dsp {
 
 impl Dsp {
     pub fn write(&mut self, address: usize, value: u8) {
-        match address % 0x80 {
+        match address {
             0x0C => self.volume[LEFT] = value as i8,
             0x1C => self.volume[RIGHT] = value as i8,
             0x0D => self.echo_feedback = value as i8,
@@ -118,6 +118,8 @@ impl Dsp {
                     self.fir_coeffs[index] = value as i8;
                 }
             }
+            // Read only mirrors
+            0x80..0x100 => {}
             _ => {
                 // Ignore for now
                 debug!("Unknown DSP register {address:02X} value={value:02X}");
