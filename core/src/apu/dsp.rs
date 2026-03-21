@@ -55,8 +55,39 @@ impl Dsp {
         match address {
             0x0C => self.volume[LEFT] = value as i8,
             0x1C => self.volume[RIGHT] = value as i8,
+            0x2C => self.echo_volume[LEFT] = value as i8,
+            0x3C => self.echo_volume[RIGHT] = value as i8,
+            // KON
+            0x4C => {
+                self.voices.iter_mut().enumerate().for_each(|(i, v)| {
+                    if bit(value, i) {
+                        v.key_on();
+                    }
+                });
+            }
+            // KOFF
+            0x5C => {
+                self.voices.iter_mut().enumerate().for_each(|(i, v)| {
+                    if bit(value, i) {
+                        v.key_off();
+                    }
+                });
+            }
+            0x6C => {
+                // Combined mute and reset
+                if value & 0xC0 != 0 {
+                    self.voices.iter_mut().for_each(|v| {
+                        v.enabled = false;
+                        v.envelope = 0;
+                    });
+                }
+                self.echo_enabled = !bit(value, 5);
+                self.noise_frequency = PERIOD_TABLE[(value & 0x1F) as usize]
+            }
+            0x7C => {
+                // End of flag read
+            }
             0x0D => self.echo_feedback = value as i8,
-            0x2C => self.echo_volume[0] = value as i8,
             0x2D => {
                 self.voices
                     .iter_mut()
@@ -64,46 +95,18 @@ impl Dsp {
                     .skip(1)
                     .for_each(|(i, c)| c.pitch_mod_enabled = bit(value, i));
             }
-            0x3C => self.echo_volume[1] = value as i8,
-            0x3D => (0..8).for_each(|i| self.voices[i].noise_enabled = bit(value, i)),
+            0x3D => self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .for_each(|(i, v)| v.noise_enabled = bit(value, i)),
             0x4D => {
                 self.voices
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, c)| c.echo_enabled = bit(value, i));
             }
-            0x4C => {
-                self.voices.iter_mut().enumerate().for_each(|(i, c)| {
-                    if bit(value, i) {
-                        c.enabled = true;
-                        c.adsr_stage = AdsrStage::Attack;
-                        c.block_addr = None;
-                        // If we are not using ADSR, we don't want to reset the envelope
-                        if c.adsr_enabled {
-                            c.envelope = 0;
-                        }
-                    }
-                });
-            }
-            0x5C => {
-                self.voices.iter_mut().enumerate().for_each(|(i, c)| {
-                    if bit(value, i) {
-                        c.adsr_enabled = true;
-                        c.adsr_stage = AdsrStage::Release;
-                    }
-                });
-            }
-            0x5D => {
-                self.sample_dir = (value as usize) << 8;
-            }
-            0x6C => {
-                // Combined mute and reset
-                if value & 0xC0 != 0 {
-                    self.voices.iter_mut().for_each(|c| c.enabled = false);
-                }
-                self.echo_enabled = !bit(value, 5);
-                self.noise_frequency = PERIOD_TABLE[(value & 0x1F) as usize]
-            }
+            0x5D => self.sample_dir = (value as usize) << 8,
             0x6D => self.echo_addr = (value as usize) << 8,
             0x7D => self.echo_size = 512 * value as usize,
             reg if address & 0x0F < 0x0A => {

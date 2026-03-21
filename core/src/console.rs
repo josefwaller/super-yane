@@ -582,7 +582,7 @@ impl Console {
         }
     }
     pub fn step_apu(&mut self) {
-        self.rest.apu_to_cpu_reg = self.apu.step(self.rest.cpu_to_apu_reg);
+        self.rest.apu_to_cpu_reg = self.apu.step(&mut self.rest.cpu_to_apu_reg);
     }
     // Returns whether the APU is "behind" the CPU, i.e. it has advanced fewer master cycles
     pub fn apu_is_behind(&self) -> bool {

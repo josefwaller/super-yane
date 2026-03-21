@@ -4,7 +4,7 @@ use crate::apu::constants::{
     ENVELOPE_MAX_VALUE, GAUSS_TABLE, LEFT, PERIOD_OFFSET_TABLE, PERIOD_TABLE, RELEASE_PERIOD_RATE,
     RIGHT,
 };
-use log::debug;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::bit;
@@ -29,6 +29,20 @@ impl From<u8> for GainMode {
             0b111 => BentIncrease,
             _ => Fixed,
         }
+    }
+}
+
+impl ToString for GainMode {
+    fn to_string(&self) -> String {
+        use GainMode::*;
+        match self {
+            Fixed => "Fixed",
+            LinearDecrease => "Linear Decrease",
+            ExponentialDecrease => "Exponential Decrease",
+            LinearIncrease => "Linear Increase",
+            BentIncrease => "Bent Increase",
+        }
+        .to_string()
     }
 }
 
@@ -86,7 +100,7 @@ pub struct Voice {
     /// Whether pitch modulation is enabled
     pub pitch_mod_enabled: bool,
     /// The current envelope of the voic
-    pub(super) envelope: u16,
+    pub envelope: u16,
     /// Internal period counter value
     period_counter: usize,
     /// Replace the output of the voice with noise
@@ -125,7 +139,9 @@ impl Voice {
                     self.gain_mode = GainMode::from(value >> 5);
                 }
             }
-            _ => {}
+            _ => {
+                warn!("Unknown voice write {:02X} {:02X}", addr, value)
+            }
         }
     }
     pub fn read(&self, addr: usize) -> u8 {
@@ -135,6 +151,7 @@ impl Voice {
             2 => self.sample_pitch.to_le_bytes()[0],
             3 => self.sample_pitch.to_le_bytes()[1],
             4 => (self.sample_src / 0x04) as u8,
+            8 => (self.envelope >> 4) as u8,
             _ => {
                 debug!("Read from {:02X}", addr);
                 0
@@ -295,6 +312,8 @@ impl Voice {
                     } else {
                         // Disable channel
                         self.enabled = false;
+                        self.adsr_enabled = true;
+                        self.adsr_stage = AdsrStage::Release;
                         None
                     }
                 } else {
@@ -345,5 +364,15 @@ impl Voice {
     fn get_period_elapsed(&self, rate: usize) -> bool {
         let table_val = PERIOD_TABLE[rate];
         table_val != 0 && (self.period_counter + PERIOD_OFFSET_TABLE[rate]) % table_val == 0
+    }
+    pub fn key_on(&mut self) {
+        self.enabled = true;
+        self.adsr_stage = AdsrStage::Attack;
+        self.adsr_enabled = true;
+        self.block_addr = None;
+    }
+    pub fn key_off(&mut self) {
+        self.adsr_enabled = true;
+        self.adsr_stage = AdsrStage::Release;
     }
 }

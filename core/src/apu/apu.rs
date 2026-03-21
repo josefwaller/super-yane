@@ -68,7 +68,7 @@ impl ApuMemory {
                             let t = &mut self.timers[i];
                             // Increment timer and increment counter if it overflows
                             t.timer_value = t.timer_value.wrapping_add(1);
-                            if t.timer_value == t.timer_target {
+                            if t.timer_value == t.timer_target || t.timer_value == 0 {
                                 t.counter = t.counter.wrapping_add(1);
                                 t.timer_value = 0;
                             }
@@ -90,16 +90,18 @@ impl HasAddressBus for ApuMemory {
     fn read(&mut self, address: usize) -> u8 {
         self.advance_apu_clocks(2);
         match address {
+            0xF0 => todo!(),
+            0xF1 => todo!(),
             0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr),
             0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
             0x00FD..0x00FF => {
                 let v = self.timers[address - 0x00FD].counter;
                 self.timers[address - 0x00FD].counter = 0;
-                v
+                v & 0x0F
             }
             0x0000..0xFFC0 => self.ram[address],
-            0xFFC0..0x10000 => {
+            0xFFC0..0x1_0000 => {
                 if self.expose_ipl_rom {
                     IPL[address - 0xFFC0]
                 } else {
@@ -112,6 +114,7 @@ impl HasAddressBus for ApuMemory {
     fn write(&mut self, address: usize, value: u8) {
         self.advance_apu_clocks(2);
         match address {
+            0xF0 => todo!(),
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
                 if value & 0x10 != 0 {
@@ -122,9 +125,13 @@ impl HasAddressBus for ApuMemory {
                     self.cpu_to_apu_reg[2] = 0x00;
                     self.cpu_to_apu_reg[3] = 0x00;
                 }
-                self.timers[0].enabled = value & 0x01 != 0;
-                self.timers[1].enabled = value & 0x02 != 0;
-                self.timers[2].enabled = value & 0x04 != 0;
+                (0..3).for_each(|i| {
+                    if bit(value, i) {
+                        self.timers[i].enabled = false;
+                        self.timers[i].timer_value = 0;
+                        self.timers[i].counter = 0;
+                    }
+                });
             }
             0x00F2 => {
                 self.dsp_addr = (value & 0x7F) as usize;
@@ -135,7 +142,9 @@ impl HasAddressBus for ApuMemory {
                     self.dsp.write(self.dsp_addr, value);
                 }
             }
-            0x00F4..0x00F8 => self.apu_to_cpu_reg[address - 0x00F4] = value,
+            0x00F4..0x00F8 => {
+                self.apu_to_cpu_reg[address - 0x00F4] = value;
+            }
             0x00FA..0x00FD => {
                 self.timers[address - 0x00FA].timer_target = value;
             }
@@ -160,14 +169,25 @@ macro_rules! rest_field {
 impl Apu {
     rest_field! {total_clocks, usize}
     /// Takes the CPU to APU side registers and returns the values written to the APU to CPU registers
-    pub fn step(&mut self, cpu_reg: [u8; 4]) -> [u8; 4] {
-        self.rest.cpu_to_apu_reg = cpu_reg;
+    pub fn step(&mut self, cpu_reg: &mut [u8; 4]) -> [u8; 4] {
+        self.rest.cpu_to_apu_reg = cpu_reg.clone();
         self.core.step(&mut self.rest);
+        *cpu_reg = self.rest.cpu_to_apu_reg;
         self.rest.apu_to_cpu_reg
     }
     /// Reads from ram, and thus doesn't require a mutable reference
     pub fn read_ram(&self, address: usize) -> u8 {
-        self.rest.ram[address % APU_RAM_SIZE]
+        match address {
+            0x0000..0xFFC0 => self.rest.ram[address],
+            0xFFC0..0x10000 => {
+                if self.rest.expose_ipl_rom {
+                    IPL[address - 0xFFC0]
+                } else {
+                    self.rest.ram[address]
+                }
+            }
+            _ => 0,
+        }
     }
     pub fn sample_queue(&mut self) -> VecDeque<f32> {
         let mut s = VecDeque::new();
