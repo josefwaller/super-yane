@@ -11,7 +11,7 @@ use derivative::Derivative;
 use paste::paste;
 
 pub const APU_RAM_SIZE: usize = 0x10000;
-/// Generate a new sample every 64 APU clocks (32 SPC700 clocks)
+/// Generate a new sample every 64 APU clocks (32 SPC700 clocks, or 96 ceramic resonator cycles)
 pub const CLOCKS_PER_SAMPLE: usize = 96;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, new)]
@@ -59,7 +59,7 @@ impl ApuMemory {
         (0..clocks).for_each(|_| {
             self.total_clocks += 1;
             if self.total_clocks % 3 == 0 {
-                // Clock the timers every 16 (timers 0 and 1) or 128 (timer 2) APU cycles
+                // Clock the timers every 128 (timers 0 and 1) or 16 (timer 2) APU cycles
                 [128, 128, 16]
                     .into_iter()
                     .enumerate()

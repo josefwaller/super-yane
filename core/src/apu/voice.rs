@@ -32,6 +32,19 @@ impl From<u8> for GainMode {
     }
 }
 
+impl From<GainMode> for u8 {
+    fn from(value: GainMode) -> Self {
+        use GainMode::*;
+        match value {
+            LinearDecrease => 0b100,
+            ExponentialDecrease => 0b101,
+            LinearIncrease => 0b110,
+            BentIncrease => 0b111,
+            _ => 0b000,
+        }
+    }
+}
+
 impl ToString for GainMode {
     fn to_string(&self) -> String {
         use GainMode::*;
@@ -52,7 +65,6 @@ pub enum AdsrStage {
     Attack,
     Decay,
     Sustain,
-    Release,
 }
 
 impl ToString for AdsrStage {
@@ -62,9 +74,29 @@ impl ToString for AdsrStage {
             Attack => "Attack",
             Decay => "Decay",
             Sustain => "Sustain",
-            Release => "Release",
         }
         .to_string()
+    }
+}
+
+#[derive(Default, Copy, Clone, Serialize, Deserialize)]
+pub enum State {
+    // Voice is using ADSR
+    Adsr(AdsrStage),
+    // Voice is using gain
+    Gain(GainMode),
+    // Voice is in release (from KOFF)
+    #[default]
+    Release,
+}
+impl ToString for State {
+    fn to_string(&self) -> String {
+        use State::*;
+        match self {
+            Adsr(s) => s.to_string(),
+            Gain(s) => s.to_string(),
+            Release => "Release".to_string(),
+        }
     }
 }
 
@@ -79,13 +111,19 @@ pub struct Voice {
     pub sample_src: usize,
     /// ADSR enable
     pub adsr_enabled: bool,
-    pub adsr_stage: AdsrStage,
+    /// Current state
+    pub state: State,
+    /// ADSR decay rate
     pub decay_rate: usize,
+    /// ADSR attack rate
     pub attack_rate: usize,
+    /// ADSR sustain level
     pub sustain_level: u32,
+    /// ADSR sustain rate
     pub sustain_rate: usize,
+    /// Gain rate
     pub gain_rate: usize,
-    pub gain_mode: GainMode,
+    /// Whether echo is enabled for this voice
     pub echo_enabled: bool,
     /// End of block flag
     pub end_flag: bool,
@@ -131,12 +169,14 @@ impl Voice {
                 self.sustain_level = ((value >> 5) as u32 + 1) * 0x200;
             }
             7 => {
-                if !bit(value, 7) {
-                    self.envelope = (value as u16 & 0x7F) * 0x10;
-                    self.gain_mode = GainMode::Fixed;
-                } else {
-                    self.gain_rate = (value & 0x1F) as usize;
-                    self.gain_mode = GainMode::from(value >> 5);
+                if !self.adsr_enabled {
+                    if !bit(value, 7) {
+                        self.envelope = (value as u16 & 0x7F) * 0x10;
+                        self.state = State::Gain(GainMode::Fixed);
+                    } else {
+                        self.gain_rate = (value & 0x1F) as usize;
+                        self.state = State::Gain(GainMode::from(value >> 5));
+                    }
                 }
             }
             _ => {
@@ -165,9 +205,9 @@ impl Voice {
             self.period_counter - 1
         };
         // Compute envelope value
-        if self.adsr_enabled {
-            use AdsrStage::*;
-            self.envelope = match self.adsr_stage {
+        use AdsrStage::*;
+        self.envelope = match self.state {
+            State::Adsr(adsr_stage) => match adsr_stage {
                 Attack => {
                     let v = if self.get_period_elapsed(self.attack_rate) {
                         self.envelope + if self.attack_rate == 0x1F { 1024 } else { 32 }
@@ -175,7 +215,7 @@ impl Voice {
                         self.envelope
                     };
                     if v >= 0x7E0 {
-                        self.adsr_stage = Decay;
+                        self.state = State::Adsr(Decay);
                     }
                     v.min(0x7FF)
                 }
@@ -184,7 +224,7 @@ impl Voice {
                         let v = self.envelope.saturating_sub(1);
                         let v = v.saturating_sub((v >> 8) + 1);
                         if v <= self.sustain_level as u16 {
-                            self.adsr_stage = Sustain;
+                            self.state = State::Adsr(Sustain);
                         }
                         v
                     } else {
@@ -200,35 +240,32 @@ impl Voice {
                         self.envelope
                     }
                 }
-                Release => {
-                    if self.get_period_elapsed(RELEASE_PERIOD_RATE) {
-                        self.envelope.saturating_sub(8)
-                    } else {
-                        self.envelope
-                    }
-                }
-            }
-        } else {
-            if self.get_period_elapsed(self.gain_rate) {
-                use GainMode::*;
-                self.envelope = match self.gain_mode {
-                    Fixed => self.envelope,
-                    LinearDecrease => self.envelope.saturating_sub(32),
-                    ExponentialDecrease => self
-                        .envelope
-                        .saturating_sub(((self.envelope.saturating_sub(1)) >> 8) + 1),
-                    LinearIncrease => self.envelope + 32,
-                    BentIncrease => {
-                        if self.envelope < 0x600 {
-                            self.envelope + 32
-                        } else {
-                            self.envelope + 8
+            },
+            State::Gain(gain_mode) => {
+                if self.get_period_elapsed(self.gain_rate) {
+                    use GainMode::*;
+                    match gain_mode {
+                        Fixed => self.envelope,
+                        LinearDecrease => self.envelope.saturating_sub(32),
+                        ExponentialDecrease => self
+                            .envelope
+                            .saturating_sub(((self.envelope.saturating_sub(1)) >> 8) + 1),
+                        LinearIncrease => self.envelope + 32,
+                        BentIncrease => {
+                            if self.envelope < 0x600 {
+                                self.envelope + 32
+                            } else {
+                                self.envelope + 8
+                            }
                         }
                     }
+                    .clamp(0, ENVELOPE_MAX_VALUE)
+                } else {
+                    self.envelope
                 }
-                .clamp(0, ENVELOPE_MAX_VALUE);
             }
-        }
+            State::Release => self.envelope.saturating_sub(8),
+        };
         self.envelope = self.envelope.clamp(0, ENVELOPE_MAX_VALUE);
     }
     /// Generate a new sample from this voice
@@ -241,87 +278,83 @@ impl Voice {
         noise_value: i32,
     ) -> [i32; 2] {
         self.clock();
-        if self.enabled {
-            // Add sample pitch to counter
-            let (counter, o) = self.counter.overflowing_add(if self.pitch_mod_enabled {
-                ((self.sample_pitch as i32 * ((*prev_pitch >> 4) + 0x400)) >> 10)
-                    .clamp(0, u16::MAX as i32) as u16
-            } else {
-                self.sample_pitch
+        // Add sample pitch to counter
+        let (counter, o) = self.counter.overflowing_add(if self.pitch_mod_enabled {
+            ((self.sample_pitch as i32 * ((*prev_pitch >> 4) + 0x400)) >> 10)
+                .clamp(0, u16::MAX as i32) as u16
+        } else {
+            self.sample_pitch
+        });
+        // If overflowed, we need to load the next block
+        if o {
+            // If enabled and block address is None, we need to load the first address
+            let block_addr = self.block_addr.unwrap_or_else(|| {
+                // Get the directory address
+                let addr = sample_dir_addr + self.sample_src;
+                u16::from_le_bytes([ram[addr], ram[addr + 1]]) as usize
             });
-            // If overflowed, we need to load the next block
-            if o {
-                // If enabled and block address is None, we need to load the first address
-                let block_addr = self.block_addr.unwrap_or_else(|| {
-                    // Get the directory address
-                    let addr = sample_dir_addr + self.sample_src;
-                    u16::from_le_bytes([ram[addr], ram[addr + 1]]) as usize
+            // Read the head and parse into flags
+            let head = ram[block_addr];
+            // High nibble
+            let shift = head >> 4;
+            // Low nibble
+            let filter = (head >> 2) & 0x03;
+            let loop_flag = bit(head, 1);
+            self.end_flag = bit(head, 0);
+            // Read and parse blocks
+            let sample_bytes: [[i16; 2]; 8] =
+                core::array::from_fn(|i| ram[(block_addr + 1 + i) % ram.len()]).map(|v| {
+                    [v >> 4, v & 0xF].map(|v| {
+                        // If negative, flip all the other bits
+                        let v = if v > 0x07 {
+                            0xFFF0 | (v as u16)
+                        } else {
+                            v as u16
+                        };
+                        // shift right by 1 since the sample is out of 15 bits
+                        if shift >= 0xD {
+                            // When shift=13..15, decoding works as if shift=12 and nibble=(nibble SAR 3).
+                            (((v >> 3) << 12) as i16) >> 1
+                        } else {
+                            ((v << shift) as i16) >> 1
+                        }
+                    })
                 });
-                // Read the head and parse into flags
-                let head = ram[block_addr];
-                // High nibble
-                let shift = head >> 4;
-                // Low nibble
-                let filter = (head >> 2) & 0x03;
-                let loop_flag = bit(head, 1);
-                self.end_flag = bit(head, 0);
-                // Read and parse blocks
-                let sample_bytes: [[i16; 2]; 8] =
-                    core::array::from_fn(|i| ram[(block_addr + 1 + i) % ram.len()]).map(|v| {
-                        [v >> 4, v & 0xF].map(|v| {
-                            // If negative, flip all the other bits
-                            let v = if v > 0x07 {
-                                0xFFF0 | (v as u16)
-                            } else {
-                                v as u16
-                            };
-                            // shift right by 1 since the sample is out of 15 bits
-                            if shift >= 0xD {
-                                // When shift=13..15, decoding works as if shift=12 and nibble=(nibble SAR 3).
-                                (((v >> 3) << 12) as i16) >> 1
-                            } else {
-                                ((v << shift) as i16) >> 1
-                            }
-                        })
-                    });
-                self.prev_sample_data.copy_from_slice(&self.samples);
+            self.prev_sample_data.copy_from_slice(&self.samples);
 
-                let mut old = self.samples[15] as i32;
-                let mut older = self.samples[14] as i32;
-                let samples: [i16; 16] = core::array::from_fn(|i| {
-                    let s = sample_bytes.as_flattened()[i] as i32;
-                    let value = match filter {
-                        0 => s,
-                        1 => s + old + ((-old) >> 4),
-                        2 => s + 2 * old + ((-3 * old) >> 5) - older + (older >> 4),
-                        3 => s + 2 * old + ((-13 * old) >> 6) - older + ((older * 3) >> 4),
-                        _ => unreachable!(),
-                    } as i16;
-                    older = old;
-                    old = value as i32;
-                    value
-                });
-                self.samples.copy_from_slice(&samples);
+            let mut old = self.samples[15] as i32;
+            let mut older = self.samples[14] as i32;
+            let samples: [i16; 16] = core::array::from_fn(|i| {
+                let s = sample_bytes.as_flattened()[i] as i32;
+                let value = match filter {
+                    0 => s,
+                    1 => s + old + ((-old) >> 4),
+                    2 => s + 2 * old + ((-3 * old) >> 5) - older + (older >> 4),
+                    3 => s + 2 * old + ((-13 * old) >> 6) - older + ((older * 3) >> 4),
+                    _ => unreachable!(),
+                } as i16;
+                older = old;
+                old = value as i32;
+                value
+            });
+            self.samples.copy_from_slice(&samples);
 
-                // Get next block address
-                self.block_addr = if self.end_flag {
-                    if loop_flag {
-                        // Point to loop address
-                        let addr = sample_dir_addr + self.sample_src + 2;
-                        Some(u16::from_le_bytes([ram[addr], ram[addr + 1]]) as usize)
-                    } else {
-                        // Disable channel
-                        self.enabled = false;
-                        self.adsr_enabled = true;
-                        self.adsr_stage = AdsrStage::Release;
-                        None
-                    }
+            // Get next block address
+            self.block_addr = if self.end_flag {
+                if loop_flag {
+                    // Point to loop address
+                    let addr = sample_dir_addr + self.sample_src + 2;
+                    Some(u16::from_le_bytes([ram[addr], ram[addr + 1]]) as usize)
                 } else {
-                    Some(block_addr + 9)
-                };
-            }
-            self.counter = counter;
+                    // Disable channel
+                    self.key_off();
+                    None
+                }
+            } else {
+                Some(block_addr + 9)
+            };
         }
+        self.counter = counter;
         // Select the top 4 bits as the sample index
         let sample_index = (self.counter >> 12) as usize;
         let gauss_index = (self.counter as usize & 0xFF0) >> 4;
@@ -366,13 +399,10 @@ impl Voice {
         table_val != 0 && (self.period_counter + PERIOD_OFFSET_TABLE[rate]) % table_val == 0
     }
     pub fn key_on(&mut self) {
-        self.enabled = true;
-        self.adsr_stage = AdsrStage::Attack;
-        self.adsr_enabled = true;
+        self.state = State::Adsr(AdsrStage::Attack);
         self.block_addr = None;
     }
     pub fn key_off(&mut self) {
-        self.adsr_enabled = true;
-        self.adsr_stage = AdsrStage::Release;
+        self.state = State::Release;
     }
 }

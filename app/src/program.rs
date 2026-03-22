@@ -1080,7 +1080,7 @@ impl Program {
                         [
                             row![text(format!("Voice {}", i)).color(COLORS[4])],
                             row![text("Enabled"), text(format!("{}", c.enabled))],
-                            row![text("Envelope"), text(format!("{}", c.envelope))],
+                            row![text("Envelope"), text(format!("{:02X}", c.envelope))],
                             row![
                                 text("Pitch Mod Enabled"),
                                 text(format!("{}", c.pitch_mod_enabled))
@@ -1092,8 +1092,8 @@ impl Program {
                             ],
                             row![text("Sample source"), text(format!("{:X}", c.sample_src))],
                             row![text("ADSR enabled"), text(format!("{}", c.adsr_enabled))],
-                            row![text("ADSR stage"), text(c.adsr_stage.to_string())],
-                            row![text("Gain Mode"), text(c.gain_mode.to_string())],
+                            row![text("State"), text(c.state.to_string())],
+                            row![text("Attack Rate"), text(format!("{:02X}", c.attack_rate))],
                             row![text("ADSR Attack Rate"), text(c.attack_rate.to_string())],
                             row![text("Echo enabled"), text(format!("{}", c.echo_enabled))],
                             row![text("Noise enabled"), text(format!("{}", c.noise_enabled))],

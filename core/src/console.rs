@@ -39,6 +39,9 @@ pub struct ExternalArchitecture {
     /// The latched input ports, i.e. the states when the input was last latched
     #[new(value = "[InputPort::default_standard_controller(); 2]")]
     pub latched_input_port: [InputPort; 2],
+    /// The index of the button to read from the latched controllers
+    #[new(value = "[0; 2]")]
+    pub latched_indexes: [usize; 2],
     #[new(value = "0")]
     total_master_clocks: u64,
     #[new(value = "0")]
@@ -83,6 +86,41 @@ impl ExternalArchitecture {
                     (v, 8)
                 }
                 0x4002..0x4007 => (self.open_bus_value, 6),
+                0x4016..=0x4017 => {
+                    use InputPort::*;
+                    let i = a - 0x4016;
+                    let input_port = self.latched_input_port[i];
+                    let value = match input_port {
+                        StandardController {
+                            a,
+                            b,
+                            x,
+                            y,
+                            up,
+                            left,
+                            right,
+                            down,
+                            start,
+                            select,
+                            r,
+                            l,
+                        } => {
+                            let idx = self.latched_indexes[i];
+                            self.latched_indexes[i] += 1;
+                            if idx < 16 {
+                                let v = [
+                                    b, y, select, start, up, down, left, right, a, x, l, r, false,
+                                    false, false, false,
+                                ];
+                                u8::from(v[idx])
+                            } else {
+                                1
+                            }
+                        }
+                        Empty => 0,
+                    };
+                    (value, 16)
+                }
                 0x4210 => {
                     let v = u8::from(self.ppu.vblank) << 7;
                     self.ppu.vblank = false;
@@ -259,6 +297,7 @@ impl ExternalArchitecture {
                         // Latch controllers
                         if value & 0x01 == 0x01 {
                             self.latched_input_port = self.input_ports.clone();
+                            self.latched_indexes = [0; 2];
                         }
                         12
                     }
@@ -487,7 +526,7 @@ impl Console {
         if !vblank && self.ppu().is_in_vblank() {
             // Trigger NMI
             if self.rest.nmi_enabled {
-                debug!("NMI {}", self.rest.total_master_clocks);
+                // debug!("NMI {}", self.rest.total_master_clocks);
                 self.cpu.on_nmi(&mut self.rest);
             }
             // Disable all HDMA channels

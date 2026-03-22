@@ -10,7 +10,7 @@ use derivative::Derivative;
 use log::*;
 use seeded_random::{Random, Seed};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::mpsc::channel};
 
 /// The DSP
 #[derive(Clone, Derivative, Serialize, Deserialize)]
@@ -48,6 +48,8 @@ pub struct Dsp {
     pub(super) sample_queue: VecDeque<f32>,
 
     pub echo_enabled: bool,
+    #[serde(default)]
+    pub mute: bool,
 }
 
 impl Dsp {
@@ -74,13 +76,15 @@ impl Dsp {
                 });
             }
             0x6C => {
-                // Combined mute and reset
-                if value & 0xC0 != 0 {
+                // Soft reset
+                if bit(value, 7) {
                     self.voices.iter_mut().for_each(|v| {
-                        v.enabled = false;
+                        v.key_off();
                         v.envelope = 0;
                     });
                 }
+                // Mute
+                self.mute = bit(value, 6);
                 self.echo_enabled = !bit(value, 5);
                 self.noise_frequency = PERIOD_TABLE[(value & 0x1F) as usize]
             }
@@ -145,7 +149,7 @@ impl Dsp {
                 .voices
                 .iter()
                 .enumerate()
-                .map(|(i, v)| u8::from(v.end_flag) >> (7 - i))
+                .map(|(i, v)| u8::from(v.end_flag) << (7 - i))
                 .sum(),
             0x7D => (self.echo_size / 512) as u8,
             reg if address & 0x0F < 0x0A => {
@@ -156,7 +160,7 @@ impl Dsp {
                     0
                 }
             }
-            _ => 0, // _ => todo!(),
+            _ => todo!(),
         }
     }
     pub fn generate_sample(&mut self, ram: &mut [u8]) {
@@ -228,17 +232,22 @@ impl Dsp {
         // Go to next cache value
         self.fir_index = (self.fir_index + 1) % self.fir_cache.len();
 
-        let final_out: [f32; 2] = core::array::from_fn(|side| {
-            (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0)
-                + (voice_out[side] as f32 * self.volume[side] as f32 / 128.0)
-        });
-        // For right now, just average the left/right sides
-        let s = (final_out[0] + final_out[1]) / 2.0 / 0x3FFF as f32;
-        if s > 1.0 || s < -1.0 {
-            error!("Invalid audio sample generated: {}", s);
+        // Check if muted
+        if self.mute {
             self.sample_queue.push_back(0.0);
         } else {
-            self.sample_queue.push_back(s);
+            let final_out: [f32; 2] = core::array::from_fn(|side| {
+                (echo_out[side] as f32 * self.echo_volume[side] as f32 / 128.0)
+                    + (voice_out[side] as f32 * self.volume[side] as f32 / 128.0)
+            });
+            // For right now, just average the left/right sides
+            let s = (final_out[0] + final_out[1]) / 2.0 / 0x3FFF as f32;
+            if s > 1.0 || s < -1.0 {
+                error!("Invalid audio sample generated: {}", s);
+                self.sample_queue.push_back(0.0);
+            } else {
+                self.sample_queue.push_back(s);
+            }
         }
     }
 }
