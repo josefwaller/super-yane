@@ -1518,7 +1518,7 @@ impl Processor {
         }
     }
     pub fn reset(&mut self, memory: &mut impl HasAddressBus) {
-        self.p.e = true;
+        self.p = StatusRegister::from_byte(0x35, true);
         self.pbr = 0x00;
         self.pc = u16::from_le_bytes([memory.read(0xFFFC), memory.read(0xFFFD)]);
         self.dbr = 0;

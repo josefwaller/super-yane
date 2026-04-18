@@ -134,7 +134,12 @@ impl ExternalArchitecture {
                 0x4212 => {
                     let v = (u8::from(self.ppu.is_in_vblank()) << 7)
                         | (u8::from(self.ppu.is_in_hblank()) << 6)
-                        | (self.open_bus_value & 0x3E);
+                        | (self.open_bus_value & 0x3E)
+                        | u8::from(
+                            self.ppu.cursor_y() == 1
+                                && self.ppu.cursor_x() > 32
+                                && self.ppu.cursor_x() < 95,
+                        );
                     (v, 6)
                 }
                 0x4213 => {
