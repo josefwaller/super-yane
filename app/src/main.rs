@@ -3,7 +3,7 @@ use std::{env, fs::File};
 use iced::{Font, Settings};
 use log::*;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
-use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, WriteLogger};
+use simplelog::{CombinedLogger, ConfigBuilder, SimpleLogger, TermLogger, WriteLogger};
 
 mod apu_snapshot;
 mod cpu_snapshot;
@@ -65,7 +65,12 @@ fn main() {
             config.clone(),
             File::create("./super_yane.log").unwrap(),
         ),
-        SimpleLogger::new(log::LevelFilter::Debug, config),
+        TermLogger::new(
+            log::LevelFilter::Debug,
+            config,
+            simplelog::TerminalMode::Mixed,
+            simplelog::ColorChoice::Always,
+        ),
     ])
     .unwrap();
     info!("Logger initialized");
