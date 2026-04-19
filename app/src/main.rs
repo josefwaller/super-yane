@@ -113,9 +113,27 @@ fn main() {
     ])
     .unwrap();
     info!("Logger initialized");
-
+    // Initialize UI
     let ui = AppWindow::new().unwrap();
+    // Initialize window
     let mut engine = Engine::new();
+    // Load ROM/savestate
+    match env::args().nth(1) {
+        Some(f) => match std::fs::read(&f) {
+            Ok(bytes) => {
+                debug!("Reading {}", f);
+                if f.ends_with(".sy.bin") {
+                    engine.load_savestate(&bytes);
+                } else {
+                    engine.load_rom(&bytes)
+                }
+            }
+            Err(e) => {
+                error!("Unable to read file {}: {:?}", f, e);
+            }
+        },
+        None => {}
+    };
     let ui_ptr = ui.as_weak();
     ui.on_advance_emulator(move || {
         let ui = ui_ptr.unwrap();
