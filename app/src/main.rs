@@ -58,19 +58,7 @@ impl From<StandardController> for InputPort {
 slint::include_modules!();
 
 // fn initial_state() -> Program {
-//     let sdl = sdl2::init().expect("Unable to init SDL");
-//     let audio = sdl.audio().unwrap();
-//     let channel: AudioQueue<f32> = audio
-//         .open_queue(
-//             None,
-//             &AudioSpecDesired {
-//                 freq: Some(32_000),
-//                 channels: Some(1),
-//                 samples: None,
-//             },
-//         )
-//         .unwrap();
-//     info!("Channel spec is {:?}", channel.spec());
+
 //     let mut a = Program::new(channel);
 //     // If an environment variable was passed, load that instead
 //     match env::args().nth(1) {
@@ -113,6 +101,21 @@ fn main() {
     ])
     .unwrap();
     info!("Logger initialized");
+    // Initialize Audio
+    let sdl = sdl2::init().expect("Unable to init SDL");
+    let audio = sdl.audio().unwrap();
+    let channel: AudioQueue<f32> = audio
+        .open_queue(
+            None,
+            &AudioSpecDesired {
+                freq: Some(32_000),
+                channels: Some(1),
+                samples: None,
+            },
+        )
+        .unwrap();
+    info!("Channel spec is {:?}", channel.spec());
+    channel.resume();
     // Initialize UI
     let ui = AppWindow::new().unwrap();
     // Initialize window
@@ -141,6 +144,10 @@ fn main() {
         engine.input_ports[0] = InputPort::from(controller);
         engine.advance_dt(Duration::from_millis(16), AdvanceSettings::default());
         engine.on_frame();
+        let samples = engine.swap_samples();
+        let (a, b) = samples.as_slices();
+        channel.queue_audio(a).expect("Unable to queue audio");
+        channel.queue_audio(b).expect("Unable to queue audio");
         let data = &engine.prev_frame_data;
         let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 240);
         ui.set_pixel_data(Image::from_rgb8(buf));
