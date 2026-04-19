@@ -17,9 +17,43 @@ mod engine;
 // use program::Program;
 
 use crate::engine::{AdvanceSettings, Engine};
+use super_yane::InputPort;
 mod disassembler;
 mod profiler;
 mod table;
+
+impl From<StandardController> for InputPort {
+    fn from(value: StandardController) -> Self {
+        let StandardController {
+            a,
+            b,
+            x,
+            y,
+            up,
+            left,
+            right,
+            down,
+            start,
+            select,
+            r,
+            l,
+        } = value;
+        InputPort::StandardController {
+            a,
+            b,
+            x,
+            y,
+            up,
+            left,
+            right,
+            down,
+            start,
+            select,
+            r,
+            l,
+        }
+    }
+}
 
 slint::include_modules!();
 
@@ -84,11 +118,14 @@ fn main() {
     let mut engine = Engine::new();
     let ui_ptr = ui.as_weak();
     ui.on_advance_emulator(move || {
+        let ui = ui_ptr.unwrap();
+        let controller = ui.get_controller();
+        engine.input_ports[0] = InputPort::from(controller);
         engine.advance_dt(Duration::from_millis(16), AdvanceSettings::default());
         engine.on_frame();
         let data = &engine.prev_frame_data;
         let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 240);
-        ui_ptr.unwrap().set_pixel_data(Image::from_rgb8(buf));
+        ui.set_pixel_data(Image::from_rgb8(buf));
     });
     ui.run().expect("Unable to start Slint application");
 
