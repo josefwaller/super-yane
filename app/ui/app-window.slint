@@ -1,0 +1,20 @@
+export component AppWindow inherits Window {
+    // The RGB data from the emulator
+    in property <image> pixel_data;
+    callback advance_emulator;
+    Timer {
+        interval: 16ms;
+        triggered => {
+            advance_emulator();
+        }
+    }
+
+    Text {
+        color: green;
+        text: "Hello World!";
+    }
+
+    Image {
+        source: pixel_data;
+    }
+}

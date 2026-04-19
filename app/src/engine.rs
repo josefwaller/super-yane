@@ -96,7 +96,7 @@ pub struct Engine {
     stream_receiver: Receiver<StreamPayload>,
     pub input_ports: [InputPort; 2],
     /// The RGB data from the previous fully rendered frame
-    pub prev_frame_data: [[u8; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+    pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
     /// Audio sample queue
     samples: VecDeque<f32>,
 }
@@ -233,7 +233,7 @@ impl Engine {
             disassembler,
             profiler: Profiler::new(),
             input_ports: [InputPort::default_standard_controller(); 2],
-            prev_frame_data: [[0; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+            prev_frame_data: [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
             samples: VecDeque::new(),
         }
     }
@@ -310,7 +310,7 @@ impl Engine {
                 screen_data: f,
                 samples,
             }) => {
-                self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2], 0xFF]);
+                self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2]]);
                 self.samples.extend(samples);
             }
             Err(_) => {}
