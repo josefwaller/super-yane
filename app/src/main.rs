@@ -1,12 +1,12 @@
-use std::{env, fs::File, time::Duration};
+use std::{env, fs::File, time::Instant};
 
-use iced::{Font, Settings};
 use log::*;
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, SharedPixelBuffer, slint};
+use slint::{Image, RenderingState, SharedPixelBuffer, slint};
 
 mod apu_snapshot;
+mod audio;
 mod cpu_snapshot;
 // mod emu_state;
 // mod program;
@@ -101,21 +101,6 @@ fn main() {
     ])
     .unwrap();
     info!("Logger initialized");
-    // Initialize Audio
-    let sdl = sdl2::init().expect("Unable to init SDL");
-    let audio = sdl.audio().unwrap();
-    let channel: AudioQueue<f32> = audio
-        .open_queue(
-            None,
-            &AudioSpecDesired {
-                freq: Some(32_000),
-                channels: Some(1),
-                samples: None,
-            },
-        )
-        .unwrap();
-    info!("Channel spec is {:?}", channel.spec());
-    channel.resume();
     // Initialize UI
     let ui = AppWindow::new().unwrap();
     // Initialize window
@@ -138,34 +123,27 @@ fn main() {
         None => {}
     };
     let ui_ptr = ui.as_weak();
-    ui.on_advance_emulator(move || {
-        let ui = ui_ptr.unwrap();
-        let controller = ui.get_controller();
-        engine.input_ports[0] = InputPort::from(controller);
-        engine.advance_dt(Duration::from_millis(16), AdvanceSettings::default());
-        engine.on_frame();
-        let samples = engine.swap_samples();
-        let (a, b) = samples.as_slices();
-        channel.queue_audio(a).expect("Unable to queue audio");
-        channel.queue_audio(b).expect("Unable to queue audio");
-        let data = &engine.prev_frame_data;
-        let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 240);
-        ui.set_pixel_data(Image::from_rgb8(buf));
-    });
+    // ui.window().set_rendering_notifier(|_state, _graphics| {
+    //     engine.on_frame();
+    // });
+    // ui.on_advance_emulator(move || {
+    let mut last_time = Instant::now();
+    ui.window()
+        .set_rendering_notifier(move |state, _graphics| match state {
+            RenderingState::AfterRendering => {
+                let ui = ui_ptr.unwrap();
+                let controller = ui.get_controller();
+                engine.input_ports[0] = InputPort::from(controller);
+                let now = Instant::now();
+                engine.advance_dt(now - last_time, AdvanceSettings::default());
+                last_time = now;
+                engine.on_frame();
+                let data = &engine.prev_frame_data;
+                let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
+                ui.set_pixel_data(Image::from_rgb8(buf));
+            }
+            _ => {}
+        })
+        .unwrap();
     ui.run().expect("Unable to start Slint application");
-
-    // iced::application(initial_state, Program::update, Program::view)
-    //     .subscription(Program::subscription)
-    //     .theme(Program::theme)
-    //     .settings(Settings {
-    //         id: None,
-    //         vsync: false,
-    //         fonts: vec![],
-    //         default_font: Font::MONOSPACE,
-    //         default_text_size: 12.into(),
-    //         antialiasing: false,
-    //     })
-    //     .exit_on_close_request(false)
-    //     .run()
-    //     .unwrap();
 }

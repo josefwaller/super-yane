@@ -1,7 +1,7 @@
 use derive_new::new;
 use log::*;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::VecDeque,
     fmt::Display,
     sync::mpsc::{self, Receiver, Sender},
     thread::{self},
@@ -12,7 +12,7 @@ use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTI
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::{
-    apu_snapshot::ApuSnapshot, cpu_snapshot::CpuSnapshot, disassembler::Disassembler,
+    apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot, disassembler::Disassembler,
     profiler::Profiler,
 };
 
@@ -82,7 +82,6 @@ pub struct DoneEmuPayload {
 #[derive(new)]
 pub struct StreamPayload {
     screen_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
-    samples: VecDeque<f32>,
 }
 
 /// The underlying engine of the emulator application
@@ -108,16 +107,20 @@ impl Engine {
         let (emu_data_sender, emu_data_receiver) = mpsc::channel::<DoneEmuPayload>();
         // Send new frame data every time a new frame is generated
         let (stream_sender, stream_receiver) = mpsc::channel::<StreamPayload>();
+        // Initialize audio
+        let mut audio = Audio::new();
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
             .spawn(move || {
                 use Command::*;
+                // Create console
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
+                // Create audio
                 loop {
                     let mut disassembler = Disassembler::new(&console);
-                    let payload = receiver.recv().unwrap();
                     let mut profiler = Profiler::new();
+                    let payload = receiver.recv().unwrap();
                     console.input_ports_mut()[0] = payload.input[0];
                     /// Advance by 1 instruction
                     macro_rules! advance {
@@ -141,10 +144,7 @@ impl Engine {
 
                             if vblank && !console.ppu().is_in_vblank() {
                                 stream_sender
-                                    .send(StreamPayload::new(
-                                        console.ppu().screen_data_rgb(),
-                                        console.apu_mut().sample_queue(),
-                                    ))
+                                    .send(StreamPayload::new(console.ppu().screen_data_rgb()))
                                     .expect("Unable to send frame data");
                             }
                         };
@@ -219,6 +219,10 @@ impl Engine {
                             console.reset();
                         }
                     }
+                    let samples = console.apu_mut().sample_queue();
+                    let (a, b) = samples.as_slices();
+                    audio.push_samples(a);
+                    audio.push_samples(b);
                 }
             })
             .expect("Unable to spawn thread");
@@ -306,23 +310,11 @@ impl Engine {
         }
         // Update screen data
         match self.stream_receiver.try_recv() {
-            Ok(StreamPayload {
-                screen_data: f,
-                samples,
-            }) => {
+            Ok(StreamPayload { screen_data: f }) => {
                 self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2]]);
-                self.samples.extend(samples);
             }
             Err(_) => {}
         }
-    }
-
-    /// Retrieve the audio samples generated so far from the internal buffer
-    /// and clear the buffer
-    pub fn swap_samples(&mut self) -> VecDeque<f32> {
-        let mut s = VecDeque::new();
-        std::mem::swap(&mut self.samples, &mut s);
-        s
     }
 
     pub fn console(&self) -> &Console {
