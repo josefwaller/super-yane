@@ -1,7 +1,6 @@
-use std::{env, fs::File, time::Instant};
+use std::{cell::RefCell, env, fs::File, rc::Rc, time::Instant};
 
 use log::*;
-use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
 use slint::{Image, RenderingState, SharedPixelBuffer, slint};
 
@@ -16,7 +15,7 @@ mod engine;
 // mod widgets;
 // use program::Program;
 
-use crate::engine::{AdvanceSettings, Engine};
+use crate::engine::{AdvanceSettings, Command, Engine};
 use super_yane::InputPort;
 mod disassembler;
 mod profiler;
@@ -104,16 +103,16 @@ fn main() {
     // Initialize UI
     let ui = AppWindow::new().unwrap();
     // Initialize window
-    let mut engine = Engine::new();
+    let engine = Rc::new(RefCell::new(Engine::new()));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
             Ok(bytes) => {
                 debug!("Reading {}", f);
                 if f.ends_with(".sy.bin") {
-                    engine.load_savestate(&bytes);
+                    engine.borrow_mut().load_savestate(&bytes);
                 } else {
-                    engine.load_rom(&bytes)
+                    engine.borrow_mut().load_rom(&bytes)
                 }
             }
             Err(e) => {
@@ -123,22 +122,20 @@ fn main() {
         None => {}
     };
     let ui_ptr = ui.as_weak();
-    // ui.window().set_rendering_notifier(|_state, _graphics| {
-    //     engine.on_frame();
-    // });
-    // ui.on_advance_emulator(move || {
-    let mut last_time = Instant::now();
+    let e = engine.clone();
+    ui.on_controller_changed(move || {
+        e.borrow_mut().update(Command::UpdateInputPorts(
+            [InputPort::from(ui_ptr.unwrap().get_controller()); 2],
+        ))
+    });
+    let ui_ptr = ui.as_weak();
+    let e = engine.clone();
     ui.window()
         .set_rendering_notifier(move |state, _graphics| match state {
             RenderingState::AfterRendering => {
                 let ui = ui_ptr.unwrap();
-                let controller = ui.get_controller();
-                engine.input_ports[0] = InputPort::from(controller);
-                let now = Instant::now();
-                engine.advance_dt(now - last_time, AdvanceSettings::default());
-                last_time = now;
-                engine.on_frame();
-                let data = &engine.prev_frame_data;
+                engine.borrow_mut().on_frame();
+                let data = &e.borrow().prev_frame_data;
                 let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
                 ui.set_pixel_data(Image::from_rgb8(buf));
             }

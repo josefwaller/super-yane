@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sdl2 = "0.37.0"
 super-yane = { path = "../core" }
 wdc65816 = { path = "../wdc65816" }
 spc700 = { path = "../spc700" }

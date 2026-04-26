@@ -5,11 +5,12 @@ use std::{
     fmt::Display,
     sync::mpsc::{self, Receiver, Sender},
     thread::{self},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTION};
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
+const SLEEP_TIME: Duration = Duration::from_millis(5);
 
 use crate::{
     apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot, disassembler::Disassembler,
@@ -56,6 +57,7 @@ impl Display for AdvanceAmount {
 /// Command send to the emulation thread
 pub enum Command {
     Advance(AdvanceAmount),
+    UpdateInputPorts([InputPort; 2]),
     LoadRom(Vec<u8>),
     LoadSavestate(Console),
     Reset,
@@ -65,8 +67,6 @@ pub enum Command {
 pub struct UpdateEmuPayload {
     /// How much to advance the emulator by
     command: Command,
-    /// The current input
-    input: [InputPort; 2],
     /// The settings
     settings: AdvanceSettings,
 }
@@ -93,11 +93,8 @@ pub struct Engine {
     sender: Sender<UpdateEmuPayload>,
     emu_data_receiver: Receiver<DoneEmuPayload>,
     stream_receiver: Receiver<StreamPayload>,
-    pub input_ports: [InputPort; 2],
     /// The RGB data from the previous fully rendered frame
     pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
-    /// Audio sample queue
-    samples: VecDeque<f32>,
 }
 impl Engine {
     pub fn new() -> Engine {
@@ -116,31 +113,31 @@ impl Engine {
                 use Command::*;
                 // Create console
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
+                // Used to calculate delta time to advance the emulator
+                let mut last_time = Instant::now();
                 // Create audio
                 loop {
                     let mut disassembler = Disassembler::new(&console);
                     let mut profiler = Profiler::new();
-                    let payload = receiver.recv().unwrap();
-                    console.input_ports_mut()[0] = payload.input[0];
                     /// Advance by 1 instruction
                     macro_rules! advance {
                         () => {
                             let vblank = console.ppu().is_in_vblank();
                             let before_master_cycles = *console.total_master_clocks();
                             console.step_cpu();
-                            if payload.settings.log_cpu {
-                                let inst = CpuSnapshot::from(&console);
-                                info!("{}", inst);
-                            }
+                            // if payload.settings.log_cpu {
+                            //     let inst = CpuSnapshot::from(&console);
+                            //     info!("{}", inst);
+                            // }
                             while console.apu_is_behind() {
                                 console.step_apu();
-                                if payload.settings.log_apu {
-                                    let inst = ApuSnapshot::from(&console);
-                                    info!("{}", inst);
-                                }
+                                // if payload.settings.log_apu {
+                                //     let inst = ApuSnapshot::from(&console);
+                                //     info!("{}", inst);
+                                // }
                             }
-                            disassembler.add_current_instruction(&console);
-                            profiler.add_current_state(&console, before_master_cycles);
+                            // disassembler.add_current_instruction(&console);
+                            // profiler.add_current_state(&console, before_master_cycles);
 
                             if vblank && !console.ppu().is_in_vblank() {
                                 stream_sender
@@ -149,80 +146,101 @@ impl Engine {
                             }
                         };
                     }
-                    match payload.command {
-                        Advance(a) => {
-                            use AdvanceAmount::*;
-                            match a {
-                                MasterCycles(n) => {
-                                    let goal_cycles = console.total_master_clocks() + n as u64;
-                                    while *console.total_master_clocks() < goal_cycles {
-                                        advance!();
+                    let p = receiver.try_recv();
+                    match p {
+                        Ok(payload) => match payload.command {
+                            Advance(a) => {
+                                use AdvanceAmount::*;
+                                match a {
+                                    MasterCycles(n) => {
+                                        let goal_cycles = console.total_master_clocks() + n as u64;
+                                        while *console.total_master_clocks() < goal_cycles {
+                                            // advance!();
+                                        }
+                                    }
+                                    Scanlines(n) => (0..n).for_each(|_| {
+                                        let mut hblank = console.ppu().is_in_hblank();
+                                        while !(hblank && !console.ppu().is_in_hblank()) {
+                                            hblank = console.ppu().is_in_hblank();
+                                            // advance!();
+                                        }
+                                    }),
+                                    Instructions(instructions) => {
+                                        (0..instructions).for_each(|_| {
+                                            // advance!();
+                                        });
+                                    }
+                                    Frames(n) => (0..n).for_each(|_| {
+                                        let mut v = console.ppu().is_in_vblank();
+                                        while !(!v && console.ppu().is_in_vblank()) {
+                                            v = console.ppu().is_in_vblank();
+                                            // advance!();
+                                        }
+                                    }),
+                                    StartVBlank => {
+                                        let mut vblank = console.ppu().is_in_vblank();
+                                        while !(!vblank && console.ppu().is_in_vblank()) {
+                                            vblank = console.ppu().is_in_vblank();
+                                            // advance!();
+                                        }
+                                    }
+                                    EndVBlank => {
+                                        let mut vblank = console.ppu().is_in_vblank();
+                                        while !(vblank && !console.ppu().is_in_vblank()) {
+                                            vblank = console.ppu().is_in_vblank();
+                                            // advance!();
+                                        }
                                     }
                                 }
-                                Scanlines(n) => (0..n).for_each(|_| {
-                                    let mut hblank = console.ppu().is_in_hblank();
-                                    while !(hblank && !console.ppu().is_in_hblank()) {
-                                        hblank = console.ppu().is_in_hblank();
-                                        advance!();
-                                    }
-                                }),
-                                Instructions(instructions) => {
-                                    (0..instructions).for_each(|_| {
-                                        advance!();
-                                    });
-                                }
-                                Frames(n) => (0..n).for_each(|_| {
-                                    let mut v = console.ppu().is_in_vblank();
-                                    while !(!v && console.ppu().is_in_vblank()) {
-                                        v = console.ppu().is_in_vblank();
-                                        advance!();
-                                    }
-                                }),
-                                StartVBlank => {
-                                    let mut vblank = console.ppu().is_in_vblank();
-                                    while !(!vblank && console.ppu().is_in_vblank()) {
-                                        vblank = console.ppu().is_in_vblank();
-                                        advance!();
-                                    }
-                                }
-                                EndVBlank => {
-                                    let mut vblank = console.ppu().is_in_vblank();
-                                    while !(vblank && !console.ppu().is_in_vblank()) {
-                                        vblank = console.ppu().is_in_vblank();
-                                        advance!();
-                                    }
-                                }
+                                emu_data_sender
+                                    .send(DoneEmuPayload {
+                                        console: console.clone(),
+                                        profiler,
+                                        disassembler,
+                                    })
+                                    .expect("Unable to send console to main thread");
                             }
-                            emu_data_sender
-                                .send(DoneEmuPayload {
-                                    console: console.clone(),
-                                    profiler,
-                                    disassembler,
-                                })
-                                .expect("Unable to send console to main thread");
-                        }
-                        LoadRom(bytes) => {
-                            console = Console::with_cartridge(&bytes);
-                            disassembler.add_current_instruction(&console);
-                            emu_data_sender
-                                .send(DoneEmuPayload {
-                                    console: console.clone(),
-                                    disassembler,
-                                    profiler,
-                                })
-                                .expect("Unable to send console to main thread");
-                        }
-                        LoadSavestate(c) => {
-                            console = c;
-                        }
-                        Reset => {
-                            console.reset();
-                        }
+                            UpdateInputPorts(input_ports) => {
+                                *console.input_ports_mut() = input_ports;
+                            }
+                            LoadRom(bytes) => {
+                                console = Console::with_cartridge(&bytes);
+                                disassembler.add_current_instruction(&console);
+                                emu_data_sender
+                                    .send(DoneEmuPayload {
+                                        console: console.clone(),
+                                        disassembler,
+                                        profiler,
+                                    })
+                                    .expect("Unable to send console to main thread");
+                            }
+                            LoadSavestate(c) => {
+                                console = c;
+                            }
+                            Reset => {
+                                console.reset();
+                            }
+                        },
+                        Err(_) => {}
                     }
+                    // Calculate delta time
+                    let now = Instant::now();
+                    let dt = now - last_time;
+                    last_time = now;
+                    // Advance emulator
+                    let initial_master_cycles = console.total_master_clocks().clone();
+                    while ((console.total_master_clocks() - initial_master_cycles) as f64)
+                        < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
+                    {
+                        advance!();
+                    }
+                    // Update audio
                     let samples = console.apu_mut().sample_queue();
                     let (a, b) = samples.as_slices();
                     audio.push_samples(a);
                     audio.push_samples(b);
+                    // Sleep
+                    thread::sleep(SLEEP_TIME);
                 }
             })
             .expect("Unable to spawn thread");
@@ -236,17 +254,23 @@ impl Engine {
             emu_data_receiver,
             disassembler,
             profiler: Profiler::new(),
-            input_ports: [InputPort::default_standard_controller(); 2],
             prev_frame_data: [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
-            samples: VecDeque::new(),
         }
+    }
+
+    pub fn update(&mut self, command: Command) {
+        self.sender
+            .send(UpdateEmuPayload {
+                command,
+                settings: AdvanceSettings::default(),
+            })
+            .expect("Unable to send data to thread");
     }
 
     pub fn load_rom(&mut self, bytes: &[u8]) {
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::LoadRom(bytes.to_vec()),
-                self.input_ports,
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread");
@@ -259,40 +283,15 @@ impl Engine {
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::LoadSavestate(console),
-                self.input_ports,
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread")
-    }
-
-    /// Advance the console by a given duration
-    pub fn advance_dt(&mut self, dt: Duration, settings: AdvanceSettings) {
-        let cycles =
-            (dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64).floor() as u32;
-        self.sender
-            .send(UpdateEmuPayload::new(
-                Command::Advance(AdvanceAmount::MasterCycles(cycles)),
-                self.input_ports.clone(),
-                settings,
-            ))
-            .expect("Unable to send to console thread");
-    }
-    /// Advance the console by a number of instructions
-    pub fn advance_amount(&mut self, amount: AdvanceAmount, settings: AdvanceSettings) {
-        self.sender
-            .send(UpdateEmuPayload::new(
-                Command::Advance(amount),
-                self.input_ports.clone(),
-                settings,
-            ))
-            .expect("Unable to send to console thread");
     }
 
     pub fn reset(&mut self) {
         self.sender
             .send(UpdateEmuPayload::new(
                 Command::Reset,
-                self.input_ports.clone(),
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send payload");
