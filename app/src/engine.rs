@@ -1,8 +1,10 @@
 use derive_new::new;
 use log::*;
+use slint::SharedString;
 use std::{
     collections::VecDeque,
     fmt::Display,
+    ops::Deref,
     sync::{
         Arc, Mutex,
         mpsc::{self, Receiver, Sender},
@@ -10,14 +12,60 @@ use std::{
     thread::{self},
     time::{Duration, Instant},
 };
-use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTION};
+use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTION};
+use wdc65816::Processor;
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
 
 use crate::{
-    Settings, apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot,
-    disassembler::Disassembler, profiler::Profiler,
+    ConsoleData, CpuData, Settings, apu_snapshot::ApuSnapshot, audio::Audio,
+    cpu_snapshot::CpuSnapshot, disassembler::Disassembler, profiler::Profiler,
 };
+
+/// Shorthand for converting a byte to a 2-digit hex number
+fn h8(value: u8) -> SharedString {
+    format!("{:02X}", value).into()
+}
+/// Shorthand for converting a u16 into a 4-digit hex number
+fn h16(value: u16) -> SharedString {
+    format!("{:04X}", value).into()
+}
+impl Into<CpuData> for Processor {
+    fn into(self) -> CpuData {
+        let Processor {
+            a,
+            b,
+            xl,
+            xh,
+            yl,
+            yh,
+            pbr,
+            pc,
+            ..
+        } = self;
+        CpuData {
+            pbr: h8(pbr),
+            pc: h16(pc),
+            a: h8(a),
+            b: h8(b),
+            c: h16(self.c()),
+            x: h16(self.x()),
+            xl: h8(xl),
+            xh: h8(xh),
+            y: h16(self.y()),
+            yl: h8(yl),
+            yh: h8(yh),
+        }
+    }
+}
+
+impl Into<ConsoleData> for &Console {
+    fn into(self) -> ConsoleData {
+        ConsoleData {
+            cpu: (*self.cpu()).into(),
+        }
+    }
+}
 
 /// Misc settings for advancing the emulator
 #[derive(Default, Clone)]
@@ -97,7 +145,11 @@ pub struct Engine {
     pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
 }
 impl Engine {
-    pub fn new(console: Arc<Mutex<Console>>, settings: Arc<Mutex<Settings>>) -> Engine {
+    pub fn new(
+        console: Arc<Mutex<Console>>,
+        settings: Arc<Mutex<Settings>>,
+        data: Arc<Mutex<ConsoleData>>,
+    ) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
         // Send new frame data every time a new frame is generated
@@ -225,6 +277,8 @@ impl Engine {
                         audio.push_samples(a, s.volume);
                         audio.push_samples(b, s.volume);
                     }
+                    // Copy data
+                    *data.lock().unwrap() = c.deref().into();
                     // Sleep
                     thread::sleep(SLEEP_TIME);
                 }

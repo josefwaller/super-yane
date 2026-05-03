@@ -5,7 +5,7 @@ use wdc65816::{HasAddressBus, Processor as WdcProcessor};
 
 #[derive(Default, Copy, Clone, Serialize, Deserialize)]
 pub struct Cpu {
-    pub(crate) core: WdcProcessor,
+    pub core: WdcProcessor,
 }
 
 impl Cpu {

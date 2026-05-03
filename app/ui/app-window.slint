@@ -10,11 +10,15 @@ import {
 } from "components/standard_controller_input.slint";
 import { Settings } from "structs/settings.slint";
 import { StandardController } from "structs/standard_controller.slint";
+import { ConsoleData } from "structs/console_data.slint";
+import { Cpu } from "components/cpu.slint";
 
 
 export component AppWindow inherits Window {
     // The RGB data from the emulator
     in property <image> pixel_data;
+    // The console data from the emulator
+    in property <ConsoleData> console_data;
 
     // The settings
     out property <Settings> settings;
@@ -56,10 +60,19 @@ export component AppWindow inherits Window {
         }
 
         VerticalLayout {
-            Image {
-                source: pixel_data;
-                width: 800px;
-                height: 600px;
+            HorizontalLayout {
+                alignment: stretch;
+                Cpu {
+                    horizontal-stretch: 0;
+                    data: console_data.cpu;
+                }
+
+                Image {
+                    horizontal-stretch: 1;
+                    source: pixel_data;
+                    width: 800px;
+                    height: 600px;
+                }
             }
 
             HorizontalBox {

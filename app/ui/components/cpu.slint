@@ -1,0 +1,55 @@
+import { CpuData } from "../structs/console_data.slint";
+import { VerticalBox, StandardTableView } from "std-widgets.slint";
+
+export component Cpu {
+    in property <CpuData> data;
+
+    VerticalLayout {
+        alignment: start;
+        GridLayout {
+            spacing: 10px;
+            padding: 10px;
+            vertical-stretch: 0;
+            Row {
+                Text {
+                    text: "PC";
+                }
+
+                Text {
+                    text: data.pc;
+                }
+            }
+
+            Row {
+
+                Text {
+                    text: "C";
+                }
+
+                Text {
+                    text: data.c;
+                }
+            }
+
+            Row {
+                Text {
+                    text: "X";
+                }
+
+                Text {
+                    text: data.x;
+                }
+            }
+
+            Row {
+                Text {
+                    text: "Y";
+                }
+
+                Text {
+                    text: data.y;
+                }
+            }
+        }
+    }
+}

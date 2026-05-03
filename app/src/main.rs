@@ -101,8 +101,14 @@ fn main() {
     let settings = Arc::new(Mutex::new(load_settings()));
     // Create console
     let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
+    // Create console data struct
+    let data = Arc::new(Mutex::new(ConsoleData::default()));
     // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new(console.clone(), settings.clone())));
+    let engine = Rc::new(RefCell::new(Engine::new(
+        console.clone(),
+        settings.clone(),
+        data.clone(),
+    )));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
@@ -137,9 +143,10 @@ fn main() {
                 RenderingState::AfterRendering => {
                     let ui = ui_ptr.unwrap();
                     engine.borrow_mut().on_frame();
-                    let data = &engine.borrow().prev_frame_data;
-                    let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
+                    let screen_data = &engine.borrow().prev_frame_data;
+                    let buf = SharedPixelBuffer::clone_from_slice(screen_data.as_flattened(), 256, 224);
                     ui.set_pixel_data(Image::from_rgb8(buf));
+                    ui.set_console_data(data.lock().unwrap().clone());
                 }
                 _ => {}
             }),
