@@ -1,15 +1,15 @@
+use closure::closure;
 use std::{
     cell::RefCell,
     env,
     fs::File,
     rc::Rc,
     sync::{Arc, Mutex},
-    time::Instant,
 };
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, Model, RenderingState, SharedPixelBuffer, SharedString, slint};
+use slint::{Image, RenderingState, SharedPixelBuffer};
 
 mod apu_snapshot;
 mod audio;
@@ -22,7 +22,7 @@ mod engine;
 // mod widgets;
 // use program::Program;
 
-use crate::engine::{AdvanceSettings, Command, Engine};
+use crate::engine::{Command, Engine};
 use super_yane::{Console, InputPort};
 mod disassembler;
 mod profiler;
@@ -96,6 +96,7 @@ fn main() {
     info!("Logger initialized");
     // Initialize UI
     let ui = AppWindow::new().unwrap();
+    let ui_ptr = ui.as_weak();
     // Load settings
     let settings = Arc::new(Mutex::new(load_settings()));
     // Create console
@@ -120,34 +121,29 @@ fn main() {
         None => {}
     };
     // Update controllers
-    let e = engine.clone();
-    let ui_ptr = ui.as_weak();
-    ui.on_controller_changed(move |controller| {
+    ui.on_controller_changed(closure!(clone engine, |controller| {
         // Todo: Support player 2
         // Copy controller values
         let values = [controller.into(); 2];
-        e.borrow_mut().update(Command::UpdateInputPorts(values));
-    });
+        engine.borrow_mut().update(Command::UpdateInputPorts(values));
+    }));
     // Update settings
-    let e = engine.clone();
-    let ui_ptr = ui.as_weak();
-    let settings_ptr = settings.clone();
-    ui.on_settings_changed(move |s| {
-        *settings_ptr.lock().unwrap() = s;
-    });
-    let ui_ptr = ui.as_weak();
-    let e = engine.clone();
+    ui.on_settings_changed(closure!(clone settings, |s| {
+        *settings.lock().unwrap() = s;
+    }));
     ui.window()
-        .set_rendering_notifier(move |state, _graphics| match state {
-            RenderingState::AfterRendering => {
-                let ui = ui_ptr.unwrap();
-                e.borrow_mut().on_frame();
-                let data = &e.borrow().prev_frame_data;
-                let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
-                ui.set_pixel_data(Image::from_rgb8(buf));
-            }
-            _ => {}
-        })
+        .set_rendering_notifier(
+            closure!(clone ui_ptr, clone engine, |state, _graphics| match state {
+                RenderingState::AfterRendering => {
+                    let ui = ui_ptr.unwrap();
+                    engine.borrow_mut().on_frame();
+                    let data = &engine.borrow().prev_frame_data;
+                    let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
+                    ui.set_pixel_data(Image::from_rgb8(buf));
+                }
+                _ => {}
+            }),
+        )
         .unwrap();
     ui.run().expect("Unable to start Slint application");
 }

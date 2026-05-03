@@ -17,6 +17,7 @@ derive-new = "0.7.0"
 serde-brief = { version = "0.2.0", features = ["alloc"] }
 slint = "1.16.0"
 rodio = "0.22.2"
+closure = "0.3.0"
 
 [build-dependencies]
 slint-build = "1.14.1"
