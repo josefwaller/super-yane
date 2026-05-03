@@ -2,7 +2,7 @@ use std::{cell::RefCell, env, fs::File, rc::Rc, time::Instant};
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, RenderingState, SharedPixelBuffer, slint};
+use slint::{Image, Model, RenderingState, SharedPixelBuffer, SharedString, slint};
 
 mod apu_snapshot;
 mod audio;
@@ -21,8 +21,10 @@ mod disassembler;
 mod profiler;
 mod table;
 
-impl From<StandardController> for InputPort {
-    fn from(value: StandardController) -> Self {
+slint::include_modules!();
+
+impl Into<InputPort> for StandardController {
+    fn into(self) -> InputPort {
         let StandardController {
             a,
             b,
@@ -36,7 +38,7 @@ impl From<StandardController> for InputPort {
             select,
             r,
             l,
-        } = value;
+        } = self;
         InputPort::StandardController {
             a,
             b,
@@ -54,30 +56,13 @@ impl From<StandardController> for InputPort {
     }
 }
 
-slint::include_modules!();
+fn load_settings() -> Settings {
+    Settings {
+        is_paused: false,
+        volume: 50.0,
+    }
+}
 
-// fn initial_state() -> Program {
-
-//     let mut a = Program::new(channel);
-//     // If an environment variable was passed, load that instead
-//     match env::args().nth(1) {
-//         Some(f) => match std::fs::read(&f) {
-//             Ok(bytes) => {
-//                 debug!("Reading {}", f);
-//                 if f.ends_with(".sy.bin") {
-//                     a.engine.load_savestate(&bytes);
-//                 } else {
-//                     a.engine.load_rom(&bytes)
-//                 }
-//             }
-//             Err(e) => {
-//                 error!("Unable to read file {}: {:?}", f, e);
-//             }
-//         },
-//         None => {}
-//     };
-//     a
-// }
 fn main() {
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -121,12 +106,20 @@ fn main() {
         },
         None => {}
     };
-    let ui_ptr = ui.as_weak();
+    // Update controllers
     let e = engine.clone();
-    ui.on_controller_changed(move || {
-        e.borrow_mut().update(Command::UpdateInputPorts(
-            [InputPort::from(ui_ptr.unwrap().get_controller()); 2],
-        ))
+    let ui_ptr = ui.as_weak();
+    ui.on_controller_changed(move |controller| {
+        // Todo: Support player 2
+        // Copy controller values
+        let values = [controller.into(); 2];
+        e.borrow_mut().update(Command::UpdateInputPorts(values));
+    });
+    // Update settings
+    let e = engine.clone();
+    let ui_ptr = ui.as_weak();
+    ui.on_settings_changed(move |settings| {
+        e.borrow_mut().update(Command::SetSettings(settings));
     });
     let ui_ptr = ui.as_weak();
     let e = engine.clone();
@@ -134,7 +127,7 @@ fn main() {
         .set_rendering_notifier(move |state, _graphics| match state {
             RenderingState::AfterRendering => {
                 let ui = ui_ptr.unwrap();
-                engine.borrow_mut().on_frame();
+                e.borrow_mut().on_frame();
                 let data = &e.borrow().prev_frame_data;
                 let buf = SharedPixelBuffer::clone_from_slice(data.as_flattened(), 256, 224);
                 ui.set_pixel_data(Image::from_rgb8(buf));

@@ -1,0 +1,35 @@
+import { StandardController } from "../structs/standard_controller.slint";
+
+// Turns keyboard input into a StandardController
+export component StandardControllerInput {
+    // The value of the controller
+    in-out property <StandardController> controller;
+
+    public function handle_key_change(key: string, value: bool) {
+        if (key == "w") {
+            controller.up = value;
+        } else if (key == "a") {
+            controller.left = value;
+        } else if (key == "s") {
+            controller.down = value;
+        } else if (key == "d") {
+            controller.right = value;
+        } else if (key == "r") {
+            controller.start = value;
+        } else if (key == "f") {
+            controller.select = value;
+        } else if (key == "q") {
+            controller.l = value;
+        } else if (key == "e") {
+            controller.r = value;
+        } else if (key == " ") {
+            controller.b = value;
+        } else if (key == "b") {
+            controller.a = value;
+        } else if (key == "n") {
+            controller.y = value;
+        } else if (key == "m") {
+            controller.x = value;
+        }
+    }
+}

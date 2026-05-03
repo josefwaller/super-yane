@@ -1,18 +1,38 @@
-import { StandardController } from "standard_controller.slint";
-import { Slider } from "std-widgets.slint";
+import {
+    Slider,
+    ProgressIndicator,
+    Button,
+    CheckBox,
+    HorizontalBox,
+} from "std-widgets.slint";
+import {
+    StandardControllerInput,
+} from "components/standard_controller_input.slint";
+import { Settings } from "structs/settings.slint";
+import { StandardController } from "structs/standard_controller.slint";
+
 
 export component AppWindow inherits Window {
     // The RGB data from the emulator
     in property <image> pixel_data;
-    out property <StandardController> controller;
-    callback controller_changed;
-    changed controller => {
-        controller_changed();
+
+    // The settings
+    out property <Settings> settings;
+    callback settings_changed(Settings);
+    changed settings => {
+        settings_changed(settings);
     }
-    out property <bool> is_paused;
-    // The volume, since it is hand
-    out property <float> volume: 50;
-    callback advance_emulator;
+    // The controllers, separate so that we are not copying all the settings every keypress
+    out property <StandardController> controller;
+    callback controller_changed(StandardController);
+    changed controller => {
+        controller_changed(controller)
+    }
+
+    init => {
+        settings.volume = 50.0;
+    }
+
     forward-focus: scope;
 
     Text {
@@ -20,43 +40,19 @@ export component AppWindow inherits Window {
         text: "Hello World!";
     }
 
-    function handle_key_change(key: string, value: bool) {
-        if (key == "w") {
-            controller.up = value;
-        } else if (key == "a") {
-            controller.left = value;
-        } else if (key == "s") {
-            controller.down = value;
-        } else if (key == "d") {
-            controller.right = value;
-        } else if (key == "r") {
-            controller.start = value;
-        } else if (key == "f") {
-            controller.select = value;
-        } else if (key == "q") {
-            controller.l = value;
-        } else if (key == "e") {
-            controller.r = value;
-        } else if (key == " ") {
-            controller.b = value;
-        } else if (key == "b") {
-            controller.a = value;
-        } else if (key == "n") {
-            controller.y = value;
-        } else if (key == "m") {
-            controller.x = value;
-        }
-    }
-
     scope := FocusScope {
         key-pressed(event) => {
-            handle_key_change(event.text, true);
+            controller_input.handle_key_change(event.text, true);
             accept
         }
 
         key-released(event) => {
-            handle_key_change(event.text, false);
+            controller_input.handle_key_change(event.text, false);
             accept
+        }
+
+        controller_input := StandardControllerInput {
+            controller <=> controller;
         }
 
         VerticalLayout {
@@ -66,10 +62,15 @@ export component AppWindow inherits Window {
                 height: 600px;
             }
 
-            Slider {
-                value: volume;
-                changed(value) => {
-                    volume = value;
+            HorizontalBox {
+                padding: 5px;
+                Slider {
+                    value <=> settings.volume;
+                }
+
+                CheckBox {
+                    text: "Pause";
+                    checked <=> settings.is-paused;
                 }
             }
         }

@@ -26,14 +26,14 @@ impl Audio {
         Audio { queue: input, sink }
     }
     /// Append a bunch of samples to the audio queue
-    pub fn push_samples(&mut self, samples: &[f32]) {
+    pub fn push_samples(&mut self, samples: &[f32], volume: f32) {
         if samples.len() == 0 {
             return;
         }
         self.queue.append(SamplesBuffer::new(
             NonZero::new(1).unwrap(),
             NonZero::new(32_000).unwrap(),
-            samples,
+            samples.iter().map(|s| s * volume).collect::<Vec<f32>>(),
         ));
     }
 }
