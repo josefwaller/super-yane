@@ -23,10 +23,12 @@ mod engine;
 // use program::Program;
 
 use crate::engine::{AdvanceSettings, Command, Engine};
-use super_yane::InputPort;
+use super_yane::{Console, InputPort};
 mod disassembler;
 mod profiler;
 mod table;
+
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 slint::include_modules!();
 
@@ -96,8 +98,10 @@ fn main() {
     let ui = AppWindow::new().unwrap();
     // Load settings
     let settings = Arc::new(Mutex::new(load_settings()));
+    // Create console
+    let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
     // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new(settings.clone())));
+    let engine = Rc::new(RefCell::new(Engine::new(console.clone(), settings.clone())));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
