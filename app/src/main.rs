@@ -1,4 +1,11 @@
-use std::{cell::RefCell, env, fs::File, rc::Rc, time::Instant};
+use std::{
+    cell::RefCell,
+    env,
+    fs::File,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
@@ -87,8 +94,10 @@ fn main() {
     info!("Logger initialized");
     // Initialize UI
     let ui = AppWindow::new().unwrap();
+    // Load settings
+    let settings = Arc::new(Mutex::new(load_settings()));
     // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new()));
+    let engine = Rc::new(RefCell::new(Engine::new(settings.clone())));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
@@ -118,8 +127,9 @@ fn main() {
     // Update settings
     let e = engine.clone();
     let ui_ptr = ui.as_weak();
-    ui.on_settings_changed(move |settings| {
-        e.borrow_mut().update(Command::SetSettings(settings));
+    let settings_ptr = settings.clone();
+    ui.on_settings_changed(move |s| {
+        *settings_ptr.lock().unwrap() = s;
     });
     let ui_ptr = ui.as_weak();
     let e = engine.clone();

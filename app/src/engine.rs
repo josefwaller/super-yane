@@ -3,7 +3,10 @@ use log::*;
 use std::{
     collections::VecDeque,
     fmt::Display,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Receiver, Sender},
+    },
     thread::{self},
     time::{Duration, Instant},
 };
@@ -60,7 +63,6 @@ pub enum Command {
     UpdateInputPorts([InputPort; 2]),
     LoadRom(Vec<u8>),
     LoadSavestate(Console),
-    SetSettings(Settings),
     Reset,
 }
 /// The payload send to the emulation thread telling it to update the emulator
@@ -98,7 +100,7 @@ pub struct Engine {
     pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
 }
 impl Engine {
-    pub fn new() -> Engine {
+    pub fn new(settings: Arc<Mutex<Settings>>) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
         // Send data back to the main thread after emulating
@@ -116,8 +118,6 @@ impl Engine {
                 let mut console = Console::with_cartridge(DEFAULT_CARTRIDGE);
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
-                // The settings
-                let mut settings = Settings::default();
                 loop {
                     let mut disassembler = Disassembler::new(&console);
                     let mut profiler = Profiler::new();
@@ -202,10 +202,6 @@ impl Engine {
                                     })
                                     .expect("Unable to send console to main thread");
                             }
-                            SetSettings(s) => {
-                                // Update settings
-                                settings = s;
-                            }
                             UpdateInputPorts(input_ports) => {
                                 *console.input_ports_mut() = input_ports;
                             }
@@ -233,8 +229,10 @@ impl Engine {
                     let now = Instant::now();
                     let dt = now - last_time;
                     last_time = now;
+                    // Clone settings
+                    let s = settings.lock().unwrap().clone();
                     // Advance emulator
-                    if !settings.is_paused {
+                    if !s.is_paused {
                         let initial_master_cycles = console.total_master_clocks().clone();
                         while ((console.total_master_clocks() - initial_master_cycles) as f64)
                             < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
@@ -244,8 +242,8 @@ impl Engine {
                         // Update audio
                         let samples = console.apu_mut().sample_queue();
                         let (a, b) = samples.as_slices();
-                        audio.push_samples(a, settings.volume);
-                        audio.push_samples(b, settings.volume);
+                        audio.push_samples(a, s.volume);
+                        audio.push_samples(b, s.volume);
                     }
                     // Sleep
                     thread::sleep(SLEEP_TIME);
