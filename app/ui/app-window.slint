@@ -4,6 +4,7 @@ import {
     Button,
     CheckBox,
     HorizontalBox,
+    TabWidget,
 } from "std-widgets.slint";
 import {
     StandardControllerInput,
@@ -12,6 +13,7 @@ import { Settings } from "structs/settings.slint";
 import { StandardController } from "structs/standard_controller.slint";
 import { ConsoleData } from "structs/console_data.slint";
 import { Cpu } from "components/cpu.slint";
+import "fonts/KodeMono-VariableFont_wght.ttf";
 
 
 export component AppWindow inherits Window {
@@ -39,6 +41,8 @@ export component AppWindow inherits Window {
 
     forward-focus: scope;
 
+    default-font-family: "Kode Mono";
+
     Text {
         color: green;
         text: "Hello World!";
@@ -59,31 +63,50 @@ export component AppWindow inherits Window {
             controller <=> controller;
         }
 
-        VerticalLayout {
-            HorizontalLayout {
-                alignment: stretch;
-                Cpu {
-                    horizontal-stretch: 0;
-                    data: console_data.cpu;
+        HorizontalLayout {
+            alignment: stretch;
+            TabWidget {
+                Tab {
+                    title: "CPU";
+                    Cpu {
+                        width: 100%;
+                        height: 100%;
+                        horizontal-stretch: 0;
+                        data: console_data.cpu;
+                    }
                 }
 
+                Tab {
+                    title: "PPU";
+                }
+
+                Tab {
+                    title: "APU";
+                }
+
+                Tab {
+                    title: "DMA";
+                }
+            }
+
+            VerticalLayout {
                 Image {
                     horizontal-stretch: 1;
                     source: pixel_data;
                     width: 800px;
                     height: 600px;
                 }
-            }
 
-            HorizontalBox {
-                padding: 5px;
-                Slider {
-                    value <=> settings.volume;
-                }
+                HorizontalBox {
+                    padding: 5px;
+                    Slider {
+                        value <=> settings.volume;
+                    }
 
-                CheckBox {
-                    text: "Pause";
-                    checked <=> settings.is-paused;
+                    CheckBox {
+                        text: "Pause";
+                        checked <=> settings.is-paused;
+                    }
                 }
             }
         }

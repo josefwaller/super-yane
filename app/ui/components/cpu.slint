@@ -1,54 +1,131 @@
 import { CpuData } from "../structs/console_data.slint";
-import { VerticalBox, StandardTableView } from "std-widgets.slint";
+import { VerticalBox, StandardTableView, Button } from "std-widgets.slint";
+import { Palette } from "../structs/palette.slint";
+
+component Register {
+    in property <string> name;
+    in property <string> value;
+    in property <color> headerColor: Palette.primaryHeader;
+    HorizontalLayout {
+        alignment: space-between;
+        spacing: 20px;
+        Text {
+            text: name;
+            font-weight: 900;
+            color: headerColor;
+        }
+
+        Text {
+            text: value;
+        }
+    }
+}
+
+component HighLowRegister {
+    in property <string> name;
+    in property <string> value;
+    in property <string> low;
+    in property <string> high;
+    property <bool> is_open;
+    VerticalLayout {
+        Register {
+            name: name;
+            value: value;
+        }
+
+        VerticalLayout {
+            padding-left: 5px;
+            Register {
+                name: name + "l";
+                value: low;
+                headerColor: Palette.secondaryHeader;
+            }
+
+            Register {
+                name: name + "h";
+                value: high;
+                headerColor: Palette.secondaryHeader;
+            }
+        }
+    }
+}
 
 export component Cpu {
     in property <CpuData> data;
 
     VerticalLayout {
         alignment: start;
-        GridLayout {
-            spacing: 10px;
-            padding: 10px;
-            vertical-stretch: 0;
-            Row {
-                Text {
-                    text: "PC";
-                }
+        spacing: 5px;
+        padding: 10px;
+        vertical-stretch: 0;
+        Register {
+            name: "PBR";
+            value: data.pbr;
+        }
 
-                Text {
-                    text: data.pc;
-                }
-            }
+        Register {
+            name: "PC";
+            value: data.pc;
+        }
 
-            Row {
+        HighLowRegister {
+            name: "C";
+            value: data.c;
+            low: data.a;
+            high: data.b;
+        }
 
-                Text {
-                    text: "C";
-                }
+        HighLowRegister {
+            name: "X";
+            value: data.x;
+            low: data.xl;
+            high: data.xh;
+        }
 
-                Text {
-                    text: data.c;
-                }
-            }
+        HighLowRegister {
+            name: "Y";
+            value: data.y;
+            low: data.yl;
+            high: data.yh;
+        }
 
-            Row {
-                Text {
-                    text: "X";
-                }
+        Register {
+            name: "SP";
+            value: data.sp;
+        }
 
-                Text {
-                    text: data.x;
-                }
-            }
+        Register {
+            name: "DBR";
+            value: data.dbr;
+        }
 
-            Row {
-                Text {
-                    text: "Y";
-                }
+        HighLowRegister {
+            name: "D";
+            value: data.d;
+            low: data.dl;
+            high: data.dh;
+        }
 
-                Text {
-                    text: data.y;
-                }
+        Register {
+            name: "P";
+            value: data.p;
+        }
+
+        VerticalLayout {
+            padding-left: 5px;
+            for flag in [
+                { name: "P.n", value: data.p_n },
+                { name: "P.v", value: data.p_v },
+                { name: "P.m", value: data.p_m },
+                { name: "P.xb", value: data.p_xb },
+                { name: "P.d", value: data.p_d },
+                { name: "P.i", value: data.p_i },
+                { name: "P.z", value: data.p_z },
+                { name: "P.c", value: data.p_c },
+            ]: Register {
+                name: flag.name;
+                value: flag.value;
+                headerColor: Palette.secondaryHeader;
             }
         }
     }

@@ -30,24 +30,33 @@ fn h8(value: u8) -> SharedString {
 fn h16(value: u16) -> SharedString {
     format!("{:04X}", value).into()
 }
+/// Shorthand for converting a bool to a 1 or 0 shared string
+fn b(value: bool) -> SharedString {
+    format!("{}", u8::from(value)).into()
+}
 impl Into<CpuData> for Processor {
     fn into(self) -> CpuData {
         let Processor {
             a,
-            b,
+            b: b_reg,
             xl,
             xh,
             yl,
             yh,
             pbr,
             pc,
+            dbr,
+            dl,
+            dh,
+            s,
+            p,
             ..
         } = self;
         CpuData {
             pbr: h8(pbr),
             pc: h16(pc),
             a: h8(a),
-            b: h8(b),
+            b: h8(b_reg),
             c: h16(self.c()),
             x: h16(self.x()),
             xl: h8(xl),
@@ -55,6 +64,21 @@ impl Into<CpuData> for Processor {
             y: h16(self.y()),
             yl: h8(yl),
             yh: h8(yh),
+            sp: h16(s),
+            dbr: h8(dbr),
+            d: h16(self.dr()),
+            dl: h8(dl),
+            dh: h8(dh),
+            p: h8(p.to_byte(true)),
+            p_z: b(p.z),
+            p_v: b(p.v),
+            p_n: b(p.n),
+            p_c: b(p.c),
+            p_d: b(p.d),
+            p_i: b(p.i),
+            p_m: b(p.m),
+            p_e: b(p.e),
+            p_xb: b(p.xb),
         }
     }
 }

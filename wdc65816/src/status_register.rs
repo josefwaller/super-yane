@@ -66,7 +66,6 @@ impl StatusRegister {
             z: bit!(1),
             i: bit!(2),
             d: bit!(3),
-            // The M and X flags are forced to 1 if E is 1
             xb: bit!(4),
             m: bit!(5),
             v: bit!(6),
@@ -88,6 +87,7 @@ impl StatusRegister {
         set_bit!(1, self.z);
         set_bit!(2, self.i);
         set_bit!(3, self.d);
+        // The M and X flags are forced to 1 if E is 1
         set_bit!(4, self.xb || (force_bytes && self.e));
         set_bit!(5, self.m || (force_bytes && self.e));
         set_bit!(6, self.v);
