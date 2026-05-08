@@ -12,13 +12,13 @@ use std::{
     thread::{self},
     time::{Duration, Instant},
 };
-use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, ppu::SCREEN_RESOLUTION};
+use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREEN_RESOLUTION};
 use wdc65816::Processor;
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
 
 use crate::{
-    ConsoleData, CpuData, Settings, apu_snapshot::ApuSnapshot, audio::Audio,
+    ConsoleData, CpuData, PpuData, Settings, apu_snapshot::ApuSnapshot, audio::Audio,
     cpu_snapshot::CpuSnapshot, disassembler::Disassembler, profiler::Profiler,
 };
 
@@ -27,8 +27,8 @@ fn h8(value: u8) -> SharedString {
     format!("{:02X}", value).into()
 }
 /// Shorthand for converting a u16 into a 4-digit hex number
-fn h16(value: u16) -> SharedString {
-    format!("{:04X}", value).into()
+fn h16(value: impl Into<u16>) -> SharedString {
+    format!("{:04X}", value.into()).into()
 }
 /// Shorthand for converting a bool to a 1 or 0 shared string
 fn b(value: bool) -> SharedString {
@@ -83,10 +83,41 @@ impl Into<CpuData> for Processor {
     }
 }
 
+impl Into<PpuData> for &Ppu {
+    fn into(self) -> PpuData {
+        let Ppu {
+            vblank,
+            forced_blanking,
+            brightness,
+            bg_mode,
+            bg3_prio,
+            mosaic_size,
+            vram_addr,
+            vram_increment_mode,
+            vram_increment_amount,
+            cgram_addr,
+            ..
+        } = *self;
+        PpuData {
+            vblank: b(vblank),
+            forced_blanking: b(forced_blanking),
+            brightness: h8(brightness),
+            bg_mode: h8(bg_mode as u8),
+            bg3_prio: b(bg3_prio),
+            mosaic_size: h8(mosaic_size as u8),
+            vram_addr: h16(vram_addr as u16),
+            vram_inc_mode: vram_increment_mode.to_string().into(),
+            vram_inc_amt: h16(vram_increment_amount as u16),
+            cgram_addr: h16(cgram_addr as u16),
+        }
+    }
+}
+
 impl Into<ConsoleData> for &Console {
     fn into(self) -> ConsoleData {
         ConsoleData {
             cpu: (*self.cpu()).into(),
+            ppu: self.ppu().into(),
         }
     }
 }

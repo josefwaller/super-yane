@@ -50,6 +50,19 @@ pub enum VramIncMode {
     LowReadHighWrite = 1,
 }
 
+impl std::fmt::Display for VramIncMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::HighReadLowWrite => "High Read/Low Write",
+                Self::LowReadHighWrite => "Low Read/High Write",
+            }
+        )
+    }
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum Mode7Fill {
@@ -98,7 +111,7 @@ pub struct Ppu {
     pub forced_blanking: bool,
     /// Brightness value
     #[new(value = "0xF")]
-    pub brightness: u32,
+    pub brightness: u8,
     /// The current background mode
     #[new(value = "0")]
     pub bg_mode: u32,
@@ -421,7 +434,7 @@ impl Ppu {
         match addr {
             0x2100 => {
                 self.forced_blanking = bit(value, 7);
-                self.brightness = (value & 0x0F) as u32;
+                self.brightness = value & 0x0F;
             }
             0x2101 => {
                 self.oam_name_addr = (value as usize & 0x03) << 13;
@@ -1481,6 +1494,6 @@ impl Ppu {
         rgb_to_color(self.fixed_color)
     }
     pub fn screen_data_rgb(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i], self.brightness as u8))
+        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i], self.brightness))
     }
 }

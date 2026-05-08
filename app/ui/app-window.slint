@@ -14,6 +14,7 @@ import { StandardController } from "structs/standard_controller.slint";
 import { ConsoleData } from "structs/console_data.slint";
 import { CpuDisplay } from "components/cpu_display.slint";
 import "fonts/KodeMono-VariableFont_wght.ttf";
+import { PpuDisplay } from "components/ppu_display.slint";
 
 
 export component AppWindow inherits Window {
@@ -78,6 +79,12 @@ export component AppWindow inherits Window {
 
                 Tab {
                     title: "PPU";
+                    PpuDisplay {
+                        width: 100%;
+                        height: 100%;
+                        horizontal-stretch: 0;
+                        data: console_data.ppu;
+                    }
                 }
 
                 Tab {

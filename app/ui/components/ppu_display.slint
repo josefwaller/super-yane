@@ -1,0 +1,64 @@
+import { PpuData } from "../structs/console_data.slint";
+import { Register } from "register.slint";
+
+export component PpuDisplay {
+    in property <PpuData> data;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 5px;
+        padding: 10px;
+        vertical-stretch: 0;
+
+        Register {
+            name: "VBlank Flag";
+            value: data.vblank;
+        }
+
+        Register {
+            name: "Forced Blanking";
+            value: data.forced_blanking;
+        }
+
+        Register {
+            name: "Brightness";
+            value: data.brightness;
+        }
+
+        Register {
+            name: "BG Mode";
+            value: data.bg-mode;
+        }
+
+        Register {
+            name: "BG3 Priority";
+            value: data.bg3-prio;
+        }
+
+        Register {
+            name: "Mosaic Size";
+            value: data.mosaic-size;
+        }
+
+        Register {
+            name: "VRAM Increment Mode";
+            value: data.vram-inc-mode;
+        }
+
+        Register {
+
+            name: "VRAM Increment Amount";
+            value: data.vram-inc-amt;
+        }
+
+        Register {
+            name: "VRAM Address";
+            value: data.vram-addr;
+        }
+
+        Register {
+            name: "CGRAM Address";
+            value: data.cgram-addr;
+        }
+    }
+}
