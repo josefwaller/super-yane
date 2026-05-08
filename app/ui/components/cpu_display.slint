@@ -1,6 +1,6 @@
 import { CpuData } from "../structs/console_data.slint";
 import { VerticalBox, StandardTableView, Button } from "std-widgets.slint";
-import { Palette } from "../structs/palette.slint";
+import { Palette } from "../palette.slint";
 import { Register } from "./register.slint";
 import { HighLowRegister } from "./high_low_register.slint";
 
@@ -64,10 +64,6 @@ export component CpuDisplay {
         Register {
             name: "P";
             value: data.p;
-        }
-
-        VerticalLayout {
-            padding-left: 5px;
             for flag in [
                 { name: "P.n", value: data.p_n },
                 { name: "P.v", value: data.p_v },
