@@ -1,0 +1,21 @@
+import { Palette } from "../structs/palette.slint";
+
+// Component to show a register value in a row
+export component Register {
+    in property <string> name;
+    in property <string> value;
+    in property <color> headerColor: Palette.primaryHeader;
+    HorizontalLayout {
+        alignment: space-between;
+        spacing: 20px;
+        Text {
+            text: name;
+            font-weight: 900;
+            color: headerColor;
+        }
+
+        Text {
+            text: value;
+        }
+    }
+}

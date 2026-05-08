@@ -29,5 +29,20 @@ export struct CpuData {
     p_e: string,
     p_xb: string
 }
+export struct PpuData {
+    vblank: string,
+    forced_blanking: string,
+    brightness: string,
+    bg_mode: string,
+    bg3_prio: string,
+    mosaic_size: string,
+    vram_inc_mode: string,
+    vram_inc_amt: string,
+    vram_addr: string,
+    cgram_addr: string,
+}
 // Data from the console
-export struct ConsoleData {cpu: CpuData}
+export struct ConsoleData {
+    cpu: CpuData,
+    ppu: PpuData,
+}

@@ -1,0 +1,31 @@
+import { Register } from "./register.slint";
+import { Palette } from "../structs/palette.slint";
+
+export component HighLowRegister {
+    in property <string> name;
+    in property <string> value;
+    in property <string> low;
+    in property <string> high;
+    property <bool> is_open;
+    VerticalLayout {
+        Register {
+            name: name;
+            value: value;
+        }
+
+        VerticalLayout {
+            padding-left: 5px;
+            Register {
+                name: name + "l";
+                value: low;
+                headerColor: Palette.secondaryHeader;
+            }
+
+            Register {
+                name: name + "h";
+                value: high;
+                headerColor: Palette.secondaryHeader;
+            }
+        }
+    }
+}
