@@ -17,6 +17,7 @@ import "fonts/KodeMono-VariableFont_wght.ttf";
 import { PpuDisplay } from "components/ppu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
+import { Controls } from "components/controls.slint";
 
 
 export component AppWindow inherits Window {
@@ -26,6 +27,9 @@ export component AppWindow inherits Window {
     in property <ConsoleData> console_data;
     // The lines to display
     in property <[DisassemblyLine]> disassembly_lines;
+
+    callback advance_instructions(int);
+    callback advance_frames(int);
 
     // The settings
     out property <Settings> settings;
@@ -106,15 +110,13 @@ export component AppWindow inherits Window {
                     height: 600px;
                 }
 
-                HorizontalBox {
-                    padding: 5px;
-                    Slider {
-                        value <=> settings.volume;
+                Controls {
+                    settings <=> settings;
+                    advance_frame => {
+                        advance_frames(1);
                     }
-
-                    CheckBox {
-                        text: "Pause";
-                        checked <=> settings.is-paused;
+                    advance_instruction => {
+                        advance_instructions(1);
                     }
                 }
             }

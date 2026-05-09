@@ -23,7 +23,7 @@ mod engine;
 // mod widgets;
 // use program::Program;
 
-use crate::engine::{Command, Engine};
+use crate::engine::{AdvanceAmount, Command, Engine};
 use super_yane::{Console, InputPort};
 mod disassembler;
 mod profiler;
@@ -129,6 +129,14 @@ fn main() {
     // Update settings
     ui.on_settings_changed(closure!(clone settings, |s| {
         *settings.lock().unwrap() = s;
+    }));
+    // Advance instructions
+    ui.on_advance_instructions(closure!(clone engine, |n| {
+        engine.borrow_mut().update(Command::Advance(AdvanceAmount::Instructions(n as u32)));
+    }));
+    // Advance frames
+    ui.on_advance_frames(closure!(clone engine, |n| {
+        engine.borrow_mut().update(Command::Advance(AdvanceAmount::Frames(n as u32)));
     }));
     ui.window()
         .set_rendering_notifier(

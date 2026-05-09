@@ -171,40 +171,40 @@ impl Engine {
                                         MasterCycles(n) => {
                                             let goal_cycles = c.total_master_clocks() + n as u64;
                                             while *c.total_master_clocks() < goal_cycles {
-                                                // advance!();
+                                                advance!();
                                             }
                                         }
                                         Scanlines(n) => (0..n).for_each(|_| {
                                             let mut hblank = c.ppu().is_in_hblank();
                                             while !(hblank && !c.ppu().is_in_hblank()) {
                                                 hblank = c.ppu().is_in_hblank();
-                                                // advance!();
+                                                advance!();
                                             }
                                         }),
                                         Instructions(instructions) => {
                                             (0..instructions).for_each(|_| {
-                                                // advance!();
+                                                advance!();
                                             });
                                         }
                                         Frames(n) => (0..n).for_each(|_| {
                                             let mut v = c.ppu().is_in_vblank();
                                             while !(!v && c.ppu().is_in_vblank()) {
                                                 v = c.ppu().is_in_vblank();
-                                                // advance!();
+                                                advance!();
                                             }
                                         }),
                                         StartVBlank => {
                                             let mut vblank = c.ppu().is_in_vblank();
                                             while !(!vblank && c.ppu().is_in_vblank()) {
                                                 vblank = c.ppu().is_in_vblank();
-                                                // advance!();
+                                                advance!();
                                             }
                                         }
                                         EndVBlank => {
                                             let mut vblank = c.ppu().is_in_vblank();
                                             while !(vblank && !c.ppu().is_in_vblank()) {
                                                 vblank = c.ppu().is_in_vblank();
-                                                // advance!();
+                                                advance!();
                                             }
                                         }
                                     }

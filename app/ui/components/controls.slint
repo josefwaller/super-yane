@@ -1,0 +1,31 @@
+import { Button, Slider } from "std-widgets.slint";
+import { Settings } from "../structs/settings.slint";
+
+export component Controls {
+    in-out property <Settings> settings;
+    callback advance_instruction;
+    callback advance_frame;
+    HorizontalLayout {
+        spacing: 5px;
+        Button {
+            text: settings.is-paused ? "Play" : "Pause";
+            clicked => {
+                settings.is-paused = !settings.is-paused
+            }
+        }
+
+        Button {
+            text: "1 INST";
+            clicked => advance_instruction();
+        }
+
+        Button {
+            text: "1 FRAME";
+            clicked => advance_frame();
+        }
+
+        Slider {
+            value <=> settings.volume;
+        }
+    }
+}
