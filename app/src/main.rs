@@ -9,7 +9,7 @@ use std::{
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, RenderingState, SharedPixelBuffer};
+use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 
 mod apu_snapshot;
 mod audio;
@@ -142,11 +142,16 @@ fn main() {
             closure!(clone ui_ptr, clone engine, |state, _graphics| match state {
                 RenderingState::AfterRendering => {
                     let ui = ui_ptr.unwrap();
-                    engine.borrow_mut().on_frame();
-                    let screen_data = &engine.borrow().prev_frame_data;
+                    let mut e = engine.borrow_mut();
+                    e.on_frame();
+                    let screen_data = e.prev_frame_data;
                     let buf = SharedPixelBuffer::clone_from_slice(screen_data.as_flattened(), 256, 224);
                     ui.set_pixel_data(Image::from_rgb8(buf));
                     ui.set_console_data(data.lock().unwrap().clone());
+                    let pc = console.lock().unwrap().pc();
+                    ui.set_disassembly_lines(ModelRc::new(VecModel::from(e.disassembly_lines(
+                        console.lock().unwrap().cartridge().transform_address(pc)
+                    ))));
                 }
                 _ => {}
             }),

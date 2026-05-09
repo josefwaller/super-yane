@@ -86,8 +86,13 @@ impl Disassembler {
             }
         }
     }
-    pub fn new(console: &Console) -> Disassembler {
-        let instructions = BTreeMap::new();
+    pub fn new() -> Disassembler {
+        Disassembler {
+            instructions: BTreeMap::new(),
+            labels: BTreeMap::new(),
+        }
+    }
+    pub fn add_native_vectors(&mut self, console: &Console) {
         macro_rules! vector {
             ($addr: expr) => {
                 console
@@ -97,7 +102,7 @@ impl Disassembler {
                     })) as usize)
             };
         }
-        let labels = BTreeMap::from_iter(
+        self.labels.append(&mut BTreeMap::from_iter(
             [
                 (vector!(0x00FFFC), Label::Reset),
                 (vector!(0x00FFFE), Label::IrqEmu),
@@ -107,11 +112,7 @@ impl Disassembler {
             ]
             .into_iter()
             .unique_by(|(addr, _)| *addr),
-        );
-        Disassembler {
-            instructions,
-            labels,
-        }
+        ));
     }
     // Merge all of the values of the other disassembler into this one.
     // This will remove all of the values out of other
@@ -122,10 +123,6 @@ impl Disassembler {
 
     pub fn instructions(&self) -> &BTreeMap<usize, Instruction> {
         &self.instructions
-    }
-
-    pub fn labels(&self) -> &BTreeMap<usize, Label> {
-        &self.labels
     }
 
     /// Iterator over the lines in the disassembly so far

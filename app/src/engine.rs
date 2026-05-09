@@ -1,8 +1,10 @@
+use crate::DisassemblyLine;
+use closure::closure;
 use derive_new::new;
 use log::*;
 use slint::SharedString;
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     fmt::Display,
     ops::Deref,
     sync::{
@@ -192,7 +194,7 @@ pub struct StreamPayload {
 /// The underlying engine of the emulator application
 /// Runs the application on a separate thread and sends data back and forth
 pub struct Engine {
-    pub disassembler: Disassembler,
+    pub disassembler: Arc<Mutex<Disassembler>>,
     pub profiler: Profiler,
     sender: Sender<UpdateEmuPayload>,
     stream_receiver: Receiver<StreamPayload>,
@@ -211,137 +213,147 @@ impl Engine {
         let (stream_sender, stream_receiver) = mpsc::channel::<StreamPayload>();
         // Initialize audio
         let mut audio = Audio::new();
+        // Initialize disassembler
+        let disassembler = Arc::new(Mutex::new(Disassembler::new()));
+        disassembler
+            .lock()
+            .unwrap()
+            .add_native_vectors(console.lock().unwrap().deref());
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(move || {
+            .spawn(closure!(clone disassembler, || {
                 use Command::*;
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
                 loop {
-                    // let mut disassembler = Disassembler::new(&console);
                     // let mut profiler = Profiler::new();
-                    let mut c = console.lock().unwrap();
-                    /// Advance by 1 instruction
-                    macro_rules! advance {
-                        () => {
-                            let vblank = c.ppu().is_in_vblank();
-                            let before_master_cycles = *c.total_master_clocks();
-                            c.step_cpu();
-                            // if payload.settings.log_cpu {
-                            //     let inst = CpuSnapshot::from(&console);
-                            //     info!("{}", inst);
-                            // }
-                            while c.apu_is_behind() {
-                                c.step_apu();
-                                // if payload.settings.log_apu {
-                                //     let inst = ApuSnapshot::from(&console);
+                    let mut d = Disassembler::new();
+                    // New scope so that c lives as short as possible
+                    {
+                        // Get a lock on the console
+                        let mut c = console.lock().unwrap();
+                        /// Advance by 1 instruction
+                        macro_rules! advance {
+                            () => {
+                                let vblank = c.ppu().is_in_vblank();
+                                let before_master_cycles = *c.total_master_clocks();
+                                c.step_cpu();
+                                // if payload.settings.log_cpu {
+                                //     let inst = CpuSnapshot::from(&console);
                                 //     info!("{}", inst);
                                 // }
-                            }
-                            // disassembler.add_current_instruction(&console);
-                            // profiler.add_current_state(&console, before_master_cycles);
+                                while c.apu_is_behind() {
+                                    c.step_apu();
+                                    // if payload.settings.log_apu {
+                                    //     let inst = ApuSnapshot::from(&console);
+                                    //     info!("{}", inst);
+                                    // }
+                                }
+                                d.add_current_instruction(&c);
+                                // profiler.add_current_state(&console, before_master_cycles);
 
-                            if vblank && !c.ppu().is_in_vblank() {
-                                stream_sender
-                                    .send(StreamPayload::new(c.ppu().screen_data_rgb()))
-                                    .expect("Unable to send frame data");
-                            }
-                        };
-                    }
-                    let p = receiver.try_recv();
-                    match p {
-                        Ok(payload) => match payload.command {
-                            Advance(a) => {
-                                use AdvanceAmount::*;
-                                match a {
-                                    MasterCycles(n) => {
-                                        let goal_cycles = c.total_master_clocks() + n as u64;
-                                        while *c.total_master_clocks() < goal_cycles {
-                                            // advance!();
+                                if vblank && !c.ppu().is_in_vblank() {
+                                    stream_sender
+                                        .send(StreamPayload::new(c.ppu().screen_data_rgb()))
+                                        .expect("Unable to send frame data");
+                                }
+                            };
+                        }
+                        let p = receiver.try_recv();
+                        match p {
+                            Ok(payload) => match payload.command {
+                                Advance(a) => {
+                                    use AdvanceAmount::*;
+                                    match a {
+                                        MasterCycles(n) => {
+                                            let goal_cycles = c.total_master_clocks() + n as u64;
+                                            while *c.total_master_clocks() < goal_cycles {
+                                                // advance!();
+                                            }
                                         }
-                                    }
-                                    Scanlines(n) => (0..n).for_each(|_| {
-                                        let mut hblank = c.ppu().is_in_hblank();
-                                        while !(hblank && !c.ppu().is_in_hblank()) {
-                                            hblank = c.ppu().is_in_hblank();
-                                            // advance!();
+                                        Scanlines(n) => (0..n).for_each(|_| {
+                                            let mut hblank = c.ppu().is_in_hblank();
+                                            while !(hblank && !c.ppu().is_in_hblank()) {
+                                                hblank = c.ppu().is_in_hblank();
+                                                // advance!();
+                                            }
+                                        }),
+                                        Instructions(instructions) => {
+                                            (0..instructions).for_each(|_| {
+                                                // advance!();
+                                            });
                                         }
-                                    }),
-                                    Instructions(instructions) => {
-                                        (0..instructions).for_each(|_| {
-                                            // advance!();
-                                        });
-                                    }
-                                    Frames(n) => (0..n).for_each(|_| {
-                                        let mut v = c.ppu().is_in_vblank();
-                                        while !(!v && c.ppu().is_in_vblank()) {
-                                            v = c.ppu().is_in_vblank();
-                                            // advance!();
+                                        Frames(n) => (0..n).for_each(|_| {
+                                            let mut v = c.ppu().is_in_vblank();
+                                            while !(!v && c.ppu().is_in_vblank()) {
+                                                v = c.ppu().is_in_vblank();
+                                                // advance!();
+                                            }
+                                        }),
+                                        StartVBlank => {
+                                            let mut vblank = c.ppu().is_in_vblank();
+                                            while !(!vblank && c.ppu().is_in_vblank()) {
+                                                vblank = c.ppu().is_in_vblank();
+                                                // advance!();
+                                            }
                                         }
-                                    }),
-                                    StartVBlank => {
-                                        let mut vblank = c.ppu().is_in_vblank();
-                                        while !(!vblank && c.ppu().is_in_vblank()) {
-                                            vblank = c.ppu().is_in_vblank();
-                                            // advance!();
-                                        }
-                                    }
-                                    EndVBlank => {
-                                        let mut vblank = c.ppu().is_in_vblank();
-                                        while !(vblank && !c.ppu().is_in_vblank()) {
-                                            vblank = c.ppu().is_in_vblank();
-                                            // advance!();
+                                        EndVBlank => {
+                                            let mut vblank = c.ppu().is_in_vblank();
+                                            while !(vblank && !c.ppu().is_in_vblank()) {
+                                                vblank = c.ppu().is_in_vblank();
+                                                // advance!();
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            UpdateInputPorts(input_ports) => {
-                                *c.input_ports_mut() = input_ports;
-                            }
-                            LoadRom(bytes) => {
-                                *c = Console::with_cartridge(&bytes);
-                                // disassembler.add_current_instruction(&console);
-                            }
-                            LoadSavestate(state) => {
-                                *c = state;
-                            }
-                            Reset => {
-                                c.reset();
-                            }
-                        },
-                        Err(_) => {}
-                    }
-                    // Calculate delta time
-                    let now = Instant::now();
-                    let dt = now - last_time;
-                    last_time = now;
-                    // Clone settings
-                    let s = settings.lock().unwrap().clone();
-                    // Advance emulator
-                    if !s.is_paused {
-                        let initial_master_cycles = c.total_master_clocks().clone();
-                        while ((c.total_master_clocks() - initial_master_cycles) as f64)
-                            < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
-                        {
-                            advance!();
+                                UpdateInputPorts(input_ports) => {
+                                    *c.input_ports_mut() = input_ports;
+                                }
+                                LoadRom(bytes) => {
+                                    *c = Console::with_cartridge(&bytes);
+                                    // disassembler.add_current_instruction(&console);
+                                }
+                                LoadSavestate(state) => {
+                                    *c = state;
+                                }
+                                Reset => {
+                                    c.reset();
+                                }
+                            },
+                            Err(_) => {}
                         }
-                        // Update audio
-                        let samples = c.apu_mut().sample_queue();
-                        let (a, b) = samples.as_slices();
-                        audio.push_samples(a, s.volume);
-                        audio.push_samples(b, s.volume);
+                        // Calculate delta time
+                        let now = Instant::now();
+                        let dt = now - last_time;
+                        last_time = now;
+                        // Clone settings
+                        let s = settings.lock().unwrap().clone();
+                        // Advance emulator
+                        if !s.is_paused {
+                            let initial_master_cycles = c.total_master_clocks().clone();
+                            while ((c.total_master_clocks() - initial_master_cycles) as f64)
+                                < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
+                            {
+                                advance!();
+                            }
+                            // Update audio
+                            let samples = c.apu_mut().sample_queue();
+                            let (a, b) = samples.as_slices();
+                            audio.push_samples(a, s.volume);
+                            audio.push_samples(b, s.volume);
+                        }
+                        // Copy console data
+                        *data.lock().unwrap() = c.deref().into();
                     }
-                    // Copy data
-                    *data.lock().unwrap() = c.deref().into();
+                    // Merge disassembler
+                    disassembler.lock().unwrap().consume(&mut d);
                     // Sleep
                     thread::sleep(SLEEP_TIME);
                 }
-            })
+            }))
             .expect("Unable to spawn thread");
 
-        let console = Console::with_cartridge(include_bytes!("../roms/HelloWorld.sfc"));
-        let disassembler = Disassembler::new(&console);
         Engine {
             sender,
             stream_receiver,
@@ -367,8 +379,6 @@ impl Engine {
                 AdvanceSettings::default(),
             ))
             .expect("Unable to send data to thread");
-        // Todo: Tidy this up
-        self.disassembler = Disassembler::new(&Console::with_cartridge(bytes));
     }
     pub fn load_savestate(&mut self, bytes: &[u8]) {
         let mut console: Console = serde_brief::from_slice(bytes).unwrap();
@@ -398,5 +408,23 @@ impl Engine {
             }
             Err(_) => {}
         }
+    }
+
+    pub fn disassembly_lines(&self, pc: usize) -> Vec<DisassemblyLine> {
+        self.disassembler
+            .lock()
+            .unwrap()
+            .instructions()
+            .iter()
+            .filter(|(i, _)| **i > pc)
+            .take(32)
+            .map(|(_, inst)| {
+                let d = inst.data();
+                DisassemblyLine {
+                    instruction: d.name.into(),
+                    arguments: inst.operands(&BTreeMap::new()).into(),
+                }
+            })
+            .collect()
     }
 }

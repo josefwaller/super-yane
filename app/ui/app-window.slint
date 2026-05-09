@@ -15,6 +15,8 @@ import { ConsoleData } from "structs/console_data.slint";
 import { CpuDisplay } from "components/cpu_display.slint";
 import "fonts/KodeMono-VariableFont_wght.ttf";
 import { PpuDisplay } from "components/ppu_display.slint";
+import { Disassembly } from "components/disassembly.slint";
+import { DisassemblyLine } from "structs/disassembly_line.slint";
 
 
 export component AppWindow inherits Window {
@@ -22,6 +24,8 @@ export component AppWindow inherits Window {
     in property <image> pixel_data;
     // The console data from the emulator
     in property <ConsoleData> console_data;
+    // The lines to display
+    in property <[DisassemblyLine]> disassembly_lines;
 
     // The settings
     out property <Settings> settings;
@@ -112,6 +116,20 @@ export component AppWindow inherits Window {
                         text: "Pause";
                         checked <=> settings.is-paused;
                     }
+                }
+            }
+
+            TabWidget {
+                height: 100%;
+                Tab {
+                    title: "CPU";
+                    Disassembly {
+                        lines: disassembly_lines;
+                    }
+                }
+
+                Tab {
+                    title: "APU";
                 }
             }
         }

@@ -1,0 +1,28 @@
+import { DisassemblyLine } from "../structs/disassembly_line.slint";
+import { Palette } from "../palette.slint";
+
+// Show the disassembly information
+export component Disassembly {
+    in property <[DisassemblyLine]> lines;
+
+    height: 100%;
+
+    VerticalLayout {
+        padding: 5px;
+        alignment: start;
+        for line[i] in lines: HorizontalLayout {
+            alignment: start;
+            width: 150px;
+            spacing: 10px;
+
+            Text {
+                text: line.instruction;
+                color: Palette.primaryHeader;
+            }
+
+            Text {
+                text: line.arguments;
+            }
+        }
+    }
+}

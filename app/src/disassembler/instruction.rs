@@ -24,9 +24,13 @@ impl Instruction {
         }
     }
     pub fn to_string(&self, labels: &BTreeMap<usize, Label>) -> String {
-        let data = opcode_data(self.opcode, self.a, self.xy);
-        let operands = self
-            .get_jump_addr(self.pc)
+        let data = self.data();
+        let operands = self.operands(labels);
+        format!("{} {}", data.name, operands)
+    }
+    pub fn operands(&self, labels: &BTreeMap<usize, Label>) -> String {
+        let data = self.data();
+        self.get_jump_addr(self.pc)
             .map(|addr| {
                 labels
                     .get(&(MemoryMap::LoRom.transform_address(addr)))
@@ -37,13 +41,12 @@ impl Instruction {
                 data.addr_mode,
                 &self.operands,
                 data.bytes,
-            ));
-        format!("{} {}", data.name, operands)
+            ))
     }
     pub fn data(&self) -> OpcodeData {
         opcode_data(self.opcode, self.a, self.xy)
     }
-    pub fn operands(&self) -> &[u8] {
+    pub fn operand_bytes(&self) -> &[u8] {
         &self.operands[0..(self.data().bytes as usize)]
     }
     /// Get the address this instruction will jump to (given the PC), or None
@@ -52,10 +55,10 @@ impl Instruction {
         // Relative address
         if [BCC, BCS, BNE, BEQ, BPL, BMI, BVC, BVS, BRA, BRL].contains(&self.opcode) {
             // Add a label (+2 to account for the PC incrementing during execution)
-            Some((pc as isize + i8::from_le_bytes([self.operands()[0]]) as isize) as usize + 2)
+            Some((pc as isize + i8::from_le_bytes([self.operand_bytes()[0]]) as isize) as usize + 2)
         // Absolute address
         } else if [JMP_A, JSR_A].contains(&self.opcode) {
-            Some(u16::from_le_bytes(core::array::from_fn(|i| self.operands()[i])) as usize)
+            Some(u16::from_le_bytes(core::array::from_fn(|i| self.operand_bytes()[i])) as usize)
         } else if [JMP_AL, JSL].contains(&self.opcode) {
             Some(u32::from_le_bytes(core::array::from_fn(|i| {
                 if i < self.operands.len() {
