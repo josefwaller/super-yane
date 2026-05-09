@@ -14,6 +14,7 @@ use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 mod apu_snapshot;
 mod audio;
 mod cpu_snapshot;
+mod utils;
 // mod emu_state;
 // mod program;
 // #[macro_use]
