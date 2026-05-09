@@ -29,8 +29,6 @@ mod disassembler;
 mod profiler;
 mod table;
 
-const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
-
 slint::include_modules!();
 
 impl Into<InputPort> for StandardController {
@@ -100,16 +98,10 @@ fn main() {
     let ui_ptr = ui.as_weak();
     // Load settings
     let settings = Arc::new(Mutex::new(load_settings()));
-    // Create console
-    let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
     // Create console data struct
     let data = Arc::new(Mutex::new(ConsoleData::default()));
     // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new(
-        console.clone(),
-        settings.clone(),
-        data.clone(),
-    )));
+    let engine = Rc::new(RefCell::new(Engine::new(settings.clone(), data.clone())));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
@@ -143,15 +135,15 @@ fn main() {
             closure!(clone ui_ptr, clone engine, |state, _graphics| match state {
                 RenderingState::AfterRendering => {
                     let ui = ui_ptr.unwrap();
-                    let mut e = engine.borrow_mut();
-                    e.on_frame();
-                    let screen_data = e.prev_frame_data;
-                    let buf = SharedPixelBuffer::clone_from_slice(screen_data.as_flattened(), 256, 224);
+                    engine.borrow_mut().on_frame();
+                    let e = engine.borrow();
+                    let c = e.console();
+                    let buf = SharedPixelBuffer::clone_from_slice(e.prev_frame_data.as_flattened(), 256, 224);
                     ui.set_pixel_data(Image::from_rgb8(buf));
                     ui.set_console_data(data.lock().unwrap().clone());
-                    let pc = console.lock().unwrap().pc();
+                    let pc = c.pc();
                     ui.set_disassembly_lines(ModelRc::new(VecModel::from(e.disassembly_lines(
-                        console.lock().unwrap().cartridge().transform_address(pc)
+                        c.cartridge().transform_address(pc)
                     ))));
                 }
                 _ => {}

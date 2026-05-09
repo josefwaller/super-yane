@@ -8,7 +8,7 @@ use std::{
     fmt::Display,
     ops::Deref,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard,
         mpsc::{self, Receiver, Sender},
     },
     thread::{self},
@@ -18,6 +18,8 @@ use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREE
 use wdc65816::Processor;
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
+
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::{
     ConsoleData, CpuData, PpuData, Settings, apu_snapshot::ApuSnapshot, audio::Audio,
@@ -94,6 +96,8 @@ pub struct StreamPayload {
 /// The underlying engine of the emulator application
 /// Runs the application on a separate thread and sends data back and forth
 pub struct Engine {
+    // The console that the engine is running
+    pub console: Arc<Mutex<Console>>,
     pub disassembler: Arc<Mutex<Disassembler>>,
     pub profiler: Profiler,
     sender: Sender<UpdateEmuPayload>,
@@ -102,11 +106,7 @@ pub struct Engine {
     pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
 }
 impl Engine {
-    pub fn new(
-        console: Arc<Mutex<Console>>,
-        settings: Arc<Mutex<Settings>>,
-        data: Arc<Mutex<ConsoleData>>,
-    ) -> Engine {
+    pub fn new(settings: Arc<Mutex<Settings>>, data: Arc<Mutex<ConsoleData>>) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
         // Send new frame data every time a new frame is generated
@@ -115,6 +115,8 @@ impl Engine {
         let mut audio = Audio::new();
         // Initialize disassembler
         let disassembler = Arc::new(Mutex::new(Disassembler::new()));
+        // Initialize console
+        let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
         disassembler
             .lock()
             .unwrap()
@@ -122,7 +124,7 @@ impl Engine {
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone disassembler, || {
+            .spawn(closure!(clone disassembler, clone console, || {
                 use Command::*;
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
@@ -258,9 +260,14 @@ impl Engine {
             sender,
             stream_receiver,
             disassembler,
+            console,
             profiler: Profiler::new(),
             prev_frame_data: [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
         }
+    }
+
+    pub fn console<'a>(&'a self) -> MutexGuard<'a, Console> {
+        self.console.lock().expect("Unable to get lock on console")
     }
 
     pub fn update(&mut self, command: Command) {
