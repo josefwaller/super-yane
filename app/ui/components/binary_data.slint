@@ -1,16 +1,34 @@
 import { ComboBox } from "std-widgets.slint";
+
+export enum BinaryDataSource {
+    Wram,
+    Vram,
+    Cgram,
+    Cartridge
+}
 /*
  * View Binary data in several formats
  */
 export component BinaryData {
     // The binary data to display
     in property <[[string]]> data;
+    in-out property <BinaryDataSource> source;
 
     VerticalLayout {
         HorizontalLayout {
             ComboBox {
-                model: ["WRAM", "VRAM", "CGRAM"];
-                current-value: "WRAM";
+                model: ["WRAM", "VRAM", "CGRAM", "Cartridge"];
+                selected(value) => {
+                    if (value == "WRAM") {
+                        source = BinaryDataSource.Wram
+                    } else if (value == "VRAM") {
+                        source = BinaryDataSource.Vram
+                    } else if (value == "CGRAM") {
+                        source = BinaryDataSource.Cgram
+                    } else if (value == "Cartridge") {
+                        source = BinaryDataSource.Cartridge
+                    }
+                }
             }
         }
 

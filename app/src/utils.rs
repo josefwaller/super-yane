@@ -86,7 +86,7 @@ fn h16(value: impl Into<u16>) -> SharedString {
 fn b(value: bool) -> SharedString {
     format!("{}", u8::from(value)).into()
 }
-impl Into<CpuData> for Processor {
+impl Into<CpuData> for &Processor {
     fn into(self) -> CpuData {
         let Processor {
             a,
@@ -103,7 +103,7 @@ impl Into<CpuData> for Processor {
             s,
             p,
             ..
-        } = self;
+        } = *self;
         CpuData {
             pbr: h8(pbr),
             pc: h16(pc),
@@ -161,20 +161,6 @@ impl Into<PpuData> for &Ppu {
             vram_inc_mode: vram_increment_mode.to_string().into(),
             vram_inc_amt: h16(vram_increment_amount as u16),
             cgram_addr: h16(cgram_addr as u16),
-        }
-    }
-}
-
-impl Into<ConsoleData> for &Console {
-    fn into(self) -> ConsoleData {
-        ConsoleData {
-            cpu: (*self.cpu()).into(),
-            ppu: self.ppu().into(),
-            binary_data: ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
-                ModelRc::from(Rc::from(VecModel::from_iter((0..32).map(|j| {
-                    SharedString::from(format!("{:02X}", self.ram()[8 * i + j]))
-                }))))
-            })))),
         }
     }
 }

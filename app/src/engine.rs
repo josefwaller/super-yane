@@ -1,12 +1,13 @@
-use crate::DisassemblyLine;
+use crate::{BinaryDataSource, DisassemblyLine};
 use closure::closure;
 use derive_new::new;
 use log::*;
-use slint::SharedString;
+use slint::{ModelRc, SharedString, VecModel};
 use std::{
     collections::{BTreeMap, VecDeque},
     fmt::Display,
-    ops::Deref,
+    ops::{Deref, DerefMut},
+    rc::Rc,
     sync::{
         Arc, Mutex, MutexGuard,
         mpsc::{self, Receiver, Sender},
@@ -98,6 +99,7 @@ pub struct StreamPayload {
 pub struct Engine {
     // The console that the engine is running
     pub console: Arc<Mutex<Console>>,
+    pub settings: Arc<Mutex<Settings>>,
     pub disassembler: Arc<Mutex<Disassembler>>,
     pub profiler: Profiler,
     sender: Sender<UpdateEmuPayload>,
@@ -106,7 +108,7 @@ pub struct Engine {
     pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
 }
 impl Engine {
-    pub fn new(settings: Arc<Mutex<Settings>>, data: Arc<Mutex<ConsoleData>>) -> Engine {
+    pub fn new() -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
         // Send new frame data every time a new frame is generated
@@ -117,6 +119,12 @@ impl Engine {
         let disassembler = Arc::new(Mutex::new(Disassembler::new()));
         // Initialize console
         let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
+        // Initialize settings
+        let settings = Arc::new(Mutex::new(Settings {
+            volume: 50.0,
+            is_paused: false,
+            binary_source: BinaryDataSource::Wram,
+        }));
         disassembler
             .lock()
             .unwrap()
@@ -124,7 +132,7 @@ impl Engine {
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone disassembler, clone console, || {
+            .spawn(closure!(clone disassembler, clone console, clone settings, || {
                 use Command::*;
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
@@ -256,8 +264,9 @@ impl Engine {
         Engine {
             sender,
             stream_receiver,
-            disassembler,
             console,
+            settings,
+            disassembler,
             profiler: Profiler::new(),
             prev_frame_data: [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
         }
@@ -267,8 +276,39 @@ impl Engine {
         self.console.lock().expect("Unable to get lock on console")
     }
     pub fn console_data(&self) -> ConsoleData {
+        let mut data = [[0u8; 32]; 8];
+        macro_rules! copy_data {
+            ($src: expr) => {{
+                let mut it = $src.skip(0);
+                (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap().clone()));
+            }};
+        }
         // Copy console data
-        self.console.lock().unwrap().deref().into()
+        let c = self.console();
+        match self.settings.lock().unwrap().binary_source {
+            BinaryDataSource::Wram => copy_data!(c.ram().iter()),
+            BinaryDataSource::Vram => copy_data!(c.ppu().vram.iter()),
+            BinaryDataSource::Cgram => copy_data!(
+                c.ppu()
+                    .cgram
+                    .iter()
+                    .map(|word| word.to_le_bytes())
+                    .flatten()
+            ),
+            BinaryDataSource::Cartridge => copy_data!(c.cartridge().data.iter()),
+        };
+        ConsoleData {
+            cpu: c.cpu().into(),
+            ppu: c.ppu().into(),
+            binary_data: ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
+                ModelRc::from(Rc::from(VecModel::from_iter(
+                    (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
+                )))
+            })))),
+        }
+    }
+    pub fn update_settings(&mut self, settings: Settings) {
+        *self.settings.lock().unwrap() = settings;
     }
 
     pub fn update(&mut self, command: Command) {

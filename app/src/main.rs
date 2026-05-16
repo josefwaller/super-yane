@@ -64,13 +64,6 @@ impl Into<InputPort> for StandardController {
     }
 }
 
-fn load_settings() -> Settings {
-    Settings {
-        is_paused: false,
-        volume: 50.0,
-    }
-}
-
 fn main() {
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -96,12 +89,8 @@ fn main() {
     // Initialize UI
     let ui = AppWindow::new().unwrap();
     let ui_ptr = ui.as_weak();
-    // Load settings
-    let settings = Arc::new(Mutex::new(load_settings()));
-    // Create console data struct
-    let data = Arc::new(Mutex::new(ConsoleData::default()));
     // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new(settings.clone(), data.clone())));
+    let engine = Rc::new(RefCell::new(Engine::new()));
     // Load ROM/savestate
     match env::args().nth(1) {
         Some(f) => match std::fs::read(&f) {
@@ -127,8 +116,8 @@ fn main() {
         engine.borrow_mut().update(Command::UpdateInputPorts(values));
     }));
     // Update settings
-    ui.on_settings_changed(closure!(clone settings, |s| {
-        *settings.lock().unwrap() = s;
+    ui.on_settings_changed(closure!(clone engine, |s| {
+        engine.borrow_mut().update_settings(s);
     }));
     // Advance instructions
     ui.on_advance_instructions(closure!(clone engine, |n| {
