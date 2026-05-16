@@ -54,28 +54,28 @@ export component BinaryData {
         }
 
         GridLayout {
+            padding: 10px;
             // Header row
             Row {
                 for header[j] in column_headers: Text {
-                    Text {
-                        text: header;
-                        color: header_color();
-                        font-weight: FontWeight.bold;
-                        horizontal-alignment: center;
-                    }
+                    text: header;
+                    color: header_color();
+                    font-weight: FontWeight.bold;
+                    horizontal-alignment: j == 0 ? left : right;
                 }
             }
 
             for row_data[i] in data: Row {
                 Text {
                     text: row_headers[i];
-                    font-weight: FontWeight.bold;
-                    horizontal-alignment: center;
+                    color: header_color();
+                    horizontal-alignment: left;
                 }
 
                 for byte[j] in row_data: Text {
                     text: byte;
-                    horizontal-alignment: center;
+                    font-weight: byte == "00" ? FontWeight.extra-light : FontWeight.normal;
+                    horizontal-alignment: right;
                 }
             }
         }
