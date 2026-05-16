@@ -364,7 +364,7 @@ impl Engine {
             .unwrap()
             .instructions()
             .iter()
-            .filter(|(i, _)| **i > pc)
+            .filter(|(i, _)| **i >= pc)
             .take(32)
             .map(|(_, inst)| {
                 let d = inst.data();
