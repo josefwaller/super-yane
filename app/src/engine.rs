@@ -1,4 +1,4 @@
-use crate::{BinaryDataSource, BinaryDataSourceType, DisassemblyLine};
+use crate::{AppWindow, BinaryDataSource, BinaryDataSourceType, DisassemblyLine};
 use closure::closure;
 use derive_new::new;
 use log::*;
@@ -283,34 +283,68 @@ impl Engine {
             ppu: c.ppu().into(),
         }
     }
-    pub fn binary_data(&self, source: BinaryDataSource) -> ModelRc<ModelRc<SharedString>> {
+    /// Update all the info for the binary data viewer.
+    /// Data, column headers, row headers, offset, etc.
+    pub fn refresh_binary_data(&self, ui: AppWindow) {
         let c = self.console();
+        let source = ui.get_binary_source();
+        use BinaryDataSourceType::*;
         // Copy some section of ram
         let mut data = [[0u8; 32]; 8];
+        const PAGE_SIZE: usize = 8 * 32;
         macro_rules! copy_data {
             ($src: expr) => {{
-                let mut it = $src.skip(0);
+                let mut it = $src.skip(PAGE_SIZE * source.page_offset as usize);
                 (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap().clone()));
             }};
         }
         // Map type -> data to show
         match source.ramType {
-            BinaryDataSourceType::Wram => copy_data!(c.ram().iter()),
-            BinaryDataSourceType::Vram => copy_data!(c.ppu().vram.iter()),
-            BinaryDataSourceType::Cgram => copy_data!(
+            Wram => copy_data!(c.ram().iter()),
+            Vram => copy_data!(c.ppu().vram.iter()),
+            Cgram => copy_data!(
                 c.ppu()
                     .cgram
                     .iter()
                     .map(|word| word.to_le_bytes())
                     .flatten()
             ),
-            BinaryDataSourceType::Cartridge => copy_data!(c.cartridge().data.iter()),
+            Cartridge => copy_data!(c.cartridge().data.iter()),
         };
-        ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
-            ModelRc::from(Rc::from(VecModel::from_iter(
-                (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
-            )))
-        }))))
+        // Copy data
+        ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(
+            |i| {
+                ModelRc::from(Rc::from(VecModel::from_iter(
+                    (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
+                )))
+            },
+        )))));
+        // Copy headers
+        let offset = match source.ramType {
+            Wram => 0x7E0000,
+            Vram => 0,
+            Cgram => 0,
+            Cartridge => 0,
+        };
+        ui.set_ram_column_headers(ModelRc::new(Rc::new(VecModel::from_iter(
+            [format!("{:06X}", offset).into()]
+                .into_iter()
+                .chain((0..32).map(|v| format!("+{:02X}", v).into())),
+        ))));
+        ui.set_ram_row_headers(ModelRc::new(Rc::new(VecModel::from_iter((0..8).map(
+            |v| format!("{:06X}", offset + 32 * 8 * source.page_offset + 32 * v).into(),
+        )))));
+        // Set number of pages
+        ui.set_ram_num_pages(
+            (match source.ramType {
+                Wram => c.ram().len(),
+                Vram => c.ppu().vram.len(),
+                Cgram => c.ppu().cgram.len() * 2,
+                Cartridge => c.cartridge().data.len(),
+            } as f32
+                / PAGE_SIZE as f32)
+                .ceil() as i32,
+        );
     }
     pub fn update_settings(&mut self, settings: Settings) {
         *self.settings.lock().unwrap() = settings;

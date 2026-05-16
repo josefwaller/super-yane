@@ -1,4 +1,4 @@
-import { ComboBox } from "std-widgets.slint";
+import { ComboBox, Button } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
 
 // Types of binary data sources
@@ -20,6 +20,8 @@ export component BinaryData {
     in property <[string]> column_headers;
     // The headers of the rows, excluding the top-left cell
     in property <[string]> row_headers;
+    // The number of pages to show
+    in property <int> num_pages;
     // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
     in-out property <BinaryDataSource> source;
 
@@ -35,8 +37,15 @@ export component BinaryData {
         }
         return Colors.white;
     }
+
+    function change_page(amount: int) {
+        source.page-offset = min(
+            max(0, source.page-offset + amount), num_pages - 1);
+    }
+
     VerticalLayout {
         HorizontalLayout {
+            alignment: start;
             ComboBox {
                 model: ["WRAM", "VRAM", "CGRAM", "Cartridge"];
                 selected(value) => {
@@ -49,7 +58,50 @@ export component BinaryData {
                     } else if (value == "Cartridge") {
                         source.ramType = BinaryDataSourceType.Cartridge
                     }
+                    source.page-offset = 0;
                 }
+            }
+
+            Button {
+                text: "-16";
+                clicked => {
+                    change_page(-16)
+                }
+                enabled: source.page-offset >= 16;
+            }
+
+            Button {
+                text: "-1";
+                clicked => {
+                    change_page(-1);
+                }
+                enabled: source.page-offset != 0;
+            }
+
+            // Required for padding
+            VerticalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                Text {
+                    text: "Page " + source.page-offset;
+                    vertical-alignment: center;
+                }
+            }
+
+            Button {
+                text: "+1";
+                clicked => {
+                    change_page(1)
+                }
+                enabled: source.page-offset != num_pages - 1;
+            }
+
+            Button {
+                text: "+16";
+                clicked => {
+                    change_page(16)
+                }
+                enabled: source.page-offset < num_pages - 16;
             }
         }
 

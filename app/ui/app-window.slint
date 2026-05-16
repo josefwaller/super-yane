@@ -33,6 +33,7 @@ export component AppWindow inherits Window {
     in property <[[string]]> binary_data;
     in property <[string]> ram_column_headers;
     in property <[string]> ram_row_headers;
+    in property <int> ram_num_pages;
 
     callback advance_instructions(int);
     callback advance_frames(int);
@@ -154,6 +155,7 @@ export component AppWindow inherits Window {
                     data <=> binary_data;
                     column_headers <=> ram_column_headers;
                     row_headers <=> ram_row_headers;
+                    num_pages <=> ram_num_pages;
                     source <=> binary_source;
                 }
             }

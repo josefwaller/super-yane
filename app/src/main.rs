@@ -145,23 +145,7 @@ fn main() {
                         ))));
                     }
                     // Set up RAM information
-                    let source = ui.get_binary_source();
-                    ui.set_binary_data(e.binary_data(source.clone()));
-                    use BinaryDataSourceType::*;
-                    let offset = match source.ramType {
-                        Wram => 0x7E0000,
-                        Vram => 0,
-                        Cgram => 0,
-                        Cartridge => 0
-                    };
-                    ui.set_ram_column_headers(ModelRc::new(Rc::new(VecModel::from_iter(
-                        [format!("{:06X}", offset).into()].into_iter().chain((0..32).map(|v| format!("+{:02X}", v).into()))
-                    ))));
-                    ui.set_ram_row_headers(ModelRc::new(Rc::new(VecModel::from_iter(
-                        (0..8).map(|v| format!("{:06X}", offset + 32 * v).into())
-                    )
-                    )));
-
+                    e.refresh_binary_data(ui);
                 }
                 _ => {}
             }),
