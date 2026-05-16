@@ -44,12 +44,9 @@ export component AppWindow inherits Window {
     changed controller => {
         controller_changed(controller)
     }
-
-    init => {
-        settings.volume = 50.0;
-    }
-
     forward-focus: scope;
+
+    title: "Super Y.A.N.E";
 
     default-font-family: "Kode Mono";
 
@@ -70,14 +67,17 @@ export component AppWindow inherits Window {
 
         VerticalLayout {
             height: 100%;
+            alignment: stretch;
             HorizontalLayout {
+                vertical-stretch: 1;
+                alignment: stretch;
                 TabWidget {
+                    horizontal-stretch: 0;
                     Tab {
                         title: "CPU";
                         CpuDisplay {
-                            width: 100%;
                             height: 100%;
-                            horizontal-stretch: 0;
+                            width: 100%;
                             data: console_data.cpu;
                         }
                     }
@@ -85,7 +85,8 @@ export component AppWindow inherits Window {
                     Tab {
                         title: "PPU";
                         PpuDisplay {
-                            // height: 100%;
+                            height: 100%;
+                            width: 100%;
                             data: console_data.ppu;
                         }
                     }
@@ -99,27 +100,36 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                VerticalLayout {
-                    Image {
-                        horizontal-stretch: 1;
-                        source: pixel_data;
-                        width: 400px;
-                        height: 300px;
-                    }
-
-                    Controls {
-                        settings <=> settings;
-                        advance_frame => {
-                            advance_frames(1);
+                Rectangle {
+                    background: black;
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            horizontal-stretch: 1;
+                            source: pixel_data;
+                            min-width: 600px;
                         }
-                        advance_instruction => {
-                            advance_instructions(1);
+
+                        Rectangle {
+                            horizontal-stretch: 0;
+                            background: #444;
+                            Controls {
+                                width: 100%;
+                                settings <=> settings;
+                                advance_frame => {
+                                    advance_frames(1);
+                                }
+                                advance_instruction => {
+                                    advance_instructions(1);
+                                }
+                            }
                         }
                     }
                 }
 
                 TabWidget {
-                    // height: 100%;
+                    horizontal-stretch: 0;
                     Tab {
                         title: "CPU";
                         Disassembly {
@@ -134,6 +144,7 @@ export component AppWindow inherits Window {
             }
 
             HorizontalLayout {
+                vertical-stretch: 0;
                 BinaryData {
                     data: console_data.binary_data;
                     source <=> settings.binary-source;

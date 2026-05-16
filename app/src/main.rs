@@ -9,7 +9,7 @@ use std::{
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
+use slint::{Image, LogicalSize, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 
 mod apu_snapshot;
 mod audio;
