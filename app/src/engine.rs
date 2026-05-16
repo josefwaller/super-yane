@@ -1,4 +1,4 @@
-use crate::{BinaryDataSource, DisassemblyLine};
+use crate::{BinaryDataSource, BinaryDataSourceType, DisassemblyLine};
 use closure::closure;
 use derive_new::new;
 use log::*;
@@ -123,7 +123,6 @@ impl Engine {
         let settings = Arc::new(Mutex::new(Settings {
             volume: 50.0,
             is_paused: false,
-            binary_source: BinaryDataSource::Wram,
         }));
         disassembler
             .lock()
@@ -276,6 +275,17 @@ impl Engine {
         self.console.lock().expect("Unable to get lock on console")
     }
     pub fn console_data(&self) -> ConsoleData {
+        // Copy console data
+        let c = self.console();
+
+        ConsoleData {
+            cpu: c.cpu().into(),
+            ppu: c.ppu().into(),
+        }
+    }
+    pub fn binary_data(&self, source: BinaryDataSource) -> ModelRc<ModelRc<SharedString>> {
+        let c = self.console();
+        // Copy some section of ram
         let mut data = [[0u8; 32]; 8];
         macro_rules! copy_data {
             ($src: expr) => {{
@@ -283,29 +293,24 @@ impl Engine {
                 (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap().clone()));
             }};
         }
-        // Copy console data
-        let c = self.console();
-        match self.settings.lock().unwrap().binary_source {
-            BinaryDataSource::Wram => copy_data!(c.ram().iter()),
-            BinaryDataSource::Vram => copy_data!(c.ppu().vram.iter()),
-            BinaryDataSource::Cgram => copy_data!(
+        // Map type -> data to show
+        match source.ramType {
+            BinaryDataSourceType::Wram => copy_data!(c.ram().iter()),
+            BinaryDataSourceType::Vram => copy_data!(c.ppu().vram.iter()),
+            BinaryDataSourceType::Cgram => copy_data!(
                 c.ppu()
                     .cgram
                     .iter()
                     .map(|word| word.to_le_bytes())
                     .flatten()
             ),
-            BinaryDataSource::Cartridge => copy_data!(c.cartridge().data.iter()),
+            BinaryDataSourceType::Cartridge => copy_data!(c.cartridge().data.iter()),
         };
-        ConsoleData {
-            cpu: c.cpu().into(),
-            ppu: c.ppu().into(),
-            binary_data: ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
-                ModelRc::from(Rc::from(VecModel::from_iter(
-                    (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
-                )))
-            })))),
-        }
+        ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
+            ModelRc::from(Rc::from(VecModel::from_iter(
+                (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
+            )))
+        }))))
     }
     pub fn update_settings(&mut self, settings: Settings) {
         *self.settings.lock().unwrap() = settings;

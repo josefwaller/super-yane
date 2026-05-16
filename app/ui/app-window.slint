@@ -18,7 +18,7 @@ import { PpuDisplay } from "components/ppu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
 import { Controls } from "components/controls.slint";
-import { BinaryData } from "components/binary_data.slint";
+import { BinaryData, BinaryDataSource } from "components/binary_data.slint";
 
 
 export component AppWindow inherits Window {
@@ -28,6 +28,11 @@ export component AppWindow inherits Window {
     in property <ConsoleData> console_data;
     // The lines to display
     in property <[DisassemblyLine]> disassembly_lines;
+    // Binary data to display
+    out property <BinaryDataSource> binary_source;
+    in property <[[string]]> binary_data;
+    in property <[string]> ram_column_headers;
+    in property <[string]> ram_row_headers;
 
     callback advance_instructions(int);
     callback advance_frames(int);
@@ -145,9 +150,11 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 vertical-stretch: 0;
-                BinaryData {
-                    data: console_data.binary_data;
-                    source <=> settings.binary-source;
+                ram_viewer := BinaryData {
+                    data <=> binary_data;
+                    column_headers <=> ram_column_headers;
+                    row_headers <=> ram_row_headers;
+                    source <=> binary_source;
                 }
             }
         }

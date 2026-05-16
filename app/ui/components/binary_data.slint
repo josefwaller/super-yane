@@ -1,39 +1,78 @@
 import { ComboBox } from "std-widgets.slint";
+import { Palette } from "../palette.slint";
 
-export enum BinaryDataSource {
+// Types of binary data sources
+export enum BinaryDataSourceType {
     Wram,
     Vram,
     Cgram,
     Cartridge
 }
+// All the information required to display a block of binary data, except the data itself
+export struct BinaryDataSource { ramType: BinaryDataSourceType, page_offset: int}
 /*
- * View Binary data in several formats
+ * View Binary data as a table of bytes
  */
 export component BinaryData {
     // The binary data to display
     in property <[[string]]> data;
+    // The headers of the columns, including the top-left cell
+    in property <[string]> column_headers;
+    // The headers of the rows, excluding the top-left cell
+    in property <[string]> row_headers;
+    // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
     in-out property <BinaryDataSource> source;
 
+    function header_color() -> color {
+        if (source.ramType == BinaryDataSourceType.Wram) {
+            return Palette.wramHeader;
+        } else if (source.ramType == BinaryDataSourceType.Vram) {
+            return Palette.vramHeader;
+        } else if (source.ramType == BinaryDataSourceType.Cgram) {
+            return Palette.cgramHeader;
+        } else if (source.ramType == BinaryDataSourceType.Cartridge) {
+            return Palette.cartridgeHeader;
+        }
+        return Colors.white;
+    }
     VerticalLayout {
         HorizontalLayout {
             ComboBox {
                 model: ["WRAM", "VRAM", "CGRAM", "Cartridge"];
                 selected(value) => {
                     if (value == "WRAM") {
-                        source = BinaryDataSource.Wram
+                        source.ramType = BinaryDataSourceType.Wram
                     } else if (value == "VRAM") {
-                        source = BinaryDataSource.Vram
+                        source.ramType = BinaryDataSourceType.Vram
                     } else if (value == "CGRAM") {
-                        source = BinaryDataSource.Cgram
+                        source.ramType = BinaryDataSourceType.Cgram
                     } else if (value == "Cartridge") {
-                        source = BinaryDataSource.Cartridge
+                        source.ramType = BinaryDataSourceType.Cartridge
                     }
                 }
             }
         }
 
         GridLayout {
+            // Header row
+            Row {
+                for header[j] in column_headers: Text {
+                    Text {
+                        text: header;
+                        color: header_color();
+                        font-weight: FontWeight.bold;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+
             for row_data[i] in data: Row {
+                Text {
+                    text: row_headers[i];
+                    font-weight: FontWeight.bold;
+                    horizontal-alignment: center;
+                }
+
                 for byte[j] in row_data: Text {
                     text: byte;
                     horizontal-alignment: center;
