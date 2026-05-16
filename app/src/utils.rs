@@ -1,4 +1,6 @@
-use slint::SharedString;
+use std::rc::Rc;
+
+use slint::{ModelRc, SharedString, VecModel};
 use super_yane::{Console, Ppu, utils::color_to_rgb_bytes};
 use wdc65816::Processor;
 
@@ -168,6 +170,11 @@ impl Into<ConsoleData> for &Console {
         ConsoleData {
             cpu: (*self.cpu()).into(),
             ppu: self.ppu().into(),
+            binary_data: ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
+                ModelRc::from(Rc::from(VecModel::from_iter((0..32).map(|j| {
+                    SharedString::from(format!("{:02X}", self.ram()[8 * i + j]))
+                }))))
+            })))),
         }
     }
 }

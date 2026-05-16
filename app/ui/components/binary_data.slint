@@ -1,0 +1,26 @@
+import { ComboBox } from "std-widgets.slint";
+/*
+ * View Binary data in several formats
+ */
+export component BinaryData {
+    // The binary data to display
+    in property <[[string]]> data;
+
+    VerticalLayout {
+        HorizontalLayout {
+            ComboBox {
+                model: ["WRAM", "VRAM", "CGRAM"];
+                current-value: "WRAM";
+            }
+        }
+
+        GridLayout {
+            for row_data[i] in data: Row {
+                for byte[j] in row_data: Text {
+                    text: byte;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

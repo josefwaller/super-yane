@@ -18,6 +18,7 @@ import { PpuDisplay } from "components/ppu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
 import { Controls } from "components/controls.slint";
+import { BinaryData } from "components/binary_data.slint";
 
 
 export component AppWindow inherits Window {
@@ -52,11 +53,6 @@ export component AppWindow inherits Window {
 
     default-font-family: "Kode Mono";
 
-    Text {
-        color: green;
-        text: "Hello World!";
-    }
-
     scope := FocusScope {
         key-pressed(event) => {
             controller_input.handle_key_change(event.text, true);
@@ -72,66 +68,74 @@ export component AppWindow inherits Window {
             controller <=> controller;
         }
 
-        HorizontalLayout {
-            alignment: stretch;
-            TabWidget {
-                Tab {
-                    title: "CPU";
-                    CpuDisplay {
-                        width: 100%;
-                        height: 100%;
-                        horizontal-stretch: 0;
-                        data: console_data.cpu;
+        VerticalLayout {
+            height: 100%;
+            HorizontalLayout {
+                TabWidget {
+                    Tab {
+                        title: "CPU";
+                        CpuDisplay {
+                            width: 100%;
+                            height: 100%;
+                            horizontal-stretch: 0;
+                            data: console_data.cpu;
+                        }
+                    }
+
+                    Tab {
+                        title: "PPU";
+                        PpuDisplay {
+                            // height: 100%;
+                            data: console_data.ppu;
+                        }
+                    }
+
+                    Tab {
+                        title: "APU";
+                    }
+
+                    Tab {
+                        title: "DMA";
                     }
                 }
 
-                Tab {
-                    title: "PPU";
-                    PpuDisplay {
-                        height: 100%;
-                        data: console_data.ppu;
+                VerticalLayout {
+                    Image {
+                        horizontal-stretch: 1;
+                        source: pixel_data;
+                        width: 400px;
+                        height: 300px;
+                    }
+
+                    Controls {
+                        settings <=> settings;
+                        advance_frame => {
+                            advance_frames(1);
+                        }
+                        advance_instruction => {
+                            advance_instructions(1);
+                        }
                     }
                 }
 
-                Tab {
-                    title: "APU";
-                }
+                TabWidget {
+                    // height: 100%;
+                    Tab {
+                        title: "CPU";
+                        Disassembly {
+                            lines: disassembly_lines;
+                        }
+                    }
 
-                Tab {
-                    title: "DMA";
+                    Tab {
+                        title: "APU";
+                    }
                 }
             }
 
-            VerticalLayout {
-                Image {
-                    horizontal-stretch: 1;
-                    source: pixel_data;
-                    width: 800px;
-                    height: 600px;
-                }
-
-                Controls {
-                    settings <=> settings;
-                    advance_frame => {
-                        advance_frames(1);
-                    }
-                    advance_instruction => {
-                        advance_instructions(1);
-                    }
-                }
-            }
-
-            TabWidget {
-                height: 100%;
-                Tab {
-                    title: "CPU";
-                    Disassembly {
-                        lines: disassembly_lines;
-                    }
-                }
-
-                Tab {
-                    title: "APU";
+            HorizontalLayout {
+                BinaryData {
+                    data: console_data.binary_data;
                 }
             }
         }

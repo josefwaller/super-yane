@@ -145,14 +145,16 @@ fn main() {
                     let ui = ui_ptr.unwrap();
                     engine.borrow_mut().on_frame();
                     let e = engine.borrow();
-                    let c = e.console();
                     let buf = SharedPixelBuffer::clone_from_slice(e.prev_frame_data.as_flattened(), 256, 224);
                     ui.set_pixel_data(Image::from_rgb8(buf));
-                    ui.set_console_data(data.lock().unwrap().clone());
+                    ui.set_console_data(e.console_data());
+                    {
+                    let c = e.console();
                     let pc = c.pc();
                     ui.set_disassembly_lines(ModelRc::new(VecModel::from(e.disassembly_lines(
                         c.cartridge().transform_address(pc)
                     ))));
+                }
                 }
                 _ => {}
             }),

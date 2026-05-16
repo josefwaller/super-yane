@@ -279,7 +279,6 @@ impl Processor {
         self.b = b;
     }
     fn sbc_d(&self, a: u8, b: u8, c: bool) -> (u8, bool) {
-        debug!("SBC_D {:02X} - {:02X} - {}", a, b, !c);
         // Note carry (c) is inverted here (0 = borrow, 1 = no borrow)
         let (low, c) = if (a & 0xF) >= (b & 0xF) + u8::from(!c) {
             (

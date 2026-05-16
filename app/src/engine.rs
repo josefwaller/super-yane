@@ -214,7 +214,6 @@ impl Engine {
                                 }
                                 LoadRom(bytes) => {
                                     *c = Console::with_cartridge(&bytes);
-                                    // disassembler.add_current_instruction(&console);
                                 }
                                 LoadSavestate(state) => {
                                     *c = state;
@@ -245,8 +244,6 @@ impl Engine {
                             audio.push_samples(a, s.volume);
                             audio.push_samples(b, s.volume);
                         }
-                        // Copy console data
-                        *data.lock().unwrap() = c.deref().into();
                     }
                     // Merge disassembler
                     disassembler.lock().unwrap().consume(&mut d);
@@ -268,6 +265,10 @@ impl Engine {
 
     pub fn console<'a>(&'a self) -> MutexGuard<'a, Console> {
         self.console.lock().expect("Unable to get lock on console")
+    }
+    pub fn console_data(&self) -> ConsoleData {
+        // Copy console data
+        self.console.lock().unwrap().deref().into()
     }
 
     pub fn update(&mut self, command: Command) {
