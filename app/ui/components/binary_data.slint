@@ -1,4 +1,4 @@
-import { ComboBox, Button, CheckBox } from "std-widgets.slint";
+import { ComboBox, Button, CheckBox, TabWidget } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
 
 // Types of binary data sources
@@ -24,8 +24,13 @@ export component BinaryData {
     in property <[string]> row_headers;
     // The number of pages to show
     in property <int> num_pages;
+    property <int> tab_index;
     // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
     in-out property <BinaryDataSource> source;
+
+    changed tab_index => {
+        source.show-as-tile = tab_index == 1;
+    }
 
     function header_color() -> color {
         if (source.ramType == BinaryDataSourceType.Wram) {
@@ -105,40 +110,46 @@ export component BinaryData {
                 }
                 enabled: source.page-offset < num_pages - 16;
             }
-
-            CheckBox {
-                checked <=> source.show-as-tile;
-                text: "Interpret as tile data";
-            }
         }
 
-        if source.show-as-tile: Image {
-            source: data_image;
-            image-rendering: ImageRendering.pixelated;
-        }
-        if !source.show-as-tile: GridLayout {
-            padding: 10px;
-            // Header row
-            Row {
-                for header[j] in column_headers: Text {
-                    text: header;
-                    color: header_color();
-                    font-weight: FontWeight.bold;
-                    horizontal-alignment: j == 0 ? left : right;
+        TabWidget {
+            current-index <=> tab_index;
+            Tab {
+                title: "Data";
+                GridLayout {
+                    padding: 10px;
+                    Row {
+                        for header[j] in column_headers: Text {
+                            text: header;
+                            color: header_color();
+                            font-weight: FontWeight.bold;
+                            horizontal-alignment: j == 0 ? left : right;
+                        }
+                    }
+
+                    for row_data[i] in data: Row {
+                        Text {
+                            text: row_headers[i];
+                            color: header_color();
+                            horizontal-alignment: left;
+                        }
+
+                        for byte[j] in row_data: Text {
+                            text: byte;
+                            font-weight: byte == "00" ? FontWeight.extra-light : FontWeight.normal;
+                            horizontal-alignment: right;
+                        }
+                    }
                 }
             }
 
-            for row_data[i] in data: Row {
-                Text {
-                    text: row_headers[i];
-                    color: header_color();
-                    horizontal-alignment: left;
-                }
-
-                for byte[j] in row_data: Text {
-                    text: byte;
-                    font-weight: byte == "00" ? FontWeight.extra-light : FontWeight.normal;
-                    horizontal-alignment: right;
+            Tab {
+                title: "Tiles";
+                Image {
+                    source: data_image;
+                    image-rendering: ImageRendering.pixelated;
+                    width: 100%;
+                    height: 100%;
                 }
             }
         }
