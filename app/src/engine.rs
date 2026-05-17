@@ -300,6 +300,11 @@ impl Engine {
             // Map data to 2BPP tile
             const NUM_TILES_WIDTH: usize = 16;
             const NUM_TILES_HEIGHT: usize = 4;
+            let offset = source.page_offset as usize
+                * NUM_TILES_WIDTH
+                * NUM_TILES_HEIGHT
+                * 8
+                * source.bpp as usize;
             let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
             // Create a copy of CGRAM as a u8 array
             let cgram_arr: [u8; 0x200] =
@@ -312,7 +317,7 @@ impl Engine {
             };
             // Copy data to buffer
             bytes_to_rgb(
-                data_src,
+                &data_src[offset..],
                 NUM_TILES_WIDTH,
                 NUM_TILES_HEIGHT,
                 source.bpp as usize,
