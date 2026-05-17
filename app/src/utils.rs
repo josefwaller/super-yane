@@ -79,7 +79,7 @@ pub fn vram_to_rgba(
 /// * `height` is the height of the output in 8x8 tiles.
 /// * `buffer` is the buffer that is written to. 2BPP tiles are written sequentially, so the first 8 bytes are
 /// the first slice, the first 64 bytes are the first tile.
-pub fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buffer: &mut [u8]) {
+fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buffer: &mut [u8]) {
     let width_pixels = width_tiles * 8;
     (0..height_tiles).for_each(|tile_y| {
         (0..width_tiles).for_each(|tile_x| {
@@ -107,6 +107,36 @@ pub fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, 
             })
         });
     })
+}
+
+pub fn bytes_to_rgb(
+    bytes: &[u8],
+    width_tiles: usize,
+    height_tiles: usize,
+    bpp: usize,
+    buffer: &mut [u8],
+) {
+    // First parse as 2Bpp
+    // Todo: Make this not a vec
+    let mut buffer_2bpp = vec![0u8; 8 * 8 * width_tiles * height_tiles * 4];
+    let multi = match bpp {
+        2 => 1,
+        4 => 2,
+        8 => 4,
+        // _ => panic!("Invalid BPP provided: {}", bpp),
+        _ => 1,
+    };
+    bytes_to_rgb_2bpp(bytes, width_tiles * multi, height_tiles, &mut buffer_2bpp);
+    // Get number of 2bpp pixels per slice
+    let pixels_per_slice = 8 * multi;
+    // Combine the slices
+    (0..(8 * height_tiles * width_tiles)).for_each(|i| {
+        // Get the pixels for this slice
+        let pixels = &buffer_2bpp[(pixels_per_slice * i)..(pixels_per_slice * (i + 1))];
+        (0..8).for_each(|x| {
+            buffer[8 * i + x] = (0..multi).map(|j| pixels[x + 8 * j] << (2 * j)).sum();
+        })
+    });
 }
 
 /// Shorthand for converting a byte to a 2-digit hex number

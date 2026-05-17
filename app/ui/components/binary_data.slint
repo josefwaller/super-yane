@@ -9,7 +9,12 @@ export enum BinaryDataSourceType {
     Cartridge
 }
 // All the information required to display a block of binary data, except the data itself
-export struct BinaryDataSource { ramType: BinaryDataSourceType, page_offset: int, show_as_tile: bool}
+export struct BinaryDataSource {
+    ramType: BinaryDataSourceType,
+    page_offset: int,
+    show_as_tile: bool,
+    bpp: int,
+}
 /*
  * View Binary data as a table of bytes
  */
@@ -26,7 +31,12 @@ export component BinaryData {
     in property <int> num_pages;
     property <int> tab_index;
     // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
-    in-out property <BinaryDataSource> source;
+    in-out property <BinaryDataSource> source: {
+        ramType: BinaryDataSourceType.Vram,
+        page_offset: 0,
+        show_as_tile: false,
+        bpp: 2,
+    };
 
     changed tab_index => {
         source.show-as-tile = tab_index == 1;
@@ -46,8 +56,7 @@ export component BinaryData {
     }
 
     function change_page(amount: int) {
-        source.page-offset = min(
-            max(0, source.page-offset + amount), num_pages - 1);
+        source.page-offset = clamp(0, source.page-offset + amount, num_pages - 1);
     }
 
     VerticalLayout {
@@ -109,6 +118,19 @@ export component BinaryData {
                     change_page(16)
                 }
                 enabled: source.page-offset < num_pages - 16;
+            }
+
+            ComboBox {
+                model: ["2BPP", "4BPP", "8BPP"];
+                selected(value) => {
+                    if (value == "2BPP") {
+                        source.bpp = 2;
+                    } else if (value == "4BPP") {
+                        source.bpp = 4;
+                    } else if (value == "8BPP") {
+                        source.bpp = 8;
+                    }
+                }
             }
         }
 

@@ -1,5 +1,5 @@
 use crate::{
-    AppWindow, BinaryDataSource, BinaryDataSourceType, DisassemblyLine, utils::bytes_to_rgb_2bpp,
+    AppWindow, BinaryDataSource, BinaryDataSourceType, DisassemblyLine, utils::bytes_to_rgb,
 };
 use closure::closure;
 use derive_new::new;
@@ -17,7 +17,10 @@ use std::{
     thread::{self},
     time::{Duration, Instant},
 };
-use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREEN_RESOLUTION};
+use super_yane::{
+    Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREEN_RESOLUTION,
+    utils::color_to_rgb_bytes,
+};
 use wdc65816::Processor;
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
@@ -292,22 +295,23 @@ impl Engine {
         let source = ui.get_binary_source();
         use BinaryDataSourceType::*;
         if source.show_as_tile {
-            // Temporary palette
-            const PALETTE: [[u8; 3]; 4] = [[0, 0, 0], [0xFF, 0, 0], [0, 0xFF, 0], [0, 0, 0xFF]];
+            let palette: [[u8; 3]; 256] =
+                core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
             // Map data to 2BPP tile
             const NUM_TILES_WIDTH: usize = 16;
-            const NUM_TILES_HEIGHT: usize = 2;
+            const NUM_TILES_HEIGHT: usize = 4;
             let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
             // Copy data to buffer
-            bytes_to_rgb_2bpp(
+            bytes_to_rgb(
                 &c.ppu().vram,
                 NUM_TILES_WIDTH,
                 NUM_TILES_HEIGHT,
+                source.bpp as usize,
                 &mut buffer,
             );
             // Map data to RGB
             let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
-                core::array::from_fn(|i| PALETTE[buffer[i] as usize]);
+                core::array::from_fn(|i| palette[buffer[i] as usize]);
             let buf = SharedPixelBuffer::clone_from_slice(
                 rgb_data.as_flattened(),
                 8 * NUM_TILES_WIDTH as u32,
