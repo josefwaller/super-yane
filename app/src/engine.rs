@@ -295,8 +295,15 @@ impl Engine {
         let source = ui.get_binary_source();
         use BinaryDataSourceType::*;
         if source.show_as_tile {
-            let palette: [[u8; 3]; 256] =
+            let colors: [[u8; 3]; 256] =
                 core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
+            let palette_size = match source.bpp {
+                2 => 4,
+                4 => 16,
+                8 => 64,
+                _ => 4,
+            };
+            let palette = &colors[source.palette_index as usize * palette_size..];
             // Map data to 2BPP tile
             const NUM_TILES_WIDTH: usize = 16;
             const NUM_TILES_HEIGHT: usize = 4;

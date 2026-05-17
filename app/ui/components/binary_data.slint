@@ -14,6 +14,7 @@ export struct BinaryDataSource {
     page_offset: int,
     show_as_tile: bool,
     bpp: int,
+    palette_index: int
 }
 /*
  * View Binary data as a table of bytes
@@ -36,10 +37,12 @@ export component BinaryData {
         page_offset: 0,
         show_as_tile: false,
         bpp: 2,
+        palette_index: 0
     };
 
     changed tab_index => {
         source.show-as-tile = tab_index == 1;
+        source.palette-index = 0;
     }
 
     function header_color() -> color {
@@ -130,6 +133,27 @@ export component BinaryData {
                     } else if (value == "8BPP") {
                         source.bpp = 8;
                     }
+                }
+            }
+
+            Button {
+                text: "-1";
+                clicked => {
+                    source.palette_index = max(source.palette_index - 1, 0);
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Palette " + source.palette_index;
+                }
+            }
+
+            Button {
+                text: "+1";
+                clicked => {
+                    source.palette_index = min(source.palette_index + 1, 16);
                 }
             }
         }

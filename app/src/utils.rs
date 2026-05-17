@@ -90,8 +90,8 @@ fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buff
             // Copy each slice
             (0..8).for_each(|y| {
                 // Get low and high slice
-                let low = bytes.get(src_tile_address + 2 * y).unwrap_or(&0);
-                let high = bytes.get(src_tile_address + 2 * y + 1).unwrap_or(&0);
+                let high = bytes.get(src_tile_address + 2 * y).unwrap_or(&0);
+                let low = bytes.get(src_tile_address + 2 * y + 1).unwrap_or(&0);
                 // Get the tile (x, y) index to write to
                 let dest_tile_x = tile_index % width_tiles;
                 let dest_tile_y = tile_index / width_tiles;
