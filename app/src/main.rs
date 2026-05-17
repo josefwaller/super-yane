@@ -127,6 +127,9 @@ fn main() {
     ui.on_advance_frames(closure!(clone engine, |n| {
         engine.borrow_mut().update(Command::Advance(AdvanceAmount::Frames(n as u32)));
     }));
+    ui.on_reset(closure!(clone engine, || {
+        engine.borrow_mut().update(Command::Reset);
+    }));
     ui.window()
         .set_rendering_notifier(
             closure!(clone ui_ptr, clone engine, |state, _graphics| match state {

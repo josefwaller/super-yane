@@ -5,8 +5,16 @@ export component Controls {
     in-out property <Settings> settings;
     callback advance_instruction;
     callback advance_frame;
+    callback reset;
     HorizontalLayout {
         spacing: 5px;
+        Button {
+            text: "Reset";
+            clicked => {
+                reset()
+            };
+        }
+
         Button {
             text: settings.is-paused ? "Play" : "Pause";
             clicked => {

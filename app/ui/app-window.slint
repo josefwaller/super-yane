@@ -38,6 +38,7 @@ export component AppWindow inherits Window {
 
     callback advance_instructions(int);
     callback advance_frames(int);
+    callback reset();
 
     // The settings
     out property <Settings> settings;
@@ -129,6 +130,9 @@ export component AppWindow inherits Window {
                                 }
                                 advance_instruction => {
                                     advance_instructions(1);
+                                }
+                                reset => {
+                                    reset();
                                 }
                             }
                         }
