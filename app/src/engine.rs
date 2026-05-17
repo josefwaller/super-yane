@@ -301,9 +301,18 @@ impl Engine {
             const NUM_TILES_WIDTH: usize = 16;
             const NUM_TILES_HEIGHT: usize = 4;
             let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
+            // Create a copy of CGRAM as a u8 array
+            let cgram_arr: [u8; 0x200] =
+                core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
+            let data_src: &[u8] = match source.ramType {
+                Vram => &c.ppu().vram,
+                Cgram => &cgram_arr,
+                Wram => c.ram().as_slice(),
+                Cartridge => &c.cartridge().data,
+            };
             // Copy data to buffer
             bytes_to_rgb(
-                &c.ppu().vram,
+                data_src,
                 NUM_TILES_WIDTH,
                 NUM_TILES_HEIGHT,
                 source.bpp as usize,

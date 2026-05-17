@@ -158,7 +158,7 @@ export component BinaryData {
 
                         for byte[j] in row_data: Text {
                             text: byte;
-                            font-weight: byte == "00" ? FontWeight.extra-light : FontWeight.normal;
+                            color: byte == "00" ? #AAA : #FFF;
                             horizontal-alignment: right;
                         }
                     }
