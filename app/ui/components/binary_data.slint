@@ -1,4 +1,4 @@
-import { ComboBox, Button } from "std-widgets.slint";
+import { ComboBox, Button, CheckBox } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
 
 // Types of binary data sources
@@ -9,13 +9,15 @@ export enum BinaryDataSourceType {
     Cartridge
 }
 // All the information required to display a block of binary data, except the data itself
-export struct BinaryDataSource { ramType: BinaryDataSourceType, page_offset: int}
+export struct BinaryDataSource { ramType: BinaryDataSourceType, page_offset: int, show_as_tile: bool}
 /*
  * View Binary data as a table of bytes
  */
 export component BinaryData {
-    // The binary data to display
+    // The binary data to display, as hex strings
     in property <[[string]]> data;
+    // The binary data to display, as an image
+    in property <image> data_image;
     // The headers of the columns, including the top-left cell
     in property <[string]> column_headers;
     // The headers of the rows, excluding the top-left cell
@@ -103,9 +105,18 @@ export component BinaryData {
                 }
                 enabled: source.page-offset < num_pages - 16;
             }
+
+            CheckBox {
+                checked <=> source.show-as-tile;
+                text: "Interpret as tile data";
+            }
         }
 
-        GridLayout {
+        if source.show-as-tile: Image {
+            source: data_image;
+            image-rendering: ImageRendering.pixelated;
+        }
+        if !source.show-as-tile: GridLayout {
             padding: 10px;
             // Header row
             Row {

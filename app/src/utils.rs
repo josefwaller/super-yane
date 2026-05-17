@@ -74,6 +74,41 @@ pub fn vram_to_rgba(
     });
 }
 
+/// Interprets a chunk of binary data as SNES 2bpp tile date, and rewrites it into a 2BPP format
+/// * `width` is the width of the output in 8x8 tiles.
+/// * `height` is the height of the output in 8x8 tiles.
+/// * `buffer` is the buffer that is written to. 2BPP tiles are written sequentially, so the first 8 bytes are
+/// the first slice, the first 64 bytes are the first tile.
+pub fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buffer: &mut [u8]) {
+    let width_pixels = width_tiles * 8;
+    (0..height_tiles).for_each(|tile_y| {
+        (0..width_tiles).for_each(|tile_x| {
+            // Render tile at (tile_x, tile_y)
+            let tile_index = tile_y * width_tiles + tile_x;
+            // 2 bytes per slice * 8 slices per tile
+            let src_tile_address = 2 * 8 * tile_index;
+            // Copy each slice
+            (0..8).for_each(|y| {
+                // Get low and high slice
+                let low = bytes[src_tile_address + 2 * y];
+                let high = bytes[src_tile_address + 2 * y + 1];
+                // Get the tile (x, y) index to write to
+                let dest_tile_x = tile_index % width_tiles;
+                let dest_tile_y = tile_index / width_tiles;
+                // Destination to write to
+                let dest_tile_address =
+                    8 * dest_tile_x + 8 * width_pixels * dest_tile_y + width_pixels * y;
+                (0..8).for_each(|x| {
+                    // Get individual pixel value
+                    let val = 2 * ((low >> (7 - x)) & 0x01) + ((high >> (7 - x)) & 0x01);
+                    // Write value
+                    buffer[dest_tile_address + x] = val;
+                });
+            })
+        });
+    })
+}
+
 /// Shorthand for converting a byte to a 2-digit hex number
 fn h8(value: u8) -> SharedString {
     format!("{:02X}", value).into()
