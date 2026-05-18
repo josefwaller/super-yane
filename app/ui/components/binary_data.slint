@@ -47,13 +47,13 @@ export component BinaryData {
 
     function header_color() -> color {
         if (source.ramType == BinaryDataSourceType.Wram) {
-            return Palette.wramHeader;
+            return Palette.blue;
         } else if (source.ramType == BinaryDataSourceType.Vram) {
-            return Palette.vramHeader;
+            return Palette.red;
         } else if (source.ramType == BinaryDataSourceType.Cgram) {
-            return Palette.cgramHeader;
+            return Palette.green;
         } else if (source.ramType == BinaryDataSourceType.Cartridge) {
-            return Palette.cartridgeHeader;
+            return Palette.orange;
         }
         return Colors.white;
     }

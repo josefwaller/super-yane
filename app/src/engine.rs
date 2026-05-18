@@ -422,17 +422,6 @@ impl Engine {
             ))
             .expect("Unable to send data to thread");
     }
-    pub fn load_savestate(&mut self, bytes: &[u8]) {
-        let mut console: Console = serde_brief::from_slice(bytes).unwrap();
-        console.ppu_mut().reset_vram_cache();
-        self.sender
-            .send(UpdateEmuPayload::new(
-                Command::LoadSavestate(console),
-                AdvanceSettings::default(),
-            ))
-            .expect("Unable to send data to thread")
-    }
-
     pub fn reset(&mut self) {
         self.sender
             .send(UpdateEmuPayload::new(
@@ -450,6 +439,16 @@ impl Engine {
             }
             Err(_) => {}
         }
+    }
+    pub fn get_savestate(&self) -> Vec<u8> {
+        let c = self.console().clone();
+        serde_brief::to_vec::<Console>(&c).expect("Unable to serialize console")
+    }
+    pub fn load_savestate(&mut self, state: &[u8]) -> Result<(), serde_brief::Error> {
+        let mut c: Console = serde_brief::from_slice(state)?;
+        c.ppu_mut().reset_vram_cache();
+        *self.console.lock().unwrap() = c;
+        Ok(())
     }
 
     pub fn disassembly_lines(&self, pc: usize) -> Vec<DisassemblyLine> {

@@ -1,15 +1,15 @@
 use closure::closure;
+use rfd::FileDialog;
 use std::{
     cell::RefCell,
     env,
-    fs::File,
+    fs::{File, write},
     rc::Rc,
-    sync::{Arc, Mutex},
 };
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, LogicalSize, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
+use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 
 mod apu_snapshot;
 mod audio;
@@ -24,7 +24,7 @@ mod engine;
 // use program::Program;
 
 use crate::engine::{AdvanceAmount, Command, Engine};
-use super_yane::{Console, InputPort};
+use super_yane::InputPort;
 mod disassembler;
 mod profiler;
 mod table;
@@ -129,6 +129,50 @@ fn main() {
     }));
     ui.on_reset(closure!(clone engine, || {
         engine.borrow_mut().update(Command::Reset);
+    }));
+    ui.on_load_rom(closure!(clone engine, || {
+        match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc"]).pick_file() {
+            None => {}
+            Some(path) => {
+                match std::fs::read(&path) {
+                    Err(e) => {
+                        error!("Unable to read file {:?}: {:?}", &path, e);
+                    }
+                    Ok(bytes) => {
+                        engine.borrow_mut().update(Command::LoadRom(bytes))
+                    }
+                }
+            }
+        }
+    }));
+    ui.on_save_savestate(closure!(clone engine, || {
+        match FileDialog::new()
+            .add_filter("Super Y.A.N.E. Savestate", &["sy.bin"])
+            .set_title("Save game state")
+            .save_file() {
+            None => {},
+            Some(path) => {
+                let data = engine.borrow().get_savestate();
+                match std::fs::write(&path, &data) {
+                    Ok(_) => {},
+                    Err(e) => error!("Unable to write to file {:?}: {:?}", path, e)
+                }
+            }
+        }
+    }));
+    ui.on_load_savestate(closure!(clone engine, || {
+        match FileDialog::new()
+            .add_filter("Super Y.A.N.E. Savestate", &["sy.bin"])
+            .set_title("Load game state")
+            .pick_file() {
+                None => {},
+                Some(path) => {
+                    match std::fs::read(&path) {
+                        Ok(bytes) => engine.borrow_mut().load_savestate(&bytes).unwrap(),
+                        Err(e) => error!("Unable to read file {:?}: {:?}", &path, e)
+                    }
+                }
+            }
     }));
     ui.window()
         .set_rendering_notifier(

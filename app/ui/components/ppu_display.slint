@@ -1,10 +1,12 @@
 import { PpuData } from "../structs/ppu_data.slint";
 import { RegisterList } from "register_list.slint";
+import { Palette } from "../palette.slint";
 
 export component PpuDisplay {
     in property <PpuData> data;
 
     RegisterList {
+        headerColor: Palette.red;
         registers: [
             { name: "VBlank Flag", value: data.vblank },
             {

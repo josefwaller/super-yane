@@ -39,6 +39,9 @@ export component AppWindow inherits Window {
     callback advance_instructions(int);
     callback advance_frames(int);
     callback reset();
+    callback load_rom();
+    callback load_savestate();
+    callback save_savestate();
 
     // The settings
     out property <Settings> settings;
@@ -57,6 +60,32 @@ export component AppWindow inherits Window {
     title: "Super Y.A.N.E";
 
     default-font-family: "Kode Mono";
+
+    MenuBar {
+        Menu {
+            title: @tr("File");
+            MenuItem {
+                title: @tr("Load ROM");
+                activated => {
+                    load_rom();
+                }
+            }
+
+            MenuItem {
+                title: @tr("Load state");
+                activated => {
+                    load_savestate();
+                }
+            }
+
+            MenuItem {
+                title: @tr("Save state");
+                activated => {
+                    save_savestate();
+                }
+            }
+        }
+    }
 
     scope := FocusScope {
         key-pressed(event) => {

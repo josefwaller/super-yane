@@ -4,6 +4,9 @@ import { Palette } from "../palette.slint";
 import { Register } from "./register.slint";
 import { HighLowRegister } from "./high_low_register.slint";
 
+component CpuReg inherits Register {
+    headerColor: Palette.blue;
+}
 
 export component CpuDisplay {
     in property <CpuData> data;
@@ -13,12 +16,12 @@ export component CpuDisplay {
         spacing: 5px;
         padding: 10px;
         vertical-stretch: 0;
-        Register {
+        CpuReg {
             name: "PBR";
             value: data.pbr;
         }
 
-        Register {
+        CpuReg {
             name: "PC";
             value: data.pc;
         }
@@ -28,6 +31,7 @@ export component CpuDisplay {
             value: data.c;
             low: data.a;
             high: data.b;
+            primaryHeader: Palette.blue;
         }
 
         HighLowRegister {
@@ -35,6 +39,7 @@ export component CpuDisplay {
             value: data.x;
             low: data.xl;
             high: data.xh;
+            primaryHeader: Palette.blue;
         }
 
         HighLowRegister {
@@ -42,14 +47,15 @@ export component CpuDisplay {
             value: data.y;
             low: data.yl;
             high: data.yh;
+            primaryHeader: Palette.blue;
         }
 
-        Register {
+        CpuReg {
             name: "SP";
             value: data.sp;
         }
 
-        Register {
+        CpuReg {
             name: "DBR";
             value: data.dbr;
         }
@@ -59,9 +65,10 @@ export component CpuDisplay {
             value: data.d;
             low: data.dl;
             high: data.dh;
+            primaryHeader: Palette.blue;
         }
 
-        Register {
+        CpuReg {
             name: "P";
             value: data.p;
             for flag in [
@@ -73,10 +80,9 @@ export component CpuDisplay {
                 { name: "P.i", value: data.p_i },
                 { name: "P.z", value: data.p_z },
                 { name: "P.c", value: data.p_c },
-            ]: Register {
+            ]: CpuReg {
                 name: flag.name;
                 value: flag.value;
-                headerColor: Palette.secondaryHeader;
             }
         }
     }
