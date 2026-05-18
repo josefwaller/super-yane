@@ -340,6 +340,8 @@ impl Engine {
             );
             // Send image data to slint
             ui.set_binary_image(Image::from_rgb8(buf));
+            let mem_per_page = NUM_TILES_HEIGHT * NUM_TILES_WIDTH * 8 * source.bpp as usize;
+            ui.set_ram_num_pages((data_src.len() / mem_per_page) as i32);
         } else {
             // Copy some section of ram
             let mut data = [[0u8; 32]; 8];

@@ -14,7 +14,7 @@ export struct BinaryDataSource {
     page_offset: int,
     show_as_tile: bool,
     bpp: int,
-    palette_index: int
+    palette_index: int,
 }
 /*
  * View Binary data as a table of bytes
@@ -30,19 +30,35 @@ export component BinaryData {
     in property <[string]> row_headers;
     // The number of pages to show
     in property <int> num_pages;
+    property <int> num_palettes: 64;
     property <int> tab_index;
     // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
-    in-out property <BinaryDataSource> source: {
-        ramType: BinaryDataSourceType.Vram,
-        page_offset: 0,
-        show_as_tile: false,
-        bpp: 2,
-        palette_index: 0
-    };
-
+    in-out property <BinaryDataSource> source;
     changed tab_index => {
         source.show-as-tile = tab_index == 1;
         source.palette-index = 0;
+    }
+    init => {
+        source = {
+            ramType: BinaryDataSourceType.Wram,
+            page_offset: 0,
+            show_as_tile: false,
+            bpp: 2,
+            palette_index: 0
+        };
+    }
+
+    function set_bpp(bpp: int) {
+        source.page-offset = floor(source.page-offset * source.bpp / bpp);
+        source.bpp = bpp;
+        if (source.bpp == 2) {
+            num_palettes = 64;
+        } else if (source.bpp == 4) {
+            num_palettes = 16;
+        } else {
+            num_palettes = 1;
+        }
+        source.palette-index = clamp(source.palette-index, 0, num_palettes - 1);
     }
 
     function header_color() -> color {
@@ -127,11 +143,11 @@ export component BinaryData {
                 model: ["2BPP", "4BPP", "8BPP"];
                 selected(value) => {
                     if (value == "2BPP") {
-                        source.bpp = 2;
+                        set_bpp(2);
                     } else if (value == "4BPP") {
-                        source.bpp = 4;
+                        set_bpp(4);
                     } else if (value == "8BPP") {
-                        source.bpp = 8;
+                        set_bpp(8);
                     }
                 }
             }
@@ -153,7 +169,7 @@ export component BinaryData {
             Button {
                 text: "+1";
                 clicked => {
-                    source.palette_index = min(source.palette_index + 1, 16);
+                    source.palette_index = min(source.palette_index + 1, num_palettes - 1);
                 }
             }
         }
