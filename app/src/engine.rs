@@ -371,7 +371,7 @@ impl Engine {
             ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(
                 |i| {
                     ModelRc::from(Rc::from(VecModel::from_iter(
-                        (0..32).map(|j| SharedString::from(format!("{:02X}", data[i][j]))),
+                        (0..32).map(|j| data[i][j] as i32),
                     )))
                 },
             )))));

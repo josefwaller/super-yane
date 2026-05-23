@@ -19,6 +19,9 @@ import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
 import { Controls } from "components/controls.slint";
 import { BinaryData, BinaryDataSource } from "components/binary_data.slint";
+import { Utils } from "./globals.slint";
+
+export { Utils }
 
 
 export component AppWindow inherits Window {
@@ -30,7 +33,7 @@ export component AppWindow inherits Window {
     in property <[DisassemblyLine]> disassembly_lines;
     // Binary data to display
     out property <BinaryDataSource> binary_source;
-    in property <[[string]]> binary_data;
+    in property <[[int]]> binary_data;
     in property <image> binary_image;
     in property <[string]> ram_column_headers;
     in property <[string]> ram_row_headers;

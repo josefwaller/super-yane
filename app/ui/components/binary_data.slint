@@ -1,5 +1,6 @@
 import { ComboBox, Button, CheckBox, TabWidget } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
+import { Utils } from "../globals.slint";
 
 // Types of binary data sources
 export enum BinaryDataSourceType {
@@ -21,7 +22,7 @@ export struct BinaryDataSource {
  */
 export component BinaryData {
     // The binary data to display, as hex strings
-    in property <[[string]]> data;
+    in property <[[int]]> data;
     // The binary data to display, as an image
     in property <image> data_image;
     // The headers of the columns, including the top-left cell
@@ -197,8 +198,8 @@ export component BinaryData {
                         }
 
                         for byte[j] in row_data: Text {
-                            text: byte;
-                            color: byte == "00" ? #AAA : #FFF;
+                            text: Utils.byte_to_hex(byte);
+                            color: byte == 0 ? #AAA : #FFF;
                             horizontal-alignment: right;
                         }
                     }

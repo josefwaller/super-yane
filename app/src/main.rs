@@ -130,6 +130,10 @@ fn main() {
     ui.on_reset(closure!(clone engine, || {
         engine.borrow_mut().update(Command::Reset);
     }));
+    ui.global::<Utils>()
+        .on_byte_to_hex(|b| format!("{:02X}", b).into());
+    ui.global::<Utils>()
+        .on_word_to_hex(|b| format!("{:04X}", b).into());
     ui.on_load_rom(closure!(clone engine, || {
         match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc"]).pick_file() {
             None => {}
