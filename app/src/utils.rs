@@ -137,20 +137,7 @@ pub fn bytes_to_rgb(
         })
     });
 }
-
-/// Shorthand for converting a byte to a 2-digit hex number
-fn h8(value: u8) -> SharedString {
-    format!("{:02X}", value).into()
-}
-/// Shorthand for converting a u16 into a 4-digit hex number
-fn h16(value: impl Into<u16>) -> SharedString {
-    format!("{:04X}", value.into()).into()
-}
-/// Shorthand for converting a bool to a 1 or 0 shared string
-fn b(value: bool) -> SharedString {
-    format!("{}", u8::from(value)).into()
-}
-
+// Macro to copy a bunch of integer fields between structs
 macro_rules! copy_fields {
     ($from: ident, $to: ident, $($field:ident),*) => {
         $(
@@ -158,6 +145,7 @@ macro_rules! copy_fields {
         )*
     };
 }
+
 impl Into<CpuData> for &Processor {
     fn into(self) -> CpuData {
         let mut data = CpuData::default();

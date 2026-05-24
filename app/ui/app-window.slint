@@ -67,24 +67,31 @@ export component AppWindow inherits Window {
     MenuBar {
         Menu {
             title: @tr("File");
-            MenuItem {
-                title: @tr("Load ROM");
-                activated => {
-                    load_rom();
+            Menu {
+                title: @tr("Load");
+
+                MenuItem {
+                    title: @tr("ROM");
+                    activated => {
+                        load_rom();
+                    }
+                }
+
+                MenuItem {
+                    title: @tr("State");
+                    activated => {
+                        load_savestate();
+                    }
                 }
             }
 
-            MenuItem {
-                title: @tr("Load state");
-                activated => {
-                    load_savestate();
-                }
-            }
-
-            MenuItem {
-                title: @tr("Save state");
-                activated => {
-                    save_savestate();
+            Menu {
+                title: @tr("Save");
+                MenuItem {
+                    title: @tr("State");
+                    activated => {
+                        save_savestate();
+                    }
                 }
             }
         }
