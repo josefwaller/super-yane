@@ -4,7 +4,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use super_yane::{Console, Ppu, utils::color_to_rgb_bytes};
 use wdc65816::{Processor, StatusRegister};
 
-use crate::{ConsoleData, CpuData, PpuData, StatusRegisterData};
+use crate::{BinaryDataSourceType, ConsoleData, CpuData, PpuData, StatusRegisterData};
 
 /// Render a section of VRAM as RGBA image data.
 /// Always interprets VRAM as 16 tiles wide.
@@ -136,6 +136,52 @@ pub fn bytes_to_rgb(
             buffer[8 * i + x] = (0..multi).map(|j| pixels[x + 8 * j] << (2 * j)).sum();
         })
     });
+}
+pub fn get_ram(
+    console: &Console,
+    offset: usize,
+    ram_type: BinaryDataSourceType,
+) -> (ModelRc<ModelRc<i32>>, usize) {
+    // Copy some section of ram
+    let mut data = [[0u8; 32]; 8];
+    macro_rules! copy_data {
+        ($src: expr) => {{
+            let mut it = $src.skip(offset);
+            (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap_or(&0).clone()));
+        }};
+    }
+    // Create a copy of CGRAM as a u8 array
+    let cgram_arr: [u8; 0x200] =
+        core::array::from_fn(|i| console.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
+    // Map type -> data to show
+    use BinaryDataSourceType::*;
+    let data_len = match ram_type {
+        Wram => {
+            copy_data!(console.ram().iter());
+            console.ram().len()
+        }
+        Vram => {
+            copy_data!(console.ppu().vram.iter());
+            console.ppu().vram.len()
+        }
+        Cgram => {
+            copy_data!(cgram_arr.iter());
+            console.ppu().cgram.len() * 2
+        }
+        Cartridge => {
+            copy_data!(console.cartridge().data.iter());
+            console.cartridge().data.len()
+        }
+    };
+    // Copy data
+    return (
+        ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
+            ModelRc::from(Rc::from(VecModel::from_iter(
+                (0..32).map(|j| data[i][j] as i32),
+            )))
+        })))),
+        data_len,
+    );
 }
 // Macro to copy a bunch of fields between structs
 macro_rules! copy_fields {

@@ -21,16 +21,14 @@ export struct BinaryDataSource {
  * View Binary data as a table of bytes
  */
 export component BinaryData {
-    // The binary data to display, as hex strings
+    // The section of binary data to display, as hex strings
     in property <[[int]]> data;
-    // The binary data to display, as an image
+    // The section binary data to display, as an image
     in property <image> data_image;
-    // The headers of the columns, including the top-left cell
-    in property <[string]> column_headers;
-    // The headers of the rows, excluding the top-left cell
-    in property <[string]> row_headers;
-    // The number of pages to show
-    in property <int> num_pages;
+    // The offset of the binary data
+    out property <int> offset;
+    // The length of the data to show
+    in property <int> data_len;
     property <int> num_palettes: 64;
     property <int> tab_index;
     // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
@@ -47,7 +45,11 @@ export component BinaryData {
             bpp: 2,
             palette_index: 0
         };
+        offset = 0;
     }
+
+    // Derived property for the offset to display
+    property <int> display_offset: (source.ramType == BinaryDataSourceType.Wram ? 8257536 : 0) + offset;
 
     function set_bpp(bpp: int) {
         source.page-offset = floor(source.page-offset * source.bpp / bpp);
@@ -76,7 +78,8 @@ export component BinaryData {
     }
 
     function change_page(amount: int) {
-        source.page-offset = clamp(0, source.page-offset + amount, num_pages - 1);
+        let per_page = source.show-as-tile ? 0 : 8 * 32;
+        offset = clamp(offset + per_page * amount, 0, data_len);
     }
 
     VerticalLayout {
@@ -94,7 +97,7 @@ export component BinaryData {
                     } else if (value == "Cartridge") {
                         source.ramType = BinaryDataSourceType.Cartridge
                     }
-                    source.page-offset = 0;
+                    offset = 0;
                 }
             }
 
@@ -103,7 +106,6 @@ export component BinaryData {
                 clicked => {
                     change_page(-16)
                 }
-                enabled: source.page-offset >= 16;
             }
 
             Button {
@@ -111,7 +113,6 @@ export component BinaryData {
                 clicked => {
                     change_page(-1);
                 }
-                enabled: source.page-offset != 0;
             }
 
             // Required for padding
@@ -119,7 +120,7 @@ export component BinaryData {
                 padding-left: 10px;
                 padding-right: 10px;
                 Text {
-                    text: "Page " + source.page-offset;
+                    text: Fmt.address(offset);
                     vertical-alignment: center;
                 }
             }
@@ -129,7 +130,6 @@ export component BinaryData {
                 clicked => {
                     change_page(1)
                 }
-                enabled: source.page-offset != num_pages - 1;
             }
 
             Button {
@@ -137,7 +137,6 @@ export component BinaryData {
                 clicked => {
                     change_page(16)
                 }
-                enabled: source.page-offset < num_pages - 16;
             }
 
             ComboBox {
@@ -182,17 +181,23 @@ export component BinaryData {
                 GridLayout {
                     padding: 10px;
                     Row {
-                        for header[j] in column_headers: Text {
-                            text: header;
+                        Text {
+                            text: Fmt.address(display_offset);
                             color: header_color();
                             font-weight: FontWeight.bold;
-                            horizontal-alignment: j == 0 ? left : right;
+                            horizontal-alignment: left;
+                        }
+
+                        for j in 32: Text {
+                            text: "+" + Fmt.byte(j);
+                            color: header_color();
+                            horizontal-alignment: right;
                         }
                     }
 
                     for row_data[i] in data: Row {
                         Text {
-                            text: row_headers[i];
+                            text: Fmt.address(display_offset + 32 * i);
                             color: header_color();
                             horizontal-alignment: left;
                         }

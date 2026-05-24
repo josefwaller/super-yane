@@ -135,10 +135,10 @@ fn main() {
         engine.borrow_mut().update(Command::Reset);
     }));
     // Define rust functions
-    ui.global::<ExternalFunction>()
-        .on_byte_to_hex(|b| format!("{:02X}", b).into());
-    ui.global::<ExternalFunction>()
-        .on_word_to_hex(|b| format!("{:04X}", b).into());
+    let funcs = ui.global::<ExternalFunction>();
+    funcs.on_byte_to_hex(|b| format!("{:02X}", b).into());
+    funcs.on_word_to_hex(|b| format!("{:04X}", b).into());
+    funcs.on_addr_to_hex(|b| format!("{:06X}", b).into());
     ui.on_load_rom(closure!(clone engine, || {
         match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc"]).pick_file() {
             None => {}

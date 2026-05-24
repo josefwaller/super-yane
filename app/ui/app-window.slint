@@ -34,9 +34,8 @@ export component AppWindow inherits Window {
     out property <BinaryDataSource> binary_source;
     in property <[[int]]> binary_data;
     in property <image> binary_image;
-    in property <[string]> ram_column_headers;
-    in property <[string]> ram_row_headers;
-    in property <int> ram_num_pages;
+    out property <int> binary_data_offset: binary_viewer.offset;
+    in property <int> binary_data_len <=> binary_viewer.data_len;
     in property <int> ram_num_palettes;
 
     callback advance_instructions(int);
@@ -195,12 +194,9 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 vertical-stretch: 0;
-                ram_viewer := BinaryData {
+                binary_viewer := BinaryData {
                     data <=> binary_data;
                     data_image <=> binary_image;
-                    column_headers <=> ram_column_headers;
-                    row_headers <=> ram_row_headers;
-                    num_pages <=> ram_num_pages;
                     source <=> binary_source;
                 }
             }

@@ -4,6 +4,8 @@ export global ExternalFunction {
     pure callback byte_to_hex(int) -> string;
     // Convert a word (2 bytes) to a 4 digit hex string
     pure callback word_to_hex(int) -> string;
+    // Convert an address (3 bytes) to a 6 digit hex string
+    pure callback addr_to_hex(int) -> string;
 }
 
 // Functions used to format values
@@ -15,6 +17,9 @@ export global Fmt {
     // Format a word (2 bytes/16 bits)
     public pure function word(value: int) -> string {
         return ExternalFunction.word_to_hex(value);
+    }
+    public pure function address(value: int) -> string {
+        return ExternalFunction.addr_to_hex(value);
     }
     public pure function flag(value: bool) -> string {
         return value ? "1" : "0";
