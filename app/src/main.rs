@@ -190,7 +190,7 @@ fn main() {
                     let ui = ui_ptr.unwrap();
                     engine.borrow_mut().on_frame();
                     let e = engine.borrow();
-                    let buf = SharedPixelBuffer::clone_from_slice(e.prev_frame_data.as_flattened(), 256, 224);
+                    let buf = SharedPixelBuffer::clone_from_slice(e.prev_frame_data().as_flattened(), 256, 224);
                     ui.set_pixel_data(Image::from_rgb8(buf));
                     ui.set_console_data(e.console_data());
                     {

@@ -109,16 +109,13 @@ pub struct Engine {
     pub disassembler: Arc<Mutex<Disassembler>>,
     pub profiler: Profiler,
     sender: Sender<UpdateEmuPayload>,
-    stream_receiver: Receiver<StreamPayload>,
     /// The RGB data from the previous fully rendered frame
-    pub prev_frame_data: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+    pub prev_frame_data: Arc<Mutex<[[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]>>,
 }
 impl Engine {
     pub fn new() -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
-        // Send new frame data every time a new frame is generated
-        let (stream_sender, stream_receiver) = mpsc::channel::<StreamPayload>();
         // Initialize audio
         let mut audio = Audio::new();
         // Initialize disassembler
@@ -130,6 +127,9 @@ impl Engine {
             volume: 20.0,
             is_paused: false,
         }));
+        let prev_frame_data = Arc::new(Mutex::new(
+            [[0u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+        ));
         disassembler
             .lock()
             .unwrap()
@@ -137,7 +137,7 @@ impl Engine {
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone disassembler, clone console, clone settings, || {
+            .spawn(closure!(clone disassembler, clone console, clone settings, clone prev_frame_data, || {
                 use Command::*;
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
@@ -169,9 +169,7 @@ impl Engine {
                                 // profiler.add_current_state(&console, before_master_cycles);
 
                                 if vblank && !c.ppu().is_in_vblank() {
-                                    stream_sender
-                                        .send(StreamPayload::new(c.ppu().screen_data_rgb()))
-                                        .expect("Unable to send frame data");
+                                    *prev_frame_data.lock().unwrap() = c.ppu().screen_data_rgb();
                                 }
                             };
                         }
@@ -268,12 +266,11 @@ impl Engine {
 
         Engine {
             sender,
-            stream_receiver,
             console,
             settings,
             disassembler,
             profiler: Profiler::new(),
-            prev_frame_data: [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+            prev_frame_data,
         }
     }
 
@@ -316,6 +313,9 @@ impl Engine {
             })
             .expect("Unable to send data to thread");
     }
+    pub fn prev_frame_data(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
+        self.prev_frame_data.lock().unwrap().clone()
+    }
 
     pub fn load_rom(&mut self, bytes: &[u8]) {
         self.sender
@@ -334,15 +334,7 @@ impl Engine {
             .expect("Unable to send payload");
     }
 
-    pub fn on_frame(&mut self) {
-        // Update screen data
-        match self.stream_receiver.try_recv() {
-            Ok(StreamPayload { screen_data: f }) => {
-                self.prev_frame_data = core::array::from_fn(|i| [f[i][0], f[i][1], f[i][2]]);
-            }
-            Err(_) => {}
-        }
-    }
+    pub fn on_frame(&mut self) {}
     pub fn get_savestate(&self) -> Vec<u8> {
         let c = self.console().clone();
         serde_brief::to_vec::<Console>(&c).expect("Unable to serialize console")
