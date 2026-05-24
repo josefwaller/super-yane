@@ -71,19 +71,19 @@ export component CpuDisplay {
 
         CpuReg {
             name: "P";
-            value: data.p;
+            value: Fmt.byte(data.p.value);
             for flag in [
-                { name: "P.n", value: data.p_n },
-                { name: "P.v", value: data.p_v },
-                { name: "P.m", value: data.p_m },
-                { name: "P.xb", value: data.p_xb },
-                { name: "P.d", value: data.p_d },
-                { name: "P.i", value: data.p_i },
-                { name: "P.z", value: data.p_z },
-                { name: "P.c", value: data.p_c },
+                { name: "P.n", value: data.p.n },
+                { name: "P.v", value: data.p.v },
+                { name: "P.m", value: data.p.m },
+                { name: "P.xb", value: data.p.xb },
+                { name: "P.d", value: data.p.d },
+                { name: "P.i", value: data.p.i },
+                { name: "P.z", value: data.p.z },
+                { name: "P.c", value: data.p.c },
             ]: CpuReg {
                 name: flag.name;
-                value: flag.value;
+                value: Fmt.flag(flag.value);
             }
         }
     }

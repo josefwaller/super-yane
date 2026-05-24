@@ -16,4 +16,7 @@ export global Fmt {
     public pure function word(value: int) -> string {
         return ExternalFunction.word_to_hex(value);
     }
+    public pure function flag(value: bool) -> string {
+        return value ? "1" : "0";
+    }
 }

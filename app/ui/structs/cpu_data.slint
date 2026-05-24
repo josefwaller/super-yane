@@ -1,3 +1,5 @@
+import { StatusRegisterData } from "./status_register_data.slint";
+
 // Data from the console's CPU to display
 export struct CpuData {
     pbr: int,
@@ -16,16 +18,5 @@ export struct CpuData {
     dh: int,
     dbr: int,
     s: int,
-    // Status Register
-    p: string,
-    // Status Register Flags
-    p_c: string,
-    p_z: string,
-    p_n: string,
-    p_d: string,
-    p_i: string,
-    p_m: string,
-    p_v: string,
-    p_e: string,
-    p_xb: string
+    p: StatusRegisterData
 }

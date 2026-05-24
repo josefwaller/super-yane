@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use slint::{ModelRc, SharedString, VecModel};
 use super_yane::{Console, Ppu, utils::color_to_rgb_bytes};
-use wdc65816::Processor;
+use wdc65816::{Processor, StatusRegister};
 
-use crate::{ConsoleData, CpuData, PpuData};
+use crate::{ConsoleData, CpuData, PpuData, StatusRegisterData};
 
 /// Render a section of VRAM as RGBA image data.
 /// Always interprets VRAM as 16 tiles wide.
@@ -137,8 +137,16 @@ pub fn bytes_to_rgb(
         })
     });
 }
-// Macro to copy a bunch of integer fields between structs
+// Macro to copy a bunch of fields between structs
 macro_rules! copy_fields {
+    ($from: ident, $to: ident, $($field:ident),*) => {
+        $(
+            $to.$field = $from.$field.into();
+        )*
+    };
+}
+// Macro to copy a bunch of integer fields between structs
+macro_rules! copy_int_fields {
     ($from: ident, $to: ident, $($field:ident),*) => {
         $(
             $to.$field = ($from.$field as i32).into();
@@ -146,10 +154,20 @@ macro_rules! copy_fields {
     };
 }
 
+impl Into<StatusRegisterData> for &StatusRegister {
+    fn into(self) -> StatusRegisterData {
+        let mut data = StatusRegisterData::default();
+        data.value = self.to_byte(false) as i32;
+        copy_fields!(self, data, c, z, n, d, i, m, v, e, xb);
+        data
+    }
+}
+
 impl Into<CpuData> for &Processor {
     fn into(self) -> CpuData {
         let mut data = CpuData::default();
-        copy_fields!(self, data, pc, pbr, a, b, yl, yh, dl, dh, dbr, s);
+        copy_int_fields!(self, data, pc, pbr, a, b, yl, yh, dl, dh, dbr, s);
+        data.p = (&self.p).into();
         data
     }
 }
@@ -157,7 +175,7 @@ impl Into<CpuData> for &Processor {
 impl Into<PpuData> for &Ppu {
     fn into(self) -> PpuData {
         let mut data = PpuData::default();
-        copy_fields!(
+        copy_int_fields!(
             self,
             data,
             vblank,
