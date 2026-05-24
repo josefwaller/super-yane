@@ -1,0 +1,105 @@
+import { BackgroundData } from "../structs/background_data.slint";
+import { Register } from "register.slint";
+import { Fmt } from "../globals.slint";
+import { Palette } from "../palette.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component Field inherits Register {
+    headerColor: Palette.red;
+}
+
+export component Backgrounds {
+    in property <[BackgroundData]> backgrounds;
+
+    ScrollView {
+        VerticalLayout {
+            alignment: start;
+            vertical-stretch: 0;
+            horizontal-stretch: 1;
+            width: 100%;
+            spacing: 5px;
+            padding: 10px;
+            for bg[i] in backgrounds: Register {
+                name: "Background " + i;
+                headerColor: Palette.red;
+                Field {
+                    name: "Enabled";
+                    value: Fmt.flag(bg.main_screen_enable);
+                }
+
+                Field {
+                    name: "Subscreen Enabled";
+                    value: Fmt.flag(bg.sub_screen_enable);
+                }
+
+                Field {
+                    name: "X offset";
+                    value: Fmt.byte(bg.h_off);
+                }
+
+                Field {
+                    name: "Y offset";
+                    value: Fmt.byte(bg.v_off);
+                }
+
+                Field {
+                    name: "Tilemap Address";
+                    value: Fmt.word(bg.tilemap_addr);
+                }
+
+                Field {
+                    name: "Character Address";
+                    value: Fmt.word(bg.chr_addr);
+                }
+
+                Field {
+                    name: "Horizontal Tilemaps";
+                    value: bg.num_horz_tilemaps;
+                }
+
+                Field {
+                    name: "Vertical Tilemaps";
+                    value: bg.num_vert_tilemaps;
+                }
+
+                Field {
+                    name: "Tile Size";
+                    value: bg.tile_size;
+                }
+
+                Field {
+                    name: "Color Math Enabled";
+                    value: Fmt.flag(bg.color_math_enable);
+                }
+
+                Field {
+                    name: "Mosaic Enabled";
+                    value: Fmt.flag(bg.mosaic);
+                }
+
+                Field {
+                    name: "Windows";
+                    Field {
+                        name: "Main Screen Enabled";
+                        value: Fmt.flag(bg.windows_enabled_main);
+                    }
+
+                    Field {
+                        name: "Subscreen Enabled";
+                        value: Fmt.flag(bg.windows_enabled_sub);
+                    }
+
+                    for enabled[j] in bg.window_enabled: Field {
+                        name: "Window " + j + " Enabled";
+                        value: Fmt.flag(enabled);
+                    }
+
+                    for inverted[j] in bg.window_enabled: Field {
+                        name: "Window " + j + " Inverted";
+                        value: Fmt.flag(inverted);
+                    }
+                }
+            }
+        }
+    }
+}

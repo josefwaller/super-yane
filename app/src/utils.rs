@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
-use super_yane::{Console, Ppu, utils::color_to_rgb_bytes};
+use super_yane::{Background, Console, Ppu, utils::color_to_rgb_bytes};
 use wdc65816::{Processor, StatusRegister};
 
-use crate::{BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData};
+use crate::{BackgroundData, BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData};
 
 /// Render a section of VRAM as RGBA image data.
 /// Always interprets VRAM as 16 tiles wide.
@@ -216,6 +216,14 @@ macro_rules! copy_int_fields {
         )*
     };
 }
+// Macro to copy an array of fields
+macro_rules! copy_array_fields {
+    ($from: ident, $to: ident, $($field: ident),*) => {
+        $(
+            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.into_iter())));
+        )*
+    };
+}
 
 impl Into<StatusRegisterData> for &StatusRegister {
     fn into(self) -> StatusRegisterData {
@@ -251,6 +259,35 @@ impl Into<PpuData> for &Ppu {
             cgram_addr
         );
         data.vram_increment_mode = format!("{}", self.vram_increment_mode).into();
+        data
+    }
+}
+
+impl Into<BackgroundData> for &Background {
+    fn into(self) -> BackgroundData {
+        let mut data = BackgroundData::default();
+        copy_int_fields!(
+            self,
+            data,
+            tile_size,
+            num_horz_tilemaps,
+            num_vert_tilemaps,
+            tilemap_addr,
+            chr_addr,
+            h_off,
+            v_off
+        );
+        copy_fields!(
+            self,
+            data,
+            mosaic,
+            main_screen_enable,
+            sub_screen_enable,
+            windows_enabled_main,
+            windows_enabled_sub,
+            color_math_enable
+        );
+        copy_array_fields!(self, data, window_enabled, window_invert);
         data
     }
 }

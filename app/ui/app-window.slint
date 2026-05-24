@@ -17,9 +17,11 @@ import "fonts/KodeMono-VariableFont_wght.ttf";
 import { PpuDisplay } from "components/ppu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
+import { BackgroundData } from "structs/background_data.slint";
 import { Controls } from "components/controls.slint";
 import { BinaryData, BinaryDataSrc } from "components/binary_data.slint";
 import { ExternalFunction } from "./globals.slint";
+import { Backgrounds } from "components/backgrounds.slint";
 
 export { ExternalFunction }
 
@@ -38,6 +40,7 @@ export component AppWindow inherits Window {
     out property <BinaryDataSrc> binary_src <=> binary_viewer.data_src;
     out property <int> bpp <=> binary_viewer.bpp;
     out property <int> palette_index <=> binary_viewer.palette_index;
+    in property <[BackgroundData]> backgrounds;
 
     callback advance_instructions(int);
     callback advance_frames(int);
@@ -144,6 +147,15 @@ export component AppWindow inherits Window {
 
                     Tab {
                         title: "DMA";
+                    }
+
+                    Tab {
+                        title: "BGs";
+                        Backgrounds {
+                            height: 100%;
+                            width: 100%;
+                            backgrounds <=> backgrounds;
+                        }
                     }
                 }
 

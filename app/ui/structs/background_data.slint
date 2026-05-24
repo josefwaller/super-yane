@@ -1,0 +1,18 @@
+export struct BackgroundData {
+    tile_size: int,
+    mosaic: bool,
+    num_horz_tilemaps: int,
+    num_vert_tilemaps: int,
+    tilemap_addr: int,
+    chr_addr: int,
+    h_off: int,
+    v_off: int,
+    main_screen_enable: bool,
+    sub_screen_enable: bool,
+    window_mask_logic: string,
+    windows_enabled_main: bool,
+    windows_enabled_sub: bool,
+    window_enabled: [bool],
+    window_invert: [bool],
+    color_math_enable: bool,
+}

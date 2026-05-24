@@ -199,6 +199,11 @@ fn main() {
                         ui.set_disassembly_lines(ModelRc::new(VecModel::from(e.disassembly_lines(
                             c.cartridge().transform_address(pc)
                         ))));
+                        ui.set_backgrounds(ModelRc::from(
+                            Rc::from(VecModel::from_iter(
+                                c.ppu().backgrounds.iter().map(|b| b.into())
+                            ))
+                        ));
                     }
                     // Set up RAM information
                     e.refresh_binary_data(ui);
