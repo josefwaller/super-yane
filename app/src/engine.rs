@@ -1,6 +1,6 @@
 use crate::{
-    AppWindow, BinaryDataSource, BinaryDataSourceType, DisassemblyLine,
-    utils::{bytes_to_rgb, get_ram},
+    AppWindow, DisassemblyLine,
+    utils::{bytes_to_rgb, get_binary_data},
 };
 use closure::closure;
 use derive_new::new;
@@ -293,65 +293,16 @@ impl Engine {
     /// Data, column headers, row headers, offset, etc.
     pub fn refresh_binary_data(&self, ui: AppWindow) {
         let c = self.console();
-        let source = ui.get_binary_source();
-        use BinaryDataSourceType::*;
-        if source.show_as_tile {
-            let colors: [[u8; 3]; 256] =
-                core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
-            let palette_size = match source.bpp {
-                2 => 4,
-                4 => 16,
-                8 => 64,
-                _ => 4,
-            };
-            let palette = &colors[source.palette_index as usize * palette_size..];
-            // Map data to 2BPP tile
-            const NUM_TILES_WIDTH: usize = 16;
-            const NUM_TILES_HEIGHT: usize = 4;
-            let offset = source.page_offset as usize
-                * NUM_TILES_WIDTH
-                * NUM_TILES_HEIGHT
-                * 8
-                * source.bpp as usize;
-            let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
-            // Create a copy of CGRAM as a u8 array
-            let cgram_arr: [u8; 0x200] =
-                core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
-            let data_src: &[u8] = match source.ramType {
-                Vram => &c.ppu().vram,
-                Cgram => &cgram_arr,
-                Wram => c.ram().as_slice(),
-                Cartridge => &c.cartridge().data,
-            };
-            // Copy data to buffer
-            bytes_to_rgb(
-                &data_src[offset..],
-                NUM_TILES_WIDTH,
-                NUM_TILES_HEIGHT,
-                source.bpp as usize,
-                &mut buffer,
-            );
-            // Map data to RGB
-            let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
-                core::array::from_fn(|i| palette[buffer[i] as usize]);
-            let buf = SharedPixelBuffer::clone_from_slice(
-                rgb_data.as_flattened(),
-                8 * NUM_TILES_WIDTH as u32,
-                8 * NUM_TILES_HEIGHT as u32,
-            );
-            // Send image data to slint
-            ui.set_binary_image(Image::from_rgb8(buf));
-            let mem_per_page = NUM_TILES_HEIGHT * NUM_TILES_WIDTH * 8 * source.bpp as usize;
-            // ui.set_ram_num_pages((data_src.len() / mem_per_page) as i32);
-        } else {
-            let (data, len) = get_ram(
-                &*c,
-                ui.get_binary_data_offset() as usize,
-                ui.get_binary_source().ramType,
-            );
-            ui.set_binary_data(data);
-            ui.set_binary_data_len(len as i32);
-        }
+        let (data, img_data, len) = get_binary_data(
+            &*c,
+            ui.get_binary_data_offset() as usize,
+            ui.get_binary_src(),
+            ui.get_bpp(),
+            ui.get_palette_index() as usize,
+        );
+        ui.set_binary_data(data);
+        ui.set_binary_image(Image::from_rgb8(img_data));
+        ui.set_binary_data_len(len as i32);
     }
     pub fn update_settings(&mut self, settings: Settings) {
         *self.settings.lock().unwrap() = settings;

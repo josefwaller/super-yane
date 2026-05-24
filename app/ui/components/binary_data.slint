@@ -3,19 +3,11 @@ import { Palette } from "../palette.slint";
 import { Fmt } from "../globals.slint";
 
 // Types of binary data sources
-export enum BinaryDataSourceType {
+export enum BinaryDataSrc {
     Wram,
     Vram,
     Cgram,
     Cartridge
-}
-// All the information required to display a block of binary data, except the data itself
-export struct BinaryDataSource {
-    ramType: BinaryDataSourceType,
-    page_offset: int,
-    show_as_tile: bool,
-    bpp: int,
-    palette_index: int,
 }
 /*
  * View Binary data as a table of bytes
@@ -31,54 +23,47 @@ export component BinaryData {
     in property <int> data_len;
     property <int> num_palettes: 64;
     property <int> tab_index;
-    // The source of the data, i.e. what ram (WRAM, VRAM) is being displayed
-    in-out property <BinaryDataSource> source;
-    changed tab_index => {
-        source.show-as-tile = tab_index == 1;
-        source.palette-index = 0;
-    }
+    out property <BinaryDataSrc> data_src;
+    out property <int> bpp;
+    out property <int> palette_index;
+
     init => {
-        source = {
-            ramType: BinaryDataSourceType.Wram,
-            page_offset: 0,
-            show_as_tile: false,
-            bpp: 2,
-            palette_index: 0
-        };
+        data_src = BinaryDataSrc.Wram;
+        bpp = 2;
+        palette_index = 0;
         offset = 0;
     }
 
     // Derived property for the offset to display
-    property <int> display_offset: (source.ramType == BinaryDataSourceType.Wram ? 8257536 : 0) + offset;
+    property <int> display_offset: (data_src == BinaryDataSrc.Wram ? 8257536 : 0) + offset;
 
-    function set_bpp(bpp: int) {
-        source.page-offset = floor(source.page-offset * source.bpp / bpp);
-        source.bpp = bpp;
-        if (source.bpp == 2) {
+    function set_bpp(new_bpp: int) {
+        bpp = new_bpp;
+        if (bpp == 2) {
             num_palettes = 64;
-        } else if (source.bpp == 4) {
+        } else if (bpp == 4) {
             num_palettes = 16;
         } else {
             num_palettes = 1;
         }
-        source.palette-index = clamp(source.palette-index, 0, num_palettes - 1);
+        palette_index = clamp(palette_index, 0, num_palettes - 1);
     }
 
     function header_color() -> color {
-        if (source.ramType == BinaryDataSourceType.Wram) {
+        if (data_src == BinaryDataSrc.Wram) {
             return Palette.blue;
-        } else if (source.ramType == BinaryDataSourceType.Vram) {
+        } else if (data_src == BinaryDataSrc.Vram) {
             return Palette.red;
-        } else if (source.ramType == BinaryDataSourceType.Cgram) {
+        } else if (data_src == BinaryDataSrc.Cgram) {
             return Palette.green;
-        } else if (source.ramType == BinaryDataSourceType.Cartridge) {
+        } else if (data_src == BinaryDataSrc.Cartridge) {
             return Palette.orange;
         }
         return Colors.white;
     }
 
     function change_page(amount: int) {
-        let per_page = source.show-as-tile ? 0 : 8 * 32;
+        let per_page = 8 * 32;
         offset = clamp(offset + per_page * amount, 0, data_len);
     }
 
@@ -89,13 +74,13 @@ export component BinaryData {
                 model: ["WRAM", "VRAM", "CGRAM", "Cartridge"];
                 selected(value) => {
                     if (value == "WRAM") {
-                        source.ramType = BinaryDataSourceType.Wram
+                        data_src = BinaryDataSrc.Wram
                     } else if (value == "VRAM") {
-                        source.ramType = BinaryDataSourceType.Vram
+                        data_src = BinaryDataSrc.Vram
                     } else if (value == "CGRAM") {
-                        source.ramType = BinaryDataSourceType.Cgram
+                        data_src = BinaryDataSrc.Cgram
                     } else if (value == "Cartridge") {
-                        source.ramType = BinaryDataSourceType.Cartridge
+                        data_src = BinaryDataSrc.Cartridge
                     }
                     offset = 0;
                 }
@@ -155,21 +140,21 @@ export component BinaryData {
             Button {
                 text: "-1";
                 clicked => {
-                    source.palette_index = max(source.palette_index - 1, 0);
+                    palette_index = max(palette_index - 1, 0);
                 }
             }
 
             VerticalLayout {
                 alignment: center;
                 Text {
-                    text: "Palette " + source.palette_index;
+                    text: "Palette " + palette_index;
                 }
             }
 
             Button {
                 text: "+1";
                 clicked => {
-                    source.palette_index = min(source.palette_index + 1, num_palettes - 1);
+                    palette_index = min(palette_index + 1, num_palettes - 1);
                 }
             }
         }

@@ -18,7 +18,7 @@ import { PpuDisplay } from "components/ppu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
 import { Controls } from "components/controls.slint";
-import { BinaryData, BinaryDataSource } from "components/binary_data.slint";
+import { BinaryData, BinaryDataSrc } from "components/binary_data.slint";
 import { ExternalFunction } from "./globals.slint";
 
 export { ExternalFunction }
@@ -31,12 +31,13 @@ export component AppWindow inherits Window {
     // The lines to display
     in property <[DisassemblyLine]> disassembly_lines;
     // Binary data to display
-    out property <BinaryDataSource> binary_source;
-    in property <[[int]]> binary_data;
-    in property <image> binary_image;
+    in property <[[int]]> binary_data <=> binary_viewer.data;
+    in property <image> binary_image <=> binary_viewer.data_image;
     out property <int> binary_data_offset: binary_viewer.offset;
     in property <int> binary_data_len <=> binary_viewer.data_len;
-    in property <int> ram_num_palettes;
+    out property <BinaryDataSrc> binary_src <=> binary_viewer.data_src;
+    out property <int> bpp <=> binary_viewer.bpp;
+    out property <int> palette_index <=> binary_viewer.palette_index;
 
     callback advance_instructions(int);
     callback advance_frames(int);
@@ -194,11 +195,7 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 vertical-stretch: 0;
-                binary_viewer := BinaryData {
-                    data <=> binary_data;
-                    data_image <=> binary_image;
-                    source <=> binary_source;
-                }
+                binary_viewer := BinaryData { }
             }
         }
     }

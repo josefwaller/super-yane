@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use super_yane::{Console, Ppu, utils::color_to_rgb_bytes};
 use wdc65816::{Processor, StatusRegister};
 
-use crate::{BinaryDataSourceType, ConsoleData, CpuData, PpuData, StatusRegisterData};
+use crate::{BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData};
 
 /// Render a section of VRAM as RGBA image data.
 /// Always interprets VRAM as 16 tiles wide.
@@ -137,49 +137,66 @@ pub fn bytes_to_rgb(
         })
     });
 }
-pub fn get_ram(
-    console: &Console,
+pub fn get_binary_data(
+    c: &Console,
     offset: usize,
-    ram_type: BinaryDataSourceType,
-) -> (ModelRc<ModelRc<i32>>, usize) {
+    ram_type: BinaryDataSrc,
+    bpp: i32,
+    palette_index: usize,
+) -> (ModelRc<ModelRc<i32>>, SharedPixelBuffer<Rgb8Pixel>, usize) {
     // Copy some section of ram
     let mut data = [[0u8; 32]; 8];
-    macro_rules! copy_data {
-        ($src: expr) => {{
-            let mut it = $src.skip(offset);
-            (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap_or(&0).clone()));
-        }};
-    }
     // Create a copy of CGRAM as a u8 array
     let cgram_arr: [u8; 0x200] =
-        core::array::from_fn(|i| console.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
-    // Map type -> data to show
-    use BinaryDataSourceType::*;
-    let data_len = match ram_type {
-        Wram => {
-            copy_data!(console.ram().iter());
-            console.ram().len()
-        }
-        Vram => {
-            copy_data!(console.ppu().vram.iter());
-            console.ppu().vram.len()
-        }
-        Cgram => {
-            copy_data!(cgram_arr.iter());
-            console.ppu().cgram.len() * 2
-        }
-        Cartridge => {
-            copy_data!(console.cartridge().data.iter());
-            console.cartridge().data.len()
-        }
+        core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
+    // Get data as slice
+    use BinaryDataSrc::*;
+    let (data_src, data_len): (&[u8], usize) = match ram_type {
+        Vram => (&c.ppu().vram, c.ppu().vram.len()),
+        Cgram => (&cgram_arr, 2 * c.ppu().cgram.len()),
+        Wram => (c.ram().as_slice(), c.ram().len()),
+        Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
     };
-    // Copy data
+    // Copy binary data to array
+    let mut it = data_src.iter().skip(offset);
+    (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap_or(&0).clone()));
+    // Collect colors
+    let colors: [[u8; 3]; 256] =
+        core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
+    let palette_size = match bpp {
+        2 => 4,
+        4 => 16,
+        8 => 64,
+        _ => 4,
+    };
+    let palette = &colors[palette_index as usize * palette_size..];
+    // Map data to 2BPP tile
+    const NUM_TILES_WIDTH: usize = 16;
+    const NUM_TILES_HEIGHT: usize = 4;
+    let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
+    // Copy data to image buffer
+    bytes_to_rgb(
+        &data_src[offset..],
+        NUM_TILES_WIDTH,
+        NUM_TILES_HEIGHT,
+        bpp as usize,
+        &mut buffer,
+    );
+    // Map data to RGB
+    let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
+        core::array::from_fn(|i| palette[buffer[i] as usize]);
+    let buf = SharedPixelBuffer::clone_from_slice(
+        rgb_data.as_flattened(),
+        8 * NUM_TILES_WIDTH as u32,
+        8 * NUM_TILES_HEIGHT as u32,
+    );
     return (
         ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
             ModelRc::from(Rc::from(VecModel::from_iter(
                 (0..32).map(|j| data[i][j] as i32),
             )))
         })))),
+        buf,
         data_len,
     );
 }
