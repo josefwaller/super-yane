@@ -150,58 +150,28 @@ fn h16(value: impl Into<u16>) -> SharedString {
 fn b(value: bool) -> SharedString {
     format!("{}", u8::from(value)).into()
 }
+
+macro_rules! copy_fields {
+    ($from: ident, $to: ident, $($field:ident),*) => {
+        $(
+            $to.$field = ($from.$field as i32).into();
+        )*
+    };
+}
 impl Into<CpuData> for &Processor {
     fn into(self) -> CpuData {
-        let Processor {
-            a,
-            b: b_reg,
-            xl,
-            xh,
-            yl,
-            yh,
-            pbr,
-            pc,
-            dbr,
-            dl,
-            dh,
-            s,
-            p,
-            ..
-        } = *self;
-        CpuData {
-            pbr: h8(pbr),
-            pc: h16(pc),
-            a: h8(a),
-            b: h8(b_reg),
-            c: h16(self.c()),
-            x: h16(self.x()),
-            xl: h8(xl),
-            xh: h8(xh),
-            y: h16(self.y()),
-            yl: h8(yl),
-            yh: h8(yh),
-            sp: h16(s),
-            dbr: h8(dbr),
-            d: h16(self.dr()),
-            dl: h8(dl),
-            dh: h8(dh),
-            p: h8(p.to_byte(true)),
-            p_z: b(p.z),
-            p_v: b(p.v),
-            p_n: b(p.n),
-            p_c: b(p.c),
-            p_d: b(p.d),
-            p_i: b(p.i),
-            p_m: b(p.m),
-            p_e: b(p.e),
-            p_xb: b(p.xb),
-        }
+        let mut data = CpuData::default();
+        copy_fields!(self, data, pc, pbr, a, b, yl, yh, dl, dh, dbr, s);
+        data
     }
 }
 
 impl Into<PpuData> for &Ppu {
     fn into(self) -> PpuData {
-        let Ppu {
+        let mut data = PpuData::default();
+        copy_fields!(
+            self,
+            data,
             vblank,
             forced_blanking,
             brightness,
@@ -209,22 +179,9 @@ impl Into<PpuData> for &Ppu {
             bg3_prio,
             mosaic_size,
             vram_addr,
-            vram_increment_mode,
-            vram_increment_amount,
-            cgram_addr,
-            ..
-        } = *self;
-        PpuData {
-            vblank: b(vblank),
-            forced_blanking: b(forced_blanking),
-            brightness: h8(brightness),
-            bg_mode: h8(bg_mode as u8),
-            bg3_prio: b(bg3_prio),
-            mosaic_size: h8(mosaic_size as u8),
-            vram_addr: h16(vram_addr as u16),
-            vram_inc_mode: vram_increment_mode.to_string().into(),
-            vram_inc_amt: h16(vram_increment_amount as u16),
-            cgram_addr: h16(cgram_addr as u16),
-        }
+            cgram_addr
+        );
+        data.vram_increment_mode = format!("{}", self.vram_increment_mode).into();
+        data
     }
 }

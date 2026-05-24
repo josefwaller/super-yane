@@ -24,7 +24,7 @@ mod engine;
 // use program::Program;
 
 use crate::engine::{AdvanceAmount, Command, Engine};
-use super_yane::InputPort;
+use super_yane::{Cpu, InputPort};
 mod disassembler;
 mod profiler;
 mod table;
@@ -33,6 +33,10 @@ slint::include_modules!();
 
 impl Into<InputPort> for StandardController {
     fn into(self) -> InputPort {
+        // let mut port = InputPort::default_standard_controller();
+        // copy_fields!(
+        //     self, port, a, b, x, y, up, left, right, down, start, select, r, l
+        // );
         let StandardController {
             a,
             b,
@@ -130,9 +134,10 @@ fn main() {
     ui.on_reset(closure!(clone engine, || {
         engine.borrow_mut().update(Command::Reset);
     }));
-    ui.global::<Utils>()
+    // Define rust functions
+    ui.global::<ExternalFunction>()
         .on_byte_to_hex(|b| format!("{:02X}", b).into());
-    ui.global::<Utils>()
+    ui.global::<ExternalFunction>()
         .on_word_to_hex(|b| format!("{:04X}", b).into());
     ui.on_load_rom(closure!(clone engine, || {
         match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc"]).pick_file() {

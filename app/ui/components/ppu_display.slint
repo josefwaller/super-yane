@@ -1,6 +1,7 @@
 import { PpuData } from "../structs/ppu_data.slint";
 import { RegisterList } from "register_list.slint";
 import { Palette } from "../palette.slint";
+import { Fmt } from "../globals.slint";
 
 export component PpuDisplay {
     in property <PpuData> data;
@@ -31,19 +32,19 @@ export component PpuDisplay {
             },
             {
                 name: "VRAM Inc Mode",
-                value: data.vram-inc-mode,
+                value: data.vram-increment-mode,
             },
             {
                 name: "VRAM Inc Amount",
-                value: data.vram-inc-amt,
+                value: data.vram-increment-amount,
             },
             {
                 name: "VRAM Address",
-                value: data.vram-addr,
+                value: Fmt.word(data.vram-addr),
             },
             {
                 name: "CGRAM Address",
-                value: data.cgram-addr,
+                value: Fmt.word(data.cgram-addr),
             }
         ];
     }

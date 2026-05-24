@@ -1,4 +1,19 @@
-export global Utils {
+// Rust functions, accessible in slint
+export global ExternalFunction {
+    // Convert a byte to a 2 digit hex string
     pure callback byte_to_hex(int) -> string;
+    // Convert a word (2 bytes) to a 4 digit hex string
     pure callback word_to_hex(int) -> string;
+}
+
+// Functions used to format values
+export global Fmt {
+    // Format a byte
+    public pure function byte(value: int) -> string {
+        return ExternalFunction.byte_to_hex(value);
+    }
+    // Format a word (2 bytes/16 bits)
+    public pure function word(value: int) -> string {
+        return ExternalFunction.word_to_hex(value);
+    }
 }

@@ -1,28 +1,29 @@
 import { Register } from "./register.slint";
 import { Palette } from "../palette.slint";
+import { Fmt } from "../globals.slint";
 
 export component HighLowRegister {
     in property <string> name;
-    in property <string> value;
-    in property <string> low;
-    in property <string> high;
+    in property <int> value;
+    in property <int> low;
+    in property <int> high;
     in property <color> primaryHeader;
     in property <color> secondaryHeader;
     property <bool> is_open;
     VerticalLayout {
         Register {
             name: name;
-            value: value;
+            value: Fmt.word(value);
             headerColor <=> primaryHeader;
             Register {
                 name: name + "l";
-                value: low;
+                value: Fmt.byte(low);
                 headerColor <=> primaryHeader;
             }
 
             Register {
                 name: name + "h";
-                value: high;
+                value: Fmt.byte(high);
                 headerColor <=> primaryHeader;
             }
         }

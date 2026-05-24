@@ -3,6 +3,7 @@ import { VerticalBox, StandardTableView, Button } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
 import { Register } from "./register.slint";
 import { HighLowRegister } from "./high_low_register.slint";
+import { Fmt } from "../globals.slint";
 
 component CpuReg inherits Register {
     headerColor: Palette.blue;
@@ -18,12 +19,12 @@ export component CpuDisplay {
         vertical-stretch: 0;
         CpuReg {
             name: "PBR";
-            value: data.pbr;
+            value: Fmt.byte(data.pbr);
         }
 
         CpuReg {
             name: "PC";
-            value: data.pc;
+            value: Fmt.word(data.pc);
         }
 
         HighLowRegister {
@@ -52,12 +53,12 @@ export component CpuDisplay {
 
         CpuReg {
             name: "SP";
-            value: data.sp;
+            value: Fmt.word(data.s);
         }
 
         CpuReg {
             name: "DBR";
-            value: data.dbr;
+            value: Fmt.byte(data.dbr);
         }
 
         HighLowRegister {
