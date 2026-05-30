@@ -16,6 +16,11 @@ export component Disassembly {
             spacing: 10px;
 
             Text {
+                text: line.pc + ":";
+                color: Palette.blue;
+            }
+
+            Text {
                 text: line.instruction;
                 color: Palette.blue;
             }
