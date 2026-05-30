@@ -134,6 +134,10 @@ impl Engine {
             .lock()
             .unwrap()
             .add_native_vectors(console.lock().unwrap().deref());
+        disassembler
+            .lock()
+            .unwrap()
+            .add_current_instruction(console.lock().unwrap().deref());
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
@@ -354,9 +358,10 @@ impl Engine {
             .iter()
             .filter(|(i, _)| **i >= pc)
             .take(32)
-            .map(|(_, inst)| {
+            .map(|(i, inst)| {
                 let d = inst.data();
                 DisassemblyLine {
+                    pc: format!("{:06X}", i).into(),
                     instruction: d.name.into(),
                     arguments: inst.operands(&BTreeMap::new()).into(),
                 }
