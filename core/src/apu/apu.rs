@@ -90,8 +90,8 @@ impl HasAddressBus for ApuMemory {
     fn read(&mut self, address: usize) -> u8 {
         self.advance_apu_clocks(2);
         match address {
-            0xF0 => todo!(),
-            0xF1 => todo!(),
+            0xF0 => todo!("APU Register F0"),
+            0xF1 => todo!("APU Register F1"),
             0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr),
             0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
@@ -108,7 +108,7 @@ impl HasAddressBus for ApuMemory {
                     self.ram[address]
                 }
             }
-            _ => panic!("Should be impossible"),
+            _ => unreachable!("Invalid APU read address: {:X}", address),
         }
     }
     fn write(&mut self, address: usize, value: u8) {
