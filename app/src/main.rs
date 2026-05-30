@@ -140,7 +140,7 @@ fn main() {
     funcs.on_word_to_hex(|b| format!("{:04X}", b).into());
     funcs.on_addr_to_hex(|b| format!("{:06X}", b).into());
     ui.on_load_rom(closure!(clone engine, || {
-        match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc"]).pick_file() {
+        match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc", "smc"]).pick_file() {
             None => {}
             Some(path) => {
                 match std::fs::read(&path) {
@@ -156,8 +156,8 @@ fn main() {
     }));
     ui.on_save_savestate(closure!(clone engine, || {
         match FileDialog::new()
-            .add_filter("Super Y.A.N.E. Savestate", &["sy.bin"])
             .set_title("Save game state")
+            .set_file_name("savestate.bin")
             .save_file() {
             None => {},
             Some(path) => {
@@ -171,7 +171,7 @@ fn main() {
     }));
     ui.on_load_savestate(closure!(clone engine, || {
         match FileDialog::new()
-            .add_filter("Super Y.A.N.E. Savestate", &["sy.bin"])
+            .add_filter("Super Y.A.N.E. Savestate", &["bin"])
             .set_title("Load game state")
             .pick_file() {
                 None => {},
