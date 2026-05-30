@@ -288,6 +288,7 @@ impl Engine {
         ConsoleData {
             cpu: c.cpu().into(),
             ppu: c.ppu().into(),
+            apu: c.apu().into(),
         }
     }
     /// Update all the info for the binary data viewer.

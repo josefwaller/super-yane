@@ -13,8 +13,10 @@ import { Settings } from "structs/settings.slint";
 import { StandardController } from "structs/standard_controller.slint";
 import { ConsoleData } from "structs/console_data.slint";
 import { CpuDisplay } from "components/cpu_display.slint";
+import { ApuData } from "structs/apu_data.slint";
 import "fonts/KodeMono-VariableFont_wght.ttf";
 import { PpuDisplay } from "components/ppu_display.slint";
+import { ApuDisplay } from "components/apu_display.slint";
 import { Disassembly } from "components/disassembly.slint";
 import { DisassemblyLine } from "structs/disassembly_line.slint";
 import { BackgroundData } from "structs/background_data.slint";
@@ -143,6 +145,11 @@ export component AppWindow inherits Window {
 
                     Tab {
                         title: "APU";
+                        ApuDisplay {
+                            data: console_data.apu;
+                            width: 100%;
+                            height: 100%;
+                        }
                     }
 
                     Tab {

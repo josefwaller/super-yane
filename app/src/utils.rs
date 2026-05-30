@@ -1,10 +1,12 @@
 use std::rc::Rc;
 
 use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
-use super_yane::{Background, Console, Ppu, utils::color_to_rgb_bytes};
+use super_yane::{Background, Console, Ppu, apu::Apu, utils::color_to_rgb_bytes};
 use wdc65816::{Processor, StatusRegister};
 
-use crate::{BackgroundData, BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData};
+use crate::{
+    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData,
+};
 
 /// Render a section of VRAM as RGBA image data.
 /// Always interprets VRAM as 16 tiles wide.
@@ -220,7 +222,7 @@ macro_rules! copy_int_fields {
 macro_rules! copy_array_fields {
     ($from: ident, $to: ident, $($field: ident),*) => {
         $(
-            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.into_iter())));
+            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.into_iter().map(|v| v.into()))));
         )*
     };
 }
@@ -288,6 +290,22 @@ impl Into<BackgroundData> for &Background {
             color_math_enable
         );
         copy_array_fields!(self, data, window_enabled, window_invert);
+        data
+    }
+}
+
+impl Into<ApuData> for &Apu {
+    fn into(self) -> ApuData {
+        let mut data = ApuData::default();
+        let c = &self.core;
+        copy_fields!(c, data, a, x, y, sp, pc);
+        data.psw_byte = c.psw.to_byte().into();
+        let c_psw = &c.psw;
+        let d_psw = &mut data.psw;
+        copy_fields!(c_psw, d_psw, n, v, p, b, h, i, z, c);
+        let r = &self.rest;
+        copy_fields!(r, data, expose_ipl_rom, dsp_addr, dsp_read_only);
+        copy_array_fields!(r, data, cpu_to_apu_reg, apu_to_cpu_reg);
         data
     }
 }

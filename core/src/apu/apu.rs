@@ -18,12 +18,15 @@ pub const CLOCKS_PER_SAMPLE: usize = 96;
 pub struct ApuTimer {
     #[new(value = "false")]
     pub enabled: bool,
+    // TODO: Remove these aliases before launch
     // Set by program
     #[new(value = "0")]
-    pub timer_target: u8,
+    #[serde(alias = "timer_target")]
+    pub target: u8,
     // Automatically counts up
     #[new(value = "0")]
-    pub timer_value: u8,
+    #[serde(alias = "timer_value")]
+    pub value: u8,
     /// Really u4
     #[new(value = "0")]
     pub counter: u8,
@@ -48,7 +51,7 @@ pub struct ApuMemory {
     pub total_clocks: usize,
     #[derivative(Default(value = "true"))]
     pub expose_ipl_rom: bool,
-    pub dsp_addr: usize,
+    pub dsp_addr: u8,
     pub dsp: Dsp,
     pub dsp_read_only: bool,
 }
@@ -67,10 +70,10 @@ impl ApuMemory {
                         if (self.total_clocks / 3) % clks == 0 {
                             let t = &mut self.timers[i];
                             // Increment timer and increment counter if it overflows
-                            t.timer_value = t.timer_value.wrapping_add(1);
-                            if t.timer_value == t.timer_target || t.timer_value == 0 {
+                            t.value = t.value.wrapping_add(1);
+                            if t.value == t.target || t.value == 0 {
                                 t.counter = t.counter.wrapping_add(1);
-                                t.timer_value = 0;
+                                t.value = 0;
                             }
                         }
                     });
@@ -93,7 +96,7 @@ impl HasAddressBus for ApuMemory {
             0xF0 => todo!("APU Register F0"),
             0xF1 => todo!("APU Register F1"),
             0x00F2 => self.dsp_addr as u8,
-            0x00F3 => self.dsp.read(self.dsp_addr),
+            0x00F3 => self.dsp.read(self.dsp_addr as usize),
             0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
             0x00FD..0x00FF => {
                 let v = self.timers[address - 0x00FD].counter;
@@ -128,25 +131,25 @@ impl HasAddressBus for ApuMemory {
                 (0..3).for_each(|i| {
                     if bit(value, i) {
                         self.timers[i].enabled = false;
-                        self.timers[i].timer_value = 0;
+                        self.timers[i].value = 0;
                         self.timers[i].counter = 0;
                     }
                 });
             }
             0x00F2 => {
-                self.dsp_addr = (value & 0x7F) as usize;
+                self.dsp_addr = value & 0x7F;
                 self.dsp_read_only = bit(value, 7);
             }
             0x00F3 => {
                 if !self.dsp_read_only {
-                    self.dsp.write(self.dsp_addr, value);
+                    self.dsp.write(self.dsp_addr as usize, value);
                 }
             }
             0x00F4..0x00F8 => {
                 self.apu_to_cpu_reg[address - 0x00F4] = value;
             }
             0x00FA..0x00FD => {
-                self.timers[address - 0x00FA].timer_target = value;
+                self.timers[address - 0x00FA].target = value;
             }
             _ => self.ram[address] = value,
         }

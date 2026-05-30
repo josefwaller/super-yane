@@ -1,0 +1,28 @@
+export struct ApuStatus {
+    n: bool,
+    v: bool,
+    p: bool,
+    b: bool,
+    h: bool,
+    i: bool,
+    z: bool,
+    c: bool,
+}
+
+export struct Timer { enabled: bool, target: int, value: int, counter: int}
+
+export struct ApuData {
+    a: int,
+    x: int,
+    y: int,
+    sp: int,
+    pc: int,
+    psw: ApuStatus,
+    psw_byte: int,
+    apu_to_cpu_reg: [int],
+    cpu_to_apu_reg: [int],
+    timers: [Timer],
+    expose_ipl_rom: bool,
+    dsp_addr: int,
+    dsp_read_only: bool
+}
