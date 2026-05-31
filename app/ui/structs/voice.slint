@@ -1,0 +1,17 @@
+export struct Voice {
+    state: string,
+    volume: [int],
+    sample_pitch: int,
+    sample_src: int,
+    adsr_enabled: bool,
+    decay_rate: int,
+    attack_rate: int,
+    sustain_level: int,
+    sustain_rate: int,
+    gain_rate: int,
+    echo_enabled: bool,
+    end_flag: bool,
+    pitch_mod_enabled: bool,
+    envelope: int,
+    noise_enabled: bool
+}

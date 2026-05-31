@@ -3,14 +3,14 @@ use std::rc::Rc;
 use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use super_yane::{
     Background, Console, Ppu,
-    apu::{Apu, Dsp},
+    apu::{Apu, Dsp, Voice},
     utils::color_to_rgb_bytes,
 };
 use wdc65816::{Processor, StatusRegister};
 
 use crate::{
     ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, PpuData,
-    StatusRegisterData,
+    StatusRegisterData, Voice as SlintVoice,
 };
 
 /// Render a section of VRAM as RGBA image data.
@@ -228,9 +228,24 @@ macro_rules! copy_int_fields {
 macro_rules! copy_array_fields {
     ($from: ident, $to: ident, $($field: ident),*) => {
         $(
-            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.into_iter().map(|v| v.into()))));
+            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.iter().map(|v| v.clone().into()))));
         )*
     };
+}
+
+impl Into<ConsoleData> for &Console {
+    fn into(self) -> ConsoleData {
+        let mut data = ConsoleData {
+            cpu: self.cpu().into(),
+            ppu: self.ppu().into(),
+            apu: self.apu().into(),
+            dsp: self.apu().dsp().into(),
+            ..ConsoleData::default()
+        };
+        let dsp = self.apu().dsp();
+        copy_array_fields!(dsp, data, voices);
+        data
+    }
 }
 
 impl Into<StatusRegisterData> for &StatusRegister {
@@ -337,6 +352,36 @@ impl Into<DspData> for &Dsp {
                 )))
             }),
         )));
+        data
+    }
+}
+
+impl Into<SlintVoice> for Voice {
+    fn into(self) -> SlintVoice {
+        let mut data = SlintVoice::default();
+        data.state = self.state.to_string().into();
+        copy_int_fields!(
+            self,
+            data,
+            sample_pitch,
+            sample_src,
+            decay_rate,
+            attack_rate,
+            sustain_level,
+            sustain_rate,
+            gain_rate,
+            envelope
+        );
+        copy_fields!(
+            self,
+            data,
+            adsr_enabled,
+            echo_enabled,
+            end_flag,
+            pitch_mod_enabled,
+            noise_enabled
+        );
+        copy_array_fields!(self, data, volume);
         data
     }
 }

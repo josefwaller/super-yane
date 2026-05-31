@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Shr};
+use std::ops::Shr;
 
 use crate::apu::constants::{
     ENVELOPE_MAX_VALUE, GAUSS_TABLE, LEFT, PERIOD_OFFSET_TABLE, PERIOD_TABLE, RELEASE_PERIOD_RATE,
@@ -137,7 +137,7 @@ pub struct Voice {
     pub(super) counter: u16,
     /// Whether pitch modulation is enabled
     pub pitch_mod_enabled: bool,
-    /// The current envelope of the voic
+    /// The current envelope of the voice
     pub envelope: u16,
     /// Internal period counter value
     period_counter: usize,

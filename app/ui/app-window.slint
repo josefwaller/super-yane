@@ -26,6 +26,7 @@ import { BinaryData, BinaryDataSrc } from "components/binary_data.slint";
 import { ExternalFunction } from "./globals.slint";
 import { Backgrounds } from "components/backgrounds.slint";
 import { DspDisplay } from "components/dsp_display.slint";
+import { VoicesDisplay } from "components/voices_display.slint";
 
 export { ExternalFunction }
 
@@ -137,6 +138,10 @@ export component AppWindow inherits Window {
                     }
 
                     Tab {
+                        title: "DMA";
+                    }
+
+                    Tab {
                         title: "PPU";
                         PpuDisplay {
                             height: 100%;
@@ -173,7 +178,10 @@ export component AppWindow inherits Window {
                     }
 
                     Tab {
-                        title: "DMA";
+                        title: "Voices";
+                        VoicesDisplay {
+                            data: console_data.voices;
+                        }
                     }
                 }
 

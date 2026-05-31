@@ -2,5 +2,12 @@ import { CpuData } from "./cpu_data.slint";
 import { PpuData } from "./ppu_data.slint";
 import { ApuData } from "./apu_data.slint";
 import { DspData } from "./dsp_data.slint";
+import { Voice } from "./voice.slint";
 // Data from the console
-export struct ConsoleData { cpu: CpuData, ppu: PpuData, apu: ApuData, dsp: DspData}
+export struct ConsoleData {
+    cpu: CpuData,
+    ppu: PpuData,
+    apu: ApuData,
+    dsp: DspData,
+    voices: [Voice],
+}

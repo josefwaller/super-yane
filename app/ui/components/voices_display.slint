@@ -1,0 +1,105 @@
+import { Register } from "register.slint";
+import { Palette } from "../palette.slint";
+import { Voice } from "../structs/voice.slint";
+import { Fmt } from "../globals.slint";
+import { RegisterList } from "register_list.slint";
+
+component Reg inherits Register {
+    headerColor: Palette.apu;
+}
+
+component Voice inherits Reg {
+    in property <int> index;
+    in property <Voice> data;
+    name: "Voice " + index;
+
+    Reg {
+        name: "State";
+        value: data.state;
+    }
+
+    Reg {
+        name: "Volume";
+        Reg {
+            name: "Left";
+            value: Fmt.byte(data.volume[0]);
+        }
+
+        Reg {
+            name: "Right";
+            value: Fmt.byte(data.volume[1]);
+        }
+    }
+
+    Reg {
+        name: "Pitch";
+        value: Fmt.word(data.sample_pitch);
+    }
+
+    Reg {
+        name: "Source";
+        value: Fmt.word(data.sample_src);
+    }
+
+    Reg {
+        name: "ADSR";
+        Reg {
+            name: "Enabled";
+            value: Fmt.flag(data.adsr_enabled);
+        }
+
+        Reg {
+            name: "Attack Rate";
+            value: Fmt.byte(data.attack_rate);
+        }
+
+        Reg {
+            name: "Decay Rate";
+            value: Fmt.byte(data.decay_rate);
+        }
+
+        Reg {
+            name: "Sustain Rate";
+            value: Fmt.byte(data.sustain_rate);
+        }
+
+        Reg {
+            name: "Sustain Level";
+            value: Fmt.byte(data.sustain_level);
+        }
+    }
+
+    Reg {
+        name: "Gain Rate";
+        value: Fmt.byte(data.gain_rate);
+    }
+
+    Reg {
+        name: "Echo enabled";
+        value: Fmt.flag(data.echo_enabled);
+    }
+
+    Reg {
+        name: "Pitch Modulation Enabled";
+        value: Fmt.flag(data.pitch_mod_enabled);
+    }
+
+    Reg {
+        name: "Envelope";
+        value: Fmt.word(data.envelope);
+    }
+
+    Reg {
+        name: "Noise Enabled";
+        value: Fmt.flag(data.noise_enabled);
+    }
+}
+
+export component VoicesDisplay inherits RegisterList {
+    in property <[Voice]> data;
+
+    for d[i] in data: Voice {
+        index: i;
+        data: d;
+    }
+}

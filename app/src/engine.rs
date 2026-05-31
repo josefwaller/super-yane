@@ -282,15 +282,7 @@ impl Engine {
         self.console.lock().expect("Unable to get lock on console")
     }
     pub fn console_data(&self) -> ConsoleData {
-        // Copy console data
-        let c = self.console();
-
-        ConsoleData {
-            cpu: c.cpu().into(),
-            ppu: c.ppu().into(),
-            apu: c.apu().into(),
-            dsp: c.apu().dsp().into(),
-        }
+        self.console.lock().unwrap().deref().into()
     }
     /// Update all the info for the binary data viewer.
     /// Data, column headers, row headers, offset, etc.
