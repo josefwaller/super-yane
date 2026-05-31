@@ -1,4 +1,4 @@
-import { Button, Slider } from "std-widgets.slint";
+import { Button, Slider, CheckBox } from "std-widgets.slint";
 import { Settings } from "../structs/settings.slint";
 
 export component Controls {
@@ -7,34 +7,48 @@ export component Controls {
     callback advance_frame;
     callback reset;
 
-    HorizontalLayout {
-        spacing: 5px;
-        Button {
-            text: "Reset";
-            clicked => {
-                reset()
-            };
-        }
+    VerticalLayout {
+        HorizontalLayout {
+            spacing: 5px;
+            Button {
+                text: "Reset";
+                clicked => {
+                    reset()
+                };
+            }
 
-        Button {
-            text: settings.is-paused ? "Play" : "Pause";
-            clicked => {
-                settings.is-paused = !settings.is-paused
+            Button {
+                text: settings.is-paused ? "Play" : "Pause";
+                clicked => {
+                    settings.is-paused = !settings.is-paused
+                }
+            }
+
+            Button {
+                text: "1 INST";
+                clicked => advance_instruction();
+            }
+
+            Button {
+                text: "1 FRAME";
+                clicked => advance_frame();
+            }
+
+            Slider {
+                value <=> settings.volume;
             }
         }
 
-        Button {
-            text: "1 INST";
-            clicked => advance_instruction();
-        }
+        HorizontalLayout {
+            CheckBox {
+                checked <=> settings.log_cpu;
+                text: "Log CPU";
+            }
 
-        Button {
-            text: "1 FRAME";
-            clicked => advance_frame();
-        }
-
-        Slider {
-            value <=> settings.volume;
+            CheckBox {
+                checked <=> settings.log_apu;
+                text: "Log APU";
+            }
         }
     }
 }

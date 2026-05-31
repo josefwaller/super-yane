@@ -126,6 +126,8 @@ impl Engine {
         let settings = Arc::new(Mutex::new(Settings {
             volume: 20.0,
             is_paused: false,
+            log_apu: false,
+            log_cpu: false,
         }));
         let prev_frame_data = Arc::new(Mutex::new(
             [[0u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
@@ -152,22 +154,24 @@ impl Engine {
                     {
                         // Get a lock on the console
                         let mut c = console.lock().unwrap();
+                        // Clone settings
+                        let s = settings.lock().unwrap().clone();
                         /// Advance by 1 instruction
                         macro_rules! advance {
                             () => {
                                 let vblank = c.ppu().is_in_vblank();
-                                let before_master_cycles = *c.total_master_clocks();
+                                // let before_master_cycles = *c.total_master_clocks();
                                 c.step_cpu();
-                                // if payload.settings.log_cpu {
-                                //     let inst = CpuSnapshot::from(&console);
-                                //     info!("{}", inst);
-                                // }
+                                if s.log_cpu {
+                                    let inst = CpuSnapshot::from(&c);
+                                    info!("{}", inst);
+                                }
                                 while c.apu_is_behind() {
                                     c.step_apu();
-                                    // if payload.settings.log_apu {
-                                    //     let inst = ApuSnapshot::from(&console);
-                                    //     info!("{}", inst);
-                                    // }
+                                    if s.log_apu {
+                                        let inst = ApuSnapshot::from(&c);
+                                        info!("{}", inst);
+                                    }
                                 }
                                 d.add_current_instruction(&c);
                                 // profiler.add_current_state(&console, before_master_cycles);
@@ -243,8 +247,6 @@ impl Engine {
                         let now = Instant::now();
                         let dt = now - last_time;
                         last_time = now;
-                        // Clone settings
-                        let s = settings.lock().unwrap().clone();
                         // Advance emulator
                         if !s.is_paused {
                             let initial_master_cycles = c.total_master_clocks().clone();

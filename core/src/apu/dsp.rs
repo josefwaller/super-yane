@@ -10,7 +10,7 @@ use derivative::Derivative;
 use log::*;
 use seeded_random::{Random, Seed};
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, sync::mpsc::channel};
+use std::collections::VecDeque;
 
 /// The DSP
 #[derive(Clone, Derivative, Serialize, Deserialize)]
@@ -144,6 +144,10 @@ impl Dsp {
                 .enumerate()
                 .map(|(i, c)| u8::from(c.echo_enabled) << i)
                 .sum(),
+            0x6C => {
+                warn!("DSP register 6C not implemented");
+                0
+            }
             0x6D => (self.echo_addr >> 8) as u8,
             0x7C => self
                 .voices
@@ -160,7 +164,7 @@ impl Dsp {
                     0
                 }
             }
-            _ => todo!(),
+            _ => todo!("Read {:04X}", address),
         }
     }
     pub fn generate_sample(&mut self, ram: &mut [u8]) {

@@ -2,4 +2,9 @@ import { StandardController } from "./standard_controller.slint";
 
 // Settings for how to run the emulator.
 // Sent from slint to the emulation thread.
-export struct Settings { volume: float, is_paused: bool}
+export struct Settings {
+    volume: float,
+    is_paused: bool,
+    log_cpu: bool,
+    log_apu: bool,
+}
