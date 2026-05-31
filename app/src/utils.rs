@@ -162,6 +162,7 @@ pub fn get_binary_data(
         Vram => (&c.ppu().vram, c.ppu().vram.len()),
         Cgram => (&cgram_arr, 2 * c.ppu().cgram.len()),
         Wram => (c.ram().as_slice(), c.ram().len()),
+        Aram => (c.apu().ram(), c.apu().ram().len()),
         Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
     };
     // Copy binary data to array

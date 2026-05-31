@@ -6,6 +6,7 @@ import { Fmt } from "../globals.slint";
 export enum BinaryDataSrc {
     Wram,
     Vram,
+    Aram,
     Cgram,
     Cartridge
 }
@@ -58,6 +59,8 @@ export component BinaryData {
             return Palette.green;
         } else if (data_src == BinaryDataSrc.Cartridge) {
             return Palette.orange;
+        } else if (data_src == BinaryDataSrc.Aram) {
+            return Palette.purple;
         }
         return Colors.white;
     }
@@ -71,7 +74,7 @@ export component BinaryData {
         HorizontalLayout {
             alignment: start;
             ComboBox {
-                model: ["WRAM", "VRAM", "CGRAM", "Cartridge"];
+                model: ["WRAM", "VRAM", "CGRAM", "ARAM", "Cartridge"];
                 selected(value) => {
                     if (value == "WRAM") {
                         data_src = BinaryDataSrc.Wram
@@ -79,6 +82,8 @@ export component BinaryData {
                         data_src = BinaryDataSrc.Vram
                     } else if (value == "CGRAM") {
                         data_src = BinaryDataSrc.Cgram
+                    } else if (value == "ARAM") {
+                        data_src = BinaryDataSrc.Aram;
                     } else if (value == "Cartridge") {
                         data_src = BinaryDataSrc.Cartridge
                     }

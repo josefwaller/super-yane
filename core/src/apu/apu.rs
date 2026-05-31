@@ -172,6 +172,9 @@ macro_rules! rest_field {
 impl Apu {
     rest_field! {total_clocks, usize}
     rest_field! {dsp, Dsp}
+    pub fn ram(&self) -> &[u8] {
+        self.rest.ram.as_slice()
+    }
     /// Takes the CPU to APU side registers and returns the values written to the APU to CPU registers
     pub fn step(&mut self, cpu_reg: &mut [u8; 4]) -> [u8; 4] {
         self.rest.cpu_to_apu_reg = cpu_reg.clone();
