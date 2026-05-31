@@ -7,7 +7,7 @@ import { Fmt } from "../globals.slint";
 import { RegisterList } from "register_list.slint";
 
 component CpuReg inherits Register {
-    headerColor: Palette.blue;
+    headerColor: Palette.cpu;
 }
 
 export component CpuDisplay inherits RegisterList {
@@ -28,7 +28,7 @@ export component CpuDisplay inherits RegisterList {
         value: data.c;
         low: data.a;
         high: data.b;
-        primaryHeader: Palette.blue;
+        primaryHeader: Palette.cpu;
     }
 
     HighLowRegister {
@@ -36,7 +36,7 @@ export component CpuDisplay inherits RegisterList {
         value: data.x;
         low: data.xl;
         high: data.xh;
-        primaryHeader: Palette.blue;
+        primaryHeader: Palette.cpu;
     }
 
     HighLowRegister {
@@ -44,7 +44,7 @@ export component CpuDisplay inherits RegisterList {
         value: data.y;
         low: data.yl;
         high: data.yh;
-        primaryHeader: Palette.blue;
+        primaryHeader: Palette.cpu;
     }
 
     CpuReg {
@@ -62,7 +62,7 @@ export component CpuDisplay inherits RegisterList {
         value: data.d;
         low: data.dl;
         high: data.dh;
-        primaryHeader: Palette.blue;
+        primaryHeader: Palette.cpu;
     }
 
     CpuReg {

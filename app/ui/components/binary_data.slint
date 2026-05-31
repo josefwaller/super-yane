@@ -52,15 +52,15 @@ export component BinaryData {
 
     function header_color() -> color {
         if (data_src == BinaryDataSrc.Wram) {
-            return Palette.blue;
+            return Palette.cpu;
         } else if (data_src == BinaryDataSrc.Vram) {
-            return Palette.red;
+            return Palette.ppu;
         } else if (data_src == BinaryDataSrc.Cgram) {
-            return Palette.green;
+            return Palette.ppu;
         } else if (data_src == BinaryDataSrc.Cartridge) {
-            return Palette.orange;
+            return Palette.cartridge;
         } else if (data_src == BinaryDataSrc.Aram) {
-            return Palette.purple;
+            return Palette.apu;
         }
         return Colors.white;
     }

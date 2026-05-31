@@ -6,15 +6,14 @@ import { ScrollView } from "std-widgets.slint";
 import { RegisterList } from "register_list.slint";
 
 component Field inherits Register {
-    headerColor: Palette.red;
+    headerColor: Palette.ppu;
 }
 
 export component Backgrounds inherits RegisterList {
     in property <[BackgroundData]> backgrounds;
 
-    for bg[i] in backgrounds: Register {
+    for bg[i] in backgrounds: Field {
         name: "Background " + i;
-        headerColor: Palette.red;
         Field {
             name: "Enabled";
             value: Fmt.flag(bg.main_screen_enable);
