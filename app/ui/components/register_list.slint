@@ -1,14 +1,10 @@
 import { Register } from "./register.slint";
-
-export struct RegisterData { name: string, value: string}
-
+import { ScrollView } from "std-widgets.slint";
 
 // Renders a list of Registers
-export component RegisterList {
-    in property <[RegisterData]> registers;
-    in property <color> headerColor;
-    // By default consume all height
+export component RegisterList inherits ScrollView {
     height: 100%;
+    width: 100%;
 
     VerticalLayout {
         alignment: start;
@@ -16,10 +12,6 @@ export component RegisterList {
         padding: 10px;
         vertical-stretch: 0;
 
-        for register[i] in registers: Register {
-            headerColor: headerColor;
-            name: register.name;
-            value: register.value;
-        }
+        @children
     }
 }

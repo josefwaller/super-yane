@@ -2,120 +2,114 @@ import { ApuData } from "../structs/apu_data.slint";
 import { Register } from "./register.slint";
 import { Fmt } from "../globals.slint";
 import { Palette } from "../palette.slint";
+import { RegisterList } from "register_list.slint";
 
 component Reg inherits Register {
     headerColor: Palette.purple;
 }
 
-export component ApuDisplay {
+export component ApuDisplay inherits RegisterList {
     in property <ApuData> data;
-    VerticalLayout {
-        alignment: start;
-        spacing: 5px;
-        padding: 10px;
-        vertical-stretch: 0;
-
+    Reg {
+        name: "SPC 700";
         Reg {
-            name: "SPC 700";
-            Reg {
-                name: "A";
-                value: Fmt.byte(data.a);
-            }
-
-            Reg {
-                name: "X";
-                value: Fmt.byte(data.x);
-            }
-
-            Reg {
-                name: "Y";
-                value: Fmt.byte(data.y);
-            }
-
-            Reg {
-                name: "SP";
-                value: Fmt.byte(data.sp);
-            }
-
-            Reg {
-                name: "PC";
-                value: Fmt.word(data.pc);
-            }
-
-            Reg {
-                name: "PSW";
-                value: Fmt.byte(data.psw_byte);
-                Reg {
-                    name: "n";
-                    value: Fmt.flag(data.psw.n);
-                }
-
-                Reg {
-                    name: "v";
-                    value: Fmt.flag(data.psw.v);
-                }
-
-                Reg {
-                    name: "p";
-                    value: Fmt.flag(data.psw.p);
-                }
-
-                Reg {
-                    name: "b";
-                    value: Fmt.flag(data.psw.b);
-                }
-
-                Reg {
-                    name: "h";
-                    value: Fmt.flag(data.psw.h);
-                }
-
-                Reg {
-                    name: "i";
-                    value: Fmt.flag(data.psw.i);
-                }
-
-                Reg {
-                    name: "z";
-                    value: Fmt.flag(data.psw.z);
-                }
-
-                Reg {
-                    name: "c";
-                    value: Fmt.flag(data.psw.c);
-                }
-            }
+            name: "A";
+            value: Fmt.byte(data.a);
         }
 
         Reg {
-            name: "CPU to APU";
-            for val[i] in data.cpu_to_apu_reg: Reg {
-                name: Fmt.byte(244 + i) + "/" + Fmt.word(8512 + i);
-                value: Fmt.byte(val);
+            name: "X";
+            value: Fmt.byte(data.x);
+        }
+
+        Reg {
+            name: "Y";
+            value: Fmt.byte(data.y);
+        }
+
+        Reg {
+            name: "SP";
+            value: Fmt.byte(data.sp);
+        }
+
+        Reg {
+            name: "PC";
+            value: Fmt.word(data.pc);
+        }
+
+        Reg {
+            name: "PSW";
+            value: Fmt.byte(data.psw_byte);
+            Reg {
+                name: "n";
+                value: Fmt.flag(data.psw.n);
+            }
+
+            Reg {
+                name: "v";
+                value: Fmt.flag(data.psw.v);
+            }
+
+            Reg {
+                name: "p";
+                value: Fmt.flag(data.psw.p);
+            }
+
+            Reg {
+                name: "b";
+                value: Fmt.flag(data.psw.b);
+            }
+
+            Reg {
+                name: "h";
+                value: Fmt.flag(data.psw.h);
+            }
+
+            Reg {
+                name: "i";
+                value: Fmt.flag(data.psw.i);
+            }
+
+            Reg {
+                name: "z";
+                value: Fmt.flag(data.psw.z);
+            }
+
+            Reg {
+                name: "c";
+                value: Fmt.flag(data.psw.c);
             }
         }
+    }
 
-        Reg {
-            name: "APU to CPU";
-            for val[i] in data.apu_to_cpu_reg: Reg {
-                name: Fmt.byte(244 + i) + "/" + Fmt.word(8512 + i);
-                value: Fmt.byte(val);
-            }
+    Reg {
+        name: "CPU to APU";
+        for val[i] in data.cpu_to_apu_reg: Reg {
+            name: Fmt.byte(244 + i) + "/" + Fmt.word(8512 + i);
+            value: Fmt.byte(val);
         }
+    }
 
-        Reg {
-            name: "Expose IPL Rom";
-            value: Fmt.flag(data.expose_ipl_rom);
+    Reg {
+        name: "APU to CPU";
+        for val[i] in data.apu_to_cpu_reg: Reg {
+            name: Fmt.byte(244 + i) + "/" + Fmt.word(8512 + i);
+            value: Fmt.byte(val);
         }
+    }
 
-        Reg {
-            name: "DSP Address";
-            value: Fmt.byte(data.dsp_addr);
-        }
+    Reg {
+        name: "Expose IPL Rom";
+        value: Fmt.flag(data.expose_ipl_rom);
+    }
 
-        Reg {
-            name: "DSP Read Only";
-            value: Fmt.flag(data.dsp_read_only);
-        }
+    Reg {
+        name: "DSP Address";
+        value: Fmt.byte(data.dsp_addr);
+    }
+
+    Reg {
+        name: "DSP Read Only";
+        value: Fmt.flag(data.dsp_read_only);
     }
 }

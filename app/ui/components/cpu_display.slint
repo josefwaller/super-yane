@@ -4,87 +4,82 @@ import { Palette } from "../palette.slint";
 import { Register } from "./register.slint";
 import { HighLowRegister } from "./high_low_register.slint";
 import { Fmt } from "../globals.slint";
+import { RegisterList } from "register_list.slint";
 
 component CpuReg inherits Register {
     headerColor: Palette.blue;
 }
 
-export component CpuDisplay {
+export component CpuDisplay inherits RegisterList {
     in property <CpuData> data;
 
-    VerticalLayout {
-        alignment: start;
-        spacing: 5px;
-        padding: 10px;
-        vertical-stretch: 0;
-        CpuReg {
-            name: "PBR";
-            value: Fmt.byte(data.pbr);
-        }
+    CpuReg {
+        name: "PBR";
+        value: Fmt.byte(data.pbr);
+    }
 
-        CpuReg {
-            name: "PC";
-            value: Fmt.word(data.pc);
-        }
+    CpuReg {
+        name: "PC";
+        value: Fmt.word(data.pc);
+    }
 
-        HighLowRegister {
-            name: "C";
-            value: data.c;
-            low: data.a;
-            high: data.b;
-            primaryHeader: Palette.blue;
-        }
+    HighLowRegister {
+        name: "C";
+        value: data.c;
+        low: data.a;
+        high: data.b;
+        primaryHeader: Palette.blue;
+    }
 
-        HighLowRegister {
-            name: "X";
-            value: data.x;
-            low: data.xl;
-            high: data.xh;
-            primaryHeader: Palette.blue;
-        }
+    HighLowRegister {
+        name: "X";
+        value: data.x;
+        low: data.xl;
+        high: data.xh;
+        primaryHeader: Palette.blue;
+    }
 
-        HighLowRegister {
-            name: "Y";
-            value: data.y;
-            low: data.yl;
-            high: data.yh;
-            primaryHeader: Palette.blue;
-        }
+    HighLowRegister {
+        name: "Y";
+        value: data.y;
+        low: data.yl;
+        high: data.yh;
+        primaryHeader: Palette.blue;
+    }
 
-        CpuReg {
-            name: "SP";
-            value: Fmt.word(data.s);
-        }
+    CpuReg {
+        name: "SP";
+        value: Fmt.word(data.s);
+    }
 
-        CpuReg {
-            name: "DBR";
-            value: Fmt.byte(data.dbr);
-        }
+    CpuReg {
+        name: "DBR";
+        value: Fmt.byte(data.dbr);
+    }
 
-        HighLowRegister {
-            name: "D";
-            value: data.d;
-            low: data.dl;
-            high: data.dh;
-            primaryHeader: Palette.blue;
-        }
+    HighLowRegister {
+        name: "D";
+        value: data.d;
+        low: data.dl;
+        high: data.dh;
+        primaryHeader: Palette.blue;
+    }
 
-        CpuReg {
-            name: "P";
-            value: Fmt.byte(data.p.value);
-            for flag in [
-                { name: "P.n", value: data.p.n },
-                { name: "P.v", value: data.p.v },
-                { name: "P.m", value: data.p.m },
-                { name: "P.xb", value: data.p.xb },
-                { name: "P.d", value: data.p.d },
-                { name: "P.i", value: data.p.i },
-                { name: "P.z", value: data.p.z },
-                { name: "P.c", value: data.p.c },
-            ]: CpuReg {
-                name: flag.name;
-                value: Fmt.flag(flag.value);
-            }
+    CpuReg {
+        name: "P";
+        value: Fmt.byte(data.p.value);
+        for flag in [
+            { name: "P.n", value: data.p.n },
+            { name: "P.v", value: data.p.v },
+            { name: "P.m", value: data.p.m },
+            { name: "P.xb", value: data.p.xb },
+            { name: "P.d", value: data.p.d },
+            { name: "P.i", value: data.p.i },
+            { name: "P.z", value: data.p.z },
+            { name: "P.c", value: data.p.c },
+        ]: CpuReg {
+            name: flag.name;
+            value: Fmt.flag(flag.value);
         }
     }
 }

@@ -3,6 +3,7 @@ import { Register } from "register.slint";
 import { Fmt } from "../globals.slint";
 import { ScrollView } from "std-widgets.slint";
 import { Palette } from "../palette.slint";
+import { RegisterList } from "register_list.slint";
 
 component Reg inherits Register {
     headerColor: Palette.purple;
@@ -11,92 +12,79 @@ component Reg inherits Register {
 component LeftRightReg inherits Reg {
     in property <string> left;
     in property <string> right;
-    Reg {
-        name: "Left";
-        value: left;
-    }
 
-    Reg {
-        name: "Right";
-        value: right;
-    }
+    value: "Left: " + left + " | Right: " + right;
 }
 
-export component DspDisplay inherits ScrollView {
+export component DspDisplay inherits RegisterList {
     in property <DspData> data;
 
-    VerticalLayout {
-        alignment: start;
-        spacing: 5px;
-        padding: 10px;
-        vertical-stretch: 0;
+    LeftRightReg {
+        name: "Volume";
+        left: Fmt.byte(data.volume[0]);
+        right: Fmt.byte(data.volume[1]);
+    }
+
+    Reg {
+        name: "Mute";
+        value: Fmt.flag(data.mute);
+    }
+
+    Reg {
+        name: "Sample Directory";
+        value: Fmt.address(data.sample_dir);
+    }
+
+    Reg {
+        name: "Noise Frequency";
+        value: data.noise_frequency;
+    }
+
+    Reg {
+        name: "Echo";
+        Reg {
+            name: "Enabled";
+            value: Fmt.flag(data.echo_enabled);
+        }
+
         LeftRightReg {
             name: "Volume";
-            left: Fmt.byte(data.volume[0]);
-            right: Fmt.byte(data.volume[1]);
+            left: Fmt.byte(data.echo_volume[0]);
+            right: Fmt.byte(data.echo_volume[1]);
         }
 
         Reg {
-            name: "Mute";
-            value: Fmt.flag(data.mute);
+            name: "Buffer Size";
+            value: Fmt.address(data.echo_size);
         }
 
         Reg {
-            name: "Sample Directory";
-            value: Fmt.address(data.sample_dir);
+            name: "Address";
+            value: Fmt.address(data.echo_addr);
         }
 
         Reg {
-            name: "Noise Frequency";
-            value: data.noise_frequency;
+            name: "Feedback Volume";
+            value: Fmt.byte(data.echo_feedback);
         }
+    }
 
+    Reg {
+        name: "FIR";
         Reg {
-            name: "Echo";
-            Reg {
-                name: "Enabled";
-                value: Fmt.flag(data.echo_enabled);
-            }
-
-            LeftRightReg {
-                name: "Volume";
-                left: Fmt.byte(data.echo_volume[0]);
-                right: Fmt.byte(data.echo_volume[1]);
-            }
-
-            Reg {
-                name: "Buffer Size";
-                value: Fmt.address(data.echo_size);
-            }
-
-            Reg {
-                name: "Address";
-                value: Fmt.address(data.echo_addr);
-            }
-
-            Reg {
-                name: "Feedback Volume";
-                value: Fmt.byte(data.echo_feedback);
+            name: "Coefficients";
+            for val[i] in data.fir_coeffs: Reg {
+                name: i;
+                value: Fmt.byte(val);
             }
         }
 
         Reg {
-            name: "FIR";
-            Reg {
-                name: "Coefficients";
-                for val[i] in data.fir_coeffs: Reg {
-                    name: i;
-                    value: Fmt.byte(val);
-                }
-            }
-
-            Reg {
-                name: "Cache";
-                for val[i] in data.fir_cache: LeftRightReg {
-                    name: i;
-                    left: val[0];
-                    right: val[1];
-                }
+            name: "Cache";
+            for val[i] in data.fir_cache: LeftRightReg {
+                name: i;
+                left: val[0];
+                right: val[1];
             }
         }
     }

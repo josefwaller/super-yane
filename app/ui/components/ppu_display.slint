@@ -2,50 +2,62 @@ import { PpuData } from "../structs/ppu_data.slint";
 import { RegisterList } from "register_list.slint";
 import { Palette } from "../palette.slint";
 import { Fmt } from "../globals.slint";
+import { Register } from "register.slint";
 
-export component PpuDisplay {
+component Reg inherits Register {
+    headerColor: Palette.red;
+}
+
+export component PpuDisplay inherits RegisterList {
     in property <PpuData> data;
 
-    RegisterList {
-        headerColor: Palette.red;
-        registers: [
-            { name: "VBlank Flag", value: data.vblank },
-            {
-                name: "Forced Blanking",
-                value: data.forced_blanking,
-            },
-            {
-                name: "Brightness",
-                value: data.brightness,
-            },
-            {
-                name: "BG Mode",
-                value: data.bg-mode,
-            },
-            {
-                name: "BG3 Priority",
-                value: data.bg3-prio,
-            },
-            {
-                name: "Mosaic Size",
-                value: data.mosaic-size,
-            },
-            {
-                name: "VRAM Inc Mode",
-                value: data.vram-increment-mode,
-            },
-            {
-                name: "VRAM Inc Amount",
-                value: data.vram-increment-amount,
-            },
-            {
-                name: "VRAM Address",
-                value: Fmt.word(data.vram-addr),
-            },
-            {
-                name: "CGRAM Address",
-                value: Fmt.word(data.cgram-addr),
-            }
-        ];
+    Reg {
+        name: "VBlank Flag";
+        value: data.vblank;
+    }
+
+    Reg {
+        name: "Forced Blanking";
+        value: data.forced_blanking;
+    }
+
+    Reg {
+        name: "Brightness";
+        value: data.brightness;
+    }
+
+    Reg {
+        name: "BG Mode";
+        value: data.bg-mode;
+    }
+
+    Reg {
+        name: "BG3 Priority";
+        value: data.bg3-prio;
+    }
+
+    Reg {
+        name: "Mosaic Size";
+        value: data.mosaic-size;
+    }
+
+    Reg {
+        name: "VRAM Inc Mode";
+        value: data.vram-increment-mode;
+    }
+
+    Reg {
+        name: "VRAM Inc Amount";
+        value: data.vram-increment-amount;
+    }
+
+    Reg {
+        name: "VRAM Address";
+        value: Fmt.word(data.vram-addr);
+    }
+
+    Reg {
+        name: "CGRAM Address";
+        value: Fmt.word(data.cgram-addr);
     }
 }
