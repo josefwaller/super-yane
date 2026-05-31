@@ -18,29 +18,14 @@ use std::{
     thread::{self},
     time::{Duration, Instant},
 };
-use super_yane::{
-    Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREEN_RESOLUTION,
-    utils::color_to_rgb_bytes,
-};
-use wdc65816::Processor;
+use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREEN_RESOLUTION};
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
-
-const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::{
     ConsoleData, Settings, apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot,
     disassembler::Disassembler, profiler::Profiler,
 };
-
-/// Misc settings for advancing the emulator
-#[derive(Default, Clone)]
-pub struct AdvanceSettings {
-    /// Whether to log the CPU state after every instruction
-    pub log_cpu: bool,
-    /// Whether to log the APU state after every instruction
-    pub log_apu: bool,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdvanceAmount {
@@ -51,25 +36,7 @@ pub enum AdvanceAmount {
     StartVBlank,
     EndVBlank,
 }
-/// Adds an 's' to string if n is 0 or n > 1
-fn pluralize(string: &str, n: impl Into<u32>) -> String {
-    let n = n.into();
-    format!("{}{}", string, if n == 0 || n > 1 { "s" } else { "" })
-}
 
-impl Display for AdvanceAmount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AdvanceAmount::*;
-        match self {
-            MasterCycles(n) => write!(f, "{} {}", n, pluralize("master cycle", *n)),
-            Scanlines(n) => write!(f, "{} {}", n, pluralize("scanline", *n)),
-            Instructions(n) => write!(f, "{} {}", n, pluralize("instruction", *n)),
-            Frames(n) => write!(f, "{} {}", n, pluralize("frame", *n)),
-            StartVBlank => write!(f, "Start VBlank"),
-            EndVBlank => write!(f, "End VBlank"),
-        }
-    }
-}
 /// Command send to the emulation thread
 pub enum Command {
     Advance(AdvanceAmount),
@@ -83,8 +50,6 @@ pub enum Command {
 pub struct UpdateEmuPayload {
     /// How much to advance the emulator by
     command: Command,
-    /// The settings
-    settings: AdvanceSettings,
 }
 
 /// The Payload to send data back to the main thread after finishing emulation
@@ -308,10 +273,7 @@ impl Engine {
 
     pub fn update(&mut self, command: Command) {
         self.sender
-            .send(UpdateEmuPayload {
-                command,
-                settings: AdvanceSettings::default(),
-            })
+            .send(UpdateEmuPayload { command })
             .expect("Unable to send data to thread");
     }
     pub fn prev_frame_data(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
@@ -320,18 +282,12 @@ impl Engine {
 
     pub fn load_rom(&mut self, bytes: &[u8]) {
         self.sender
-            .send(UpdateEmuPayload::new(
-                Command::LoadRom(bytes.to_vec()),
-                AdvanceSettings::default(),
-            ))
+            .send(UpdateEmuPayload::new(Command::LoadRom(bytes.to_vec())))
             .expect("Unable to send data to thread");
     }
     pub fn reset(&mut self) {
         self.sender
-            .send(UpdateEmuPayload::new(
-                Command::Reset,
-                AdvanceSettings::default(),
-            ))
+            .send(UpdateEmuPayload::new(Command::Reset))
             .expect("Unable to send payload");
     }
 

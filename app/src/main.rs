@@ -1,11 +1,6 @@
 use closure::closure;
 use rfd::FileDialog;
-use std::{
-    cell::RefCell,
-    env,
-    fs::{File, write},
-    rc::Rc,
-};
+use std::{cell::RefCell, env, fs::File, rc::Rc};
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
@@ -14,64 +9,20 @@ use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 mod apu_snapshot;
 mod audio;
 mod cpu_snapshot;
-mod utils;
-// mod emu_state;
-// mod program;
-// #[macro_use]
-// mod utils;
 mod engine;
-// mod widgets;
-// use program::Program;
+mod utils;
 
 use crate::{
     LoadConsoleError::FileError,
     engine::{AdvanceAmount, Command, Engine},
 };
-use super_yane::{Console, Cpu, InputPort};
+use super_yane::Console;
 mod disassembler;
 mod profiler;
-mod table;
 
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 slint::include_modules!();
-
-impl Into<InputPort> for StandardController {
-    fn into(self) -> InputPort {
-        // let mut port = InputPort::default_standard_controller();
-        // copy_fields!(
-        //     self, port, a, b, x, y, up, left, right, down, start, select, r, l
-        // );
-        let StandardController {
-            a,
-            b,
-            x,
-            y,
-            up,
-            left,
-            right,
-            down,
-            start,
-            select,
-            r,
-            l,
-        } = self;
-        InputPort::StandardController {
-            a,
-            b,
-            x,
-            y,
-            up,
-            left,
-            right,
-            down,
-            start,
-            select,
-            r,
-            l,
-        }
-    }
-}
 
 #[derive(Debug)]
 enum LoadConsoleError {

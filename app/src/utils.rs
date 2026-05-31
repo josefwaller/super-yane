@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use super_yane::{
-    Background, Console, Ppu,
+    Background, Console, InputPort, Ppu,
     apu::{Apu, Dsp, Voice},
     utils::color_to_rgb_bytes,
 };
@@ -10,76 +10,8 @@ use wdc65816::{Processor, StatusRegister};
 
 use crate::{
     ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, PpuData,
-    StatusRegisterData, Voice as SlintVoice,
+    StandardController, StatusRegisterData, Voice as SlintVoice,
 };
-
-/// Render a section of VRAM as RGBA image data.
-/// Always interprets VRAM as 16 tiles wide.
-/// console: The console to use the VRAM and palettes of
-/// num_tiles: How many tiles to render, in (x, y) format
-/// bpp: THe bits per pixel
-/// tile_offset: How many tiles to skip before rendering
-/// palette: The index of the palette to use
-/// direct_color: Whether to render with direct color or not
-/// gap: How big of a gap to leave between tiles. 0 means that tiles will be tightly packed.
-/// buffer: The buffer to write to. Provided so that we don't hvae to recreate an array every time
-pub fn vram_to_rgba(
-    console: &Console,
-    num_tiles: (usize, usize),
-    bpp: usize,
-    tile_offset: usize,
-    palette: usize,
-    direct_color: bool,
-    gap: usize,
-    buffer: &mut [[u8; 4]],
-) {
-    let num_slices = match bpp {
-        2 => 1,
-        4 => 2,
-        8 => 4,
-        _ => unreachable!("Invalid VRAM BPP: {}", bpp),
-    };
-    let tile_size = 8 + gap;
-    let image_width = num_tiles.0 * tile_size;
-    // How many slices each tile needs
-    let slice_step = 8 * num_slices;
-    let colors_per_palette = 2usize.pow(bpp as u32);
-    (0..num_tiles.0).for_each(|tile_x| {
-        (0..num_tiles.1).for_each(|tile_y| {
-            let tile_index = tile_offset + tile_x + 16 * tile_y;
-            (0..8).for_each(|fine_y| {
-                let slice = (0..num_slices)
-                    .map(|i| {
-                        console
-                            .ppu()
-                            .get_2bpp_slice(fine_y + slice_step * tile_index + 8 * i)
-                    })
-                    .enumerate()
-                    .fold([0; 8], |acc, (j, e)| {
-                        core::array::from_fn(|k| acc[k] + (e[k] << (2 * j)))
-                    });
-                (0..8).for_each(|fine_x| {
-                    let x = tile_size * tile_x + fine_x;
-                    let y = tile_size * tile_y + fine_y;
-                    let s = slice[fine_x];
-                    buffer[y * image_width + x] = if direct_color {
-                        [(s & 0x03) << 5, (s & 0x38) << 2, (s & 0xC0), 0xFF]
-                    } else {
-                        if s == 0 {
-                            [0x00; 4]
-                        } else {
-                            let c = color_to_rgb_bytes(
-                                console.ppu().cgram[colors_per_palette * palette + s as usize],
-                                0xF,
-                            );
-                            [c[0], c[1], c[2], 0xFF]
-                        }
-                    };
-                })
-            })
-        });
-    });
-}
 
 /// Interprets a chunk of binary data as SNES 2bpp tile date, and rewrites it into a 2BPP format
 /// * `width` is the width of the output in 8x8 tiles.
@@ -383,5 +315,38 @@ impl Into<SlintVoice> for Voice {
         );
         copy_array_fields!(self, data, volume);
         data
+    }
+}
+
+impl Into<InputPort> for StandardController {
+    fn into(self) -> InputPort {
+        let StandardController {
+            a,
+            b,
+            x,
+            y,
+            up,
+            left,
+            right,
+            down,
+            start,
+            select,
+            r,
+            l,
+        } = self;
+        InputPort::StandardController {
+            a,
+            b,
+            x,
+            y,
+            up,
+            left,
+            right,
+            down,
+            start,
+            select,
+            r,
+            l,
+        }
     }
 }
