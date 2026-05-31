@@ -1,7 +1,10 @@
 use derive_new::new;
 use std::collections::VecDeque;
 
-use crate::{apu::Dsp, utils::bit};
+use crate::{
+    apu::{Dsp, voice::State},
+    utils::bit,
+};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use serde_big_array::Array;
@@ -211,6 +214,6 @@ impl Apu {
             .dsp
             .voices
             .iter_mut()
-            .for_each(|c| c.enabled = false);
+            .for_each(|c| c.state = State::Release);
     }
 }

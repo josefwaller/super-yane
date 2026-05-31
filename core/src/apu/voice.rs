@@ -102,7 +102,6 @@ impl ToString for State {
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Voice {
-    pub enabled: bool,
     /// Volume, first left, then right
     pub volume: [i8; 2],
     /// Sample pitch, i.e. rate at which samples are consumed
