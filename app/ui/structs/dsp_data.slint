@@ -1,0 +1,13 @@
+export struct DspData {
+    volume: [int],
+    sample_dir: int,
+    fir_coeffs: [int],
+    fir_cache: [[int]],
+    echo_size: int,
+    echo_addr: int,
+    echo_feedback: int,
+    echo_volume: [int],
+    noise_frequency: int,
+    echo_enabled: bool,
+    mute: bool
+}

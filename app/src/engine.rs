@@ -29,8 +29,8 @@ const SLEEP_TIME: Duration = Duration::from_millis(5);
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 use crate::{
-    ConsoleData, CpuData, PpuData, Settings, apu_snapshot::ApuSnapshot, audio::Audio,
-    cpu_snapshot::CpuSnapshot, disassembler::Disassembler, profiler::Profiler,
+    ConsoleData, Settings, apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot,
+    disassembler::Disassembler, profiler::Profiler,
 };
 
 /// Misc settings for advancing the emulator
@@ -289,6 +289,7 @@ impl Engine {
             cpu: c.cpu().into(),
             ppu: c.ppu().into(),
             apu: c.apu().into(),
+            dsp: c.apu().dsp().into(),
         }
     }
     /// Update all the info for the binary data viewer.

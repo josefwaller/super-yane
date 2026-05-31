@@ -1,11 +1,16 @@
 use std::rc::Rc;
 
 use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
-use super_yane::{Background, Console, Ppu, apu::Apu, utils::color_to_rgb_bytes};
+use super_yane::{
+    Background, Console, Ppu,
+    apu::{Apu, Dsp},
+    utils::color_to_rgb_bytes,
+};
 use wdc65816::{Processor, StatusRegister};
 
 use crate::{
-    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, PpuData, StatusRegisterData,
+    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, PpuData,
+    StatusRegisterData,
 };
 
 /// Render a section of VRAM as RGBA image data.
@@ -306,6 +311,31 @@ impl Into<ApuData> for &Apu {
         let r = &self.rest;
         copy_fields!(r, data, expose_ipl_rom, dsp_addr, dsp_read_only);
         copy_array_fields!(r, data, cpu_to_apu_reg, apu_to_cpu_reg);
+        data
+    }
+}
+
+impl Into<DspData> for &Dsp {
+    fn into(self) -> DspData {
+        let mut data = DspData::default();
+        copy_array_fields!(self, data, volume, fir_coeffs, echo_volume);
+        copy_int_fields!(
+            self,
+            data,
+            sample_dir,
+            echo_size,
+            echo_addr,
+            echo_feedback,
+            noise_frequency
+        );
+        copy_fields!(self, data, echo_enabled, mute);
+        data.fir_cache = ModelRc::from(Rc::from(VecModel::from_iter(
+            self.fir_cache.into_iter().map(|val| {
+                ModelRc::from(Rc::from(VecModel::from_iter(
+                    val.into_iter().map(|v| v.into()),
+                )))
+            }),
+        )));
         data
     }
 }

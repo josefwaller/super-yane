@@ -25,6 +25,7 @@ import { Controls } from "components/controls.slint";
 import { BinaryData, BinaryDataSrc } from "components/binary_data.slint";
 import { ExternalFunction } from "./globals.slint";
 import { Backgrounds } from "components/backgrounds.slint";
+import { DspDisplay } from "components/dsp_display.slint";
 
 export { ExternalFunction }
 
@@ -145,6 +146,15 @@ export component AppWindow inherits Window {
                     }
 
                     Tab {
+                        title: "BGs";
+                        Backgrounds {
+                            height: 100%;
+                            width: 100%;
+                            backgrounds <=> backgrounds;
+                        }
+                    }
+
+                    Tab {
                         title: "APU";
                         ApuDisplay {
                             data: console_data.apu;
@@ -154,16 +164,16 @@ export component AppWindow inherits Window {
                     }
 
                     Tab {
-                        title: "DMA";
+                        title: "DSP";
+                        DspDisplay {
+                            width: 100%;
+                            height: 100%;
+                            data: console_data.dsp;
+                        }
                     }
 
                     Tab {
-                        title: "BGs";
-                        Backgrounds {
-                            height: 100%;
-                            width: 100%;
-                            backgrounds <=> backgrounds;
-                        }
+                        title: "DMA";
                     }
                 }
 
