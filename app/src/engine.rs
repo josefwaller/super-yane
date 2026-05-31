@@ -112,8 +112,9 @@ pub struct Engine {
     /// The RGB data from the previous fully rendered frame
     pub prev_frame_data: Arc<Mutex<[[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]>>,
 }
+
 impl Engine {
-    pub fn new() -> Engine {
+    pub fn new(console: Console) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (sender, receiver) = mpsc::channel::<UpdateEmuPayload>();
         // Initialize audio
@@ -121,7 +122,7 @@ impl Engine {
         // Initialize disassembler
         let disassembler = Arc::new(Mutex::new(Disassembler::new()));
         // Initialize console
-        let console = Arc::new(Mutex::new(Console::with_cartridge(DEFAULT_CARTRIDGE)));
+        let console = Arc::new(Mutex::new(console));
         // Initialize settings
         let settings = Arc::new(Mutex::new(Settings {
             volume: 20.0,

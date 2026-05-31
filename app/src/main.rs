@@ -23,11 +23,16 @@ mod engine;
 // mod widgets;
 // use program::Program;
 
-use crate::engine::{AdvanceAmount, Command, Engine};
-use super_yane::{Cpu, InputPort};
+use crate::{
+    LoadConsoleError::FileError,
+    engine::{AdvanceAmount, Command, Engine},
+};
+use super_yane::{Console, Cpu, InputPort};
 mod disassembler;
 mod profiler;
 mod table;
+
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 slint::include_modules!();
 
@@ -68,6 +73,36 @@ impl Into<InputPort> for StandardController {
     }
 }
 
+#[derive(Debug)]
+enum LoadConsoleError {
+    FileError(std::io::Error),
+    DeserializationError(serde_brief::Error),
+}
+
+fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
+    // Load ROM/savestate
+    match arg {
+        Some(f) => match std::fs::read(&f) {
+            Ok(bytes) => {
+                debug!("Reading {}", f);
+                if f.ends_with(".sy.bin") {
+                    let mut c: Console = serde_brief::from_slice(&bytes)
+                        .map_err(LoadConsoleError::DeserializationError)?;
+                    c.ppu_mut().reset_vram_cache();
+                    Ok(c)
+                } else {
+                    Ok(Console::with_cartridge(&bytes))
+                }
+            }
+            Err(e) => {
+                error!("Unable to read file {}: {:?}", f, e);
+                Err(FileError(e))
+            }
+        },
+        None => Ok(Console::with_cartridge(DEFAULT_CARTRIDGE)),
+    }
+}
+
 fn main() {
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -93,25 +128,10 @@ fn main() {
     // Initialize UI
     let ui = AppWindow::new().unwrap();
     let ui_ptr = ui.as_weak();
-    // Initialize window
-    let engine = Rc::new(RefCell::new(Engine::new()));
-    // Load ROM/savestate
-    match env::args().nth(1) {
-        Some(f) => match std::fs::read(&f) {
-            Ok(bytes) => {
-                debug!("Reading {}", f);
-                if f.ends_with(".sy.bin") {
-                    engine.borrow_mut().load_savestate(&bytes);
-                } else {
-                    engine.borrow_mut().load_rom(&bytes)
-                }
-            }
-            Err(e) => {
-                error!("Unable to read file {}: {:?}", f, e);
-            }
-        },
-        None => {}
-    };
+    // Initialize engine
+    let engine = Rc::new(RefCell::new(Engine::new(
+        initial_console(env::args().nth(1)).unwrap(),
+    )));
     // Update controllers
     ui.on_controller_changed(closure!(clone engine, |controller| {
         // Todo: Support player 2
