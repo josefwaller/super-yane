@@ -23,8 +23,12 @@ use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREE
 const SLEEP_TIME: Duration = Duration::from_millis(5);
 
 use crate::{
-    ConsoleData, Settings, apu_snapshot::ApuSnapshot, audio::Audio, cpu_snapshot::CpuSnapshot,
-    disassembler::Disassembler, profiler::Profiler,
+    ConsoleData, Settings,
+    apu_snapshot::ApuSnapshot,
+    audio::Audio,
+    cpu_snapshot::CpuSnapshot,
+    disassembler::{ApuInstruction, CpuInstruction, Disassembler, Instruction},
+    profiler::Profiler,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,10 +83,13 @@ impl Engine {
             .name("Super Y.A.N.E. helper".to_string())
             .spawn(closure!(clone console, clone settings, || {
                 // Create disassmbler
-                let mut disassembler = Disassembler::new();
+                let mut disassembler = Disassembler::<CpuInstruction>::new();
                 // Add initial vectors and instruction
                 disassembler.add_native_vectors(&console.lock().unwrap());
                 disassembler.add_current_instruction(&console.lock().unwrap());
+
+                let mut apu_disassembler = Disassembler::<ApuInstruction>::new();
+                apu_disassembler.add_current_instruction(&console.lock().unwrap());
 
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
@@ -92,18 +99,19 @@ impl Engine {
                         ($console: ident, $settings: ident) => {
                             // let before_master_cycles = *c.total_master_clocks();
                             $console.step_cpu();
-                            if settings.lock().unwrap().log_cpu {
+                            if $settings.log_cpu {
                                 let inst = CpuSnapshot::from(&$console);
                                 info!("{}", inst);
                             }
                             while $console.apu_is_behind() {
                                 $console.step_apu();
-                                if settings.lock().unwrap().log_apu {
+                                if $settings.log_apu {
                                     let inst = ApuSnapshot::from(&$console);
                                     info!("{}", inst);
                                 }
                             }
                             disassembler.add_current_instruction(&$console);
+                            apu_disassembler.add_current_instruction(&$console)
                             // profiler.add_current_state(&console, before_master_cycles);
                         };
                     }
@@ -117,7 +125,7 @@ impl Engine {
                                         224,
                                     );
                                 let pc = $c.cartridge().transform_address($c.pc());
-                                let dis_lines: Vec<DisassemblyLine> = disassembler
+                                let cpu_dis_lines: Vec<DisassemblyLine> = disassembler
                                     .instructions()
                                     .iter()
                                     .filter(|(i, _)| **i >= pc)
@@ -125,8 +133,21 @@ impl Engine {
                                     .map(|(i, inst)| {
                                         let d = inst.data();
                                         DisassemblyLine {
-                                            pc: format!("{:06X}", i).into(),
+                                            pc: inst.addr().into(),
                                             instruction: d.name.into(),
+                                            arguments: inst.operands(&BTreeMap::new()).into(),
+                                        }
+                                    })
+                                    .collect();
+                                let apu_dis_lines: Vec<DisassemblyLine> = apu_disassembler
+                                    .instructions()
+                                    .iter()
+                                    .filter(|(i, _)| **i >= pc)
+                                    .take(32)
+                                    .map(|(_, inst)| {
+                                        DisassemblyLine {
+                                            pc: inst.addr().into(),
+                                            instruction: inst.opcode_name().into(),
                                             arguments: inst.operands(&BTreeMap::new()).into(),
                                         }
                                     })
@@ -149,7 +170,8 @@ impl Engine {
                                         ui.set_binary_image(Image::from_rgb8(img_data));
                                         ui.set_binary_data_len(len as i32);
 
-                                        ui.set_disassembly_lines(ModelRc::new(VecModel::from(dis_lines)));
+                                        ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
+                                        ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
 
                                         ui.set_backgrounds(ModelRc::from(
                                             Rc::from(VecModel::from_iter(
@@ -214,6 +236,7 @@ impl Engine {
                                             }
                                         }
                                     }
+                                    update_ui!(c, s);
                                 }
                                 UpdateInputPorts(input_ports) => {
                                     *c.input_ports_mut() = input_ports;

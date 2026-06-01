@@ -27,6 +27,7 @@ import { ExternalFunction } from "./globals.slint";
 import { Backgrounds } from "components/backgrounds.slint";
 import { DspDisplay } from "components/dsp_display.slint";
 import { VoicesDisplay } from "components/voices_display.slint";
+import { Palette } from "palette.slint";
 
 export { ExternalFunction, BinaryDataSrc }
 
@@ -36,7 +37,9 @@ export component AppWindow inherits Window {
     // The console data from the emulator
     in property <ConsoleData> console_data;
     // The lines to display
-    in property <[DisassemblyLine]> disassembly_lines;
+    in property <[DisassemblyLine]> cpu_disassembly_lines;
+    // The APU lines to display
+    in property <[DisassemblyLine]> apu_disassembly_lines;
     // Binary data to display
     in property <[[int]]> binary_data <=> binary_viewer.data;
     in property <image> binary_image <=> binary_viewer.data_image;
@@ -221,12 +224,19 @@ export component AppWindow inherits Window {
                     Tab {
                         title: "CPU";
                         Disassembly {
-                            lines: disassembly_lines;
+                            lines: cpu_disassembly_lines;
+                            pc_color: Palette.cpu;
+                            instruction_color: Palette.cpu;
                         }
                     }
 
                     Tab {
                         title: "APU";
+                        Disassembly {
+                            lines: apu_disassembly_lines;
+                            pc_color: Palette.apu;
+                            instruction_color: Palette.apu;
+                        }
                     }
                 }
             }
