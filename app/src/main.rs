@@ -82,6 +82,7 @@ fn main() {
     // Initialize engine
     let engine = Rc::new(RefCell::new(Engine::new(
         initial_console(env::args().nth(1)).unwrap(),
+        ui_ptr,
     )));
     // Update controllers
     ui.on_controller_changed(closure!(clone engine, |controller| {
@@ -154,34 +155,5 @@ fn main() {
                 }
             }
     }));
-    ui.window()
-        .set_rendering_notifier(
-            closure!(clone ui_ptr, clone engine, |state, _graphics| match state {
-                RenderingState::AfterRendering => {
-                    let ui = ui_ptr.unwrap();
-                    engine.borrow_mut().on_frame();
-                    let e = engine.borrow();
-                    let buf = SharedPixelBuffer::clone_from_slice(e.prev_frame_data().as_flattened(), 256, 224);
-                    ui.set_pixel_data(Image::from_rgb8(buf));
-                    ui.set_console_data(e.console_data());
-                    {
-                        let c = e.console();
-                        let pc = c.pc();
-                        ui.set_disassembly_lines(ModelRc::new(VecModel::from(e.disassembly_lines(
-                            c.cartridge().transform_address(pc)
-                        ))));
-                        ui.set_backgrounds(ModelRc::from(
-                            Rc::from(VecModel::from_iter(
-                                c.ppu().backgrounds.iter().map(|b| b.into())
-                            ))
-                        ));
-                    }
-                    // Set up RAM information
-                    e.refresh_binary_data(ui);
-                }
-                _ => {}
-            }),
-        )
-        .unwrap();
     ui.run().expect("Unable to start Slint application");
 }
