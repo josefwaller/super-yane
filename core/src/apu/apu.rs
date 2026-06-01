@@ -101,7 +101,7 @@ impl HasAddressBus for ApuMemory {
             0x00F2 => self.dsp_addr as u8,
             0x00F3 => self.dsp.read(self.dsp_addr as usize),
             0x00F4..0x00F8 => self.cpu_to_apu_reg[address - 0x00F4],
-            0x00FD..0x00FF => {
+            0x00FD..0x0100 => {
                 let v = self.timers[address - 0x00FD].counter;
                 self.timers[address - 0x00FD].counter = 0;
                 v & 0x0F
