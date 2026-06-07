@@ -6,6 +6,7 @@ use super_yane::{Cartridge, Console, cartridge::MemoryMap};
 use wdc65816::{OpcodeData, format_address_mode, opcode_data};
 
 pub trait Instruction: Clone {
+    fn key(&self) -> usize;
     fn current_instruction(console: &Console) -> Self;
     fn jump_addr(&self, pc: usize) -> Option<usize>;
     fn addr(&self) -> String;
@@ -37,9 +38,12 @@ impl CpuInstruction {
 }
 
 impl Instruction for CpuInstruction {
+    fn key(&self) -> usize {
+        self.pc as usize
+    }
     fn current_instruction(value: &Console) -> Self {
         CpuInstruction {
-            pc: value.pc(),
+            pc: value.cartridge().transform_address(value.pc()),
             opcode: value.opcode(),
             operands: core::array::from_fn(|i| value.read_byte_cpu(value.pc() + i + 1)),
             a: value.cpu().p.a_is_16bit(),
@@ -99,12 +103,15 @@ pub struct ApuInstruction {
 }
 
 impl Instruction for ApuInstruction {
+    fn key(&self) -> usize {
+        self.pc as usize
+    }
     fn current_instruction(console: &Console) -> Self {
         let p = &console.apu().core;
         ApuInstruction {
             pc: p.pc,
             opcode: console.apu().read_ram(p.pc as usize),
-            operands: core::array::from_fn(|i| console.apu().read_ram(p.pc as usize + i)),
+            operands: core::array::from_fn(|i| console.apu().read_ram(p.pc as usize + 1 + i)),
         }
     }
     fn jump_addr(&self, pc: usize) -> Option<usize> {

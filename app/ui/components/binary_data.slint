@@ -194,7 +194,7 @@ export component BinaryData {
 
                         for byte[j] in row_data: Text {
                             text: Fmt.byte(byte);
-                            color: byte == 0 ? #AAA : #FFF;
+                            color: byte == 0 ? Palette.light_grey : Palette.white;
                             horizontal-alignment: right;
                         }
                     }

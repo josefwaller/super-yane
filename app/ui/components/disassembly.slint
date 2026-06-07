@@ -5,7 +5,6 @@ import { Palette } from "../palette.slint";
 export component Disassembly {
     in property <[DisassemblyLine]> lines;
     in property <color> pc_color;
-    in property <color> instruction_color;
 
     height: 100%;
 
@@ -24,11 +23,12 @@ export component Disassembly {
 
             Text {
                 text: line.instruction;
-                color: instruction_color;
+                color: line.is_current ? Palette.white : Palette.light_grey;
             }
 
             Text {
                 text: line.arguments;
+                color: line.is_current ? Palette.white : Palette.light_grey;
             }
         }
     }

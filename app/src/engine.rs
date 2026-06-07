@@ -99,19 +99,19 @@ impl Engine {
                         ($console: ident, $settings: ident) => {
                             // let before_master_cycles = *c.total_master_clocks();
                             $console.step_cpu();
+                            disassembler.add_current_instruction(&$console);
                             if $settings.log_cpu {
                                 let inst = CpuSnapshot::from(&$console);
                                 info!("{}", inst);
                             }
                             while $console.apu_is_behind() {
                                 $console.step_apu();
+                                apu_disassembler.add_current_instruction(&$console);
                                 if $settings.log_apu {
                                     let inst = ApuSnapshot::from(&$console);
                                     info!("{}", inst);
                                 }
                             }
-                            disassembler.add_current_instruction(&$console);
-                            apu_disassembler.add_current_instruction(&$console)
                             // profiler.add_current_state(&console, before_master_cycles);
                         };
                     }
@@ -124,34 +124,10 @@ impl Engine {
                                         256,
                                         224,
                                     );
-                                let pc = $c.cartridge().transform_address($c.pc());
-                                let cpu_dis_lines: Vec<DisassemblyLine> = disassembler
-                                    .instructions()
-                                    .iter()
-                                    .filter(|(i, _)| **i >= pc)
-                                    .take(32)
-                                    .map(|(i, inst)| {
-                                        let d = inst.data();
-                                        DisassemblyLine {
-                                            pc: inst.addr().into(),
-                                            instruction: d.name.into(),
-                                            arguments: inst.operands(&BTreeMap::new()).into(),
-                                        }
-                                    })
-                                    .collect();
-                                let apu_dis_lines: Vec<DisassemblyLine> = apu_disassembler
-                                    .instructions()
-                                    .iter()
-                                    .filter(|(i, _)| **i >= pc)
-                                    .take(32)
-                                    .map(|(_, inst)| {
-                                        DisassemblyLine {
-                                            pc: inst.addr().into(),
-                                            instruction: inst.opcode_name().into(),
-                                            arguments: inst.operands(&BTreeMap::new()).into(),
-                                        }
-                                    })
-                                    .collect();
+                                let pc = $c.pc();
+                                let pc = $c.cartridge().transform_address(pc);
+                                let cpu_dis_lines = disassembler.slint_instructions(pc, 16, 16);
+                                let apu_dis_lines = apu_disassembler.slint_instructions($c.apu().core.pc as usize, 16, 16);
                                 // Clone the Arc<Mutex<Console>> instead of the console here
                                 ui_ptr
                                     .upgrade_in_event_loop(closure!(clone console, |ui| {

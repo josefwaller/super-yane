@@ -5,7 +5,10 @@ use log::*;
 use super_yane::Console;
 use wdc65816::opcodes::*;
 
-use crate::disassembler::{Instruction, Label};
+use crate::{
+    DisassemblyLine,
+    disassembler::{Instruction, Label},
+};
 
 use derive_new::new;
 
@@ -78,8 +81,8 @@ fn get_label_name(prefix: &str, n: usize) -> String {
 impl<I: Instruction> Disassembler<I> {
     pub fn add_current_instruction(&mut self, console: &Console) {
         // Add the instruction if it is not already added
-        let key = console.cartridge().transform_address(console.pc());
         let inst = I::current_instruction(&console);
+        let key = inst.key();
         self.instructions.insert(key, inst.clone());
         if let Some(addr) = inst.jump_addr(console.pc()) {
             let addr = console.cartridge().transform_address(addr);
@@ -124,6 +127,31 @@ impl<I: Instruction> Disassembler<I> {
 
     pub fn instructions(&self) -> &BTreeMap<usize, I> {
         &self.instructions
+    }
+
+    pub fn slint_instructions(
+        &self,
+        pc: usize,
+        num_before: usize,
+        num_after: usize,
+    ) -> Vec<DisassemblyLine> {
+        let index = self
+            .instructions
+            .iter()
+            .position(|(k, _)| *k == pc)
+            .unwrap_or(0);
+        self.instructions
+            .iter()
+            .enumerate()
+            .skip(index.saturating_sub(num_before))
+            .take(num_before + num_after + 1)
+            .map(|(i, (_, inst))| DisassemblyLine {
+                pc: inst.addr().into(),
+                instruction: inst.opcode_name().into(),
+                arguments: inst.operands(&BTreeMap::new()).into(),
+                is_current: i == index,
+            })
+            .collect()
     }
 
     // /// Iterator over the lines in the disassembly so far
