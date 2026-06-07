@@ -62,6 +62,8 @@ pub struct Engine {
     to_emu: Sender<UpdateEmuPayload>,
     console: Arc<Mutex<Console>>,
     settings: Arc<Mutex<Settings>>,
+    pub cpu_dis: Arc<Mutex<Disassembler<CpuInstruction>>>,
+    pub apu_dis: Arc<Mutex<Disassembler<ApuInstruction>>>,
 }
 
 impl Engine {
@@ -79,17 +81,21 @@ impl Engine {
             log_apu: false,
             log_cpu: false,
         }));
+
+        // Create disassmblers
+        let cpu_dis = Arc::new(Mutex::new(Disassembler::<CpuInstruction>::new()));
+        let apu_dis = Arc::new(Mutex::new(Disassembler::<ApuInstruction>::new()));
+
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone console, clone settings, || {
-                // Create disassmbler
-                let mut disassembler = Disassembler::<CpuInstruction>::new();
-                // Add initial vectors and instruction
-                disassembler.add_native_vectors(&console.lock().unwrap());
-                disassembler.add_current_instruction(&console.lock().unwrap());
-
-                let mut apu_disassembler = Disassembler::<ApuInstruction>::new();
-                apu_disassembler.add_current_instruction(&console.lock().unwrap());
+            .spawn(closure!(clone console, clone settings, clone cpu_dis, clone apu_dis, || {
+                {
+                    let d = &mut cpu_dis.lock().unwrap();
+                    // Add initial vectors and instruction
+                    d.add_native_vectors(&console.lock().unwrap());
+                    d.add_current_instruction(&console.lock().unwrap());
+                }
+                apu_dis.lock().unwrap().add_current_instruction(&console.lock().unwrap());
 
                 // Used to calculate delta time to advance the emulator
                 let mut last_time = Instant::now();
@@ -99,17 +105,17 @@ impl Engine {
                         ($console: ident, $settings: ident) => {
                             // let before_master_cycles = *c.total_master_clocks();
                             $console.step_cpu();
-                            disassembler.add_current_instruction(&$console);
+                            cpu_dis.lock().unwrap().add_current_instruction(&$console);
                             if $settings.log_cpu {
                                 let inst = CpuSnapshot::from(&$console);
-                                info!("{}", inst);
+                                info!("[CPU] {}", inst);
                             }
                             while $console.apu_is_behind() {
                                 $console.step_apu();
-                                apu_disassembler.add_current_instruction(&$console);
+                                apu_dis.lock().unwrap().add_current_instruction(&$console);
                                 if $settings.log_apu {
                                     let inst = ApuSnapshot::from(&$console);
-                                    info!("{}", inst);
+                                    info!("[APU] {}", inst);
                                 }
                             }
                             // profiler.add_current_state(&console, before_master_cycles);
@@ -126,8 +132,8 @@ impl Engine {
                                     );
                                 let pc = $c.pc();
                                 let pc = $c.cartridge().transform_address(pc);
-                                let cpu_dis_lines = disassembler.slint_instructions(pc, 16, 16);
-                                let apu_dis_lines = apu_disassembler.slint_instructions($c.apu().core.pc as usize, 16, 16);
+                                let cpu_dis_lines = cpu_dis.lock().unwrap().slint_instructions(pc, 16, 16);
+                                let apu_dis_lines = cpu_dis.lock().unwrap().slint_instructions($c.apu().core.pc as usize, 16, 16);
                                 // Clone the Arc<Mutex<Console>> instead of the console here
                                 ui_ptr
                                     .upgrade_in_event_loop(closure!(clone console, |ui| {
@@ -267,6 +273,8 @@ impl Engine {
             to_emu,
             console,
             settings,
+            cpu_dis,
+            apu_dis,
         }
     }
 

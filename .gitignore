@@ -18,3 +18,5 @@ __pycache__
 **/profile.json
 samples.wav
 **/disassembly.txt
+cpu.asm
+apu.asm

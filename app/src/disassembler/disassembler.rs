@@ -12,50 +12,61 @@ use crate::{
 
 use derive_new::new;
 
-// #[derive(new)]
-// pub struct LinesIterator<'a> {
-//     instruction_index: usize,
-//     labels_index: usize,
-//     instructions: &'a BTreeMap<usize, Instruction>,
-//     labels: &'a BTreeMap<usize, Label>,
-// }
+#[derive(new)]
+pub struct LinesIterator<'a, I>
+where
+    I: Instruction,
+{
+    instruction_index: usize,
+    labels_index: usize,
+    instructions: &'a BTreeMap<usize, I>,
+    labels: &'a BTreeMap<usize, Label>,
+}
 
-// impl<'a> Iterator for LinesIterator<'a> {
-//     type Item = String;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let inst = self
-//             .instructions
-//             .iter()
-//             .nth(self.instruction_index)
-//             .map(|(pc, i)| (pc, format!("{:8}{}", " ", i.to_string(self.labels))));
-//         let lab = self
-//             .labels
-//             .iter()
-//             .nth(self.labels_index)
-//             .map(|(pc, l)| (pc, format!("{}:", l.to_string())));
-//         if inst.is_some() {
-//             let (ipc, i) = inst.unwrap();
-//             Some(if lab.is_some() {
-//                 let (lpc, l) = lab.unwrap();
-//                 if lpc <= ipc {
-//                     self.labels_index += 1;
-//                     l
-//                 } else {
-//                     self.instruction_index += 1;
-//                     i
-//                 }
-//             } else {
-//                 self.instruction_index += 1;
-//                 i
-//             })
-//         } else {
-//             lab.map(|(_, l)| {
-//                 self.labels_index += 1;
-//                 l
-//             })
-//         }
-//     }
-// }
+impl<'a, I> Iterator for LinesIterator<'a, I>
+where
+    I: Instruction,
+{
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        let inst = self
+            .instructions
+            .iter()
+            .nth(self.instruction_index)
+            .map(|(pc, i)| {
+                (
+                    pc,
+                    format!("{:8}{} {}", " ", i.opcode_name(), i.operands(self.labels)),
+                )
+            });
+        let lab = self
+            .labels
+            .iter()
+            .nth(self.labels_index)
+            .map(|(pc, l)| (pc, format!("{}:", l.to_string())));
+        if inst.is_some() {
+            let (ipc, i) = inst.unwrap();
+            Some(if lab.is_some() {
+                let (lpc, l) = lab.unwrap();
+                if lpc <= ipc {
+                    self.labels_index += 1;
+                    l
+                } else {
+                    self.instruction_index += 1;
+                    i
+                }
+            } else {
+                self.instruction_index += 1;
+                i
+            })
+        } else {
+            lab.map(|(_, l)| {
+                self.labels_index += 1;
+                l
+            })
+        }
+    }
+}
 
 /// Contains all the information required to disassemble the machine code into ASM
 #[derive(Clone)]
@@ -154,8 +165,8 @@ impl<I: Instruction> Disassembler<I> {
             .collect()
     }
 
-    // /// Iterator over the lines in the disassembly so far
-    // pub fn lines(&self) -> impl Iterator<Item = String> {
-    //     return LinesIterator::new(0, 0, &self.instructions, &self.labels);
-    // }
+    /// Iterator over the lines in the disassembly so far
+    pub fn lines(&self) -> impl Iterator<Item = String> {
+        return LinesIterator::new(0, 0, &self.instructions, &self.labels);
+    }
 }

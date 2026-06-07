@@ -1,6 +1,12 @@
 use closure::closure;
 use rfd::FileDialog;
-use std::{cell::RefCell, env, fs::File, rc::Rc};
+use std::{
+    cell::RefCell,
+    env,
+    fs::File,
+    io::{BufWriter, Write},
+    rc::Rc,
+};
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
@@ -67,12 +73,12 @@ fn main() {
             config.clone(),
             File::create("./super_yane.log").unwrap(),
         ),
-        TermLogger::new(
-            log::LevelFilter::Debug,
-            config,
-            simplelog::TerminalMode::Mixed,
-            simplelog::ColorChoice::Always,
-        ),
+        // TermLogger::new(
+        //     log::LevelFilter::Debug,
+        //     config,
+        //     simplelog::TerminalMode::Mixed,
+        //     simplelog::ColorChoice::Always,
+        // ),
     ])
     .unwrap();
     info!("Logger initialized");
@@ -156,4 +162,16 @@ fn main() {
             }
     }));
     ui.run().expect("Unable to start Slint application");
+
+    let e = engine.borrow();
+    let d = e.cpu_dis.lock().unwrap();
+    buf_write("./cpu.asm", d.lines());
+    let d = e.apu_dis.lock().unwrap();
+    buf_write("./apu.asm", d.lines());
+}
+
+fn buf_write(p: &str, it: impl Iterator<Item = String>) {
+    let f = std::fs::File::create(p).unwrap();
+    let mut bw = BufWriter::new(f);
+    it.for_each(|line| writeln!(bw, "{}", line).unwrap());
 }
