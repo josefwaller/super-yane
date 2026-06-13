@@ -11,7 +11,7 @@ pub enum MemoryMap {
 impl MemoryMap {
     pub fn transform_address(&self, address: usize) -> usize {
         match self {
-            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x7F_8000),
+            MemoryMap::LoRom => (address & 0x7FFF) + ((address >> 1) & 0x3F_8000),
             MemoryMap::HiRom => address & 0x3F_FFFF,
             MemoryMap::ExHiRom => (((!address) & 0x80_0000) >> 1) | (address & 0x3F_FFFF),
         }
