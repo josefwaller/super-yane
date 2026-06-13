@@ -131,59 +131,65 @@ export component AppWindow inherits Window {
                 alignment: stretch;
                 TabWidget {
                     horizontal-stretch: 0;
+                    width: 300px;
                     Tab {
                         title: "CPU";
-                        CpuDisplay {
-                            height: 100%;
-                            width: 100%;
-                            data: console_data.cpu;
-                        }
-                    }
+                        TabWidget {
+                            Tab {
+                                title: "WDC 65816";
+                                CpuDisplay {
+                                    data: console_data.cpu;
+                                }
+                            }
 
-                    Tab {
-                        title: "DMA";
+                            Tab {
+                                title: "DMA";
+                            }
+                        }
                     }
 
                     Tab {
                         title: "PPU";
-                        PpuDisplay {
-                            height: 100%;
-                            width: 100%;
-                            data: console_data.ppu;
-                        }
-                    }
+                        TabWidget {
+                            Tab {
+                                title: "REG";
+                                PpuDisplay {
+                                    data: console_data.ppu;
+                                }
+                            }
 
-                    Tab {
-                        title: "BGs";
-                        Backgrounds {
-                            height: 100%;
-                            width: 100%;
-                            backgrounds <=> backgrounds;
+                            Tab {
+                                title: "BGs";
+                                Backgrounds {
+                                    backgrounds <=> backgrounds;
+                                }
+                            }
                         }
                     }
 
                     Tab {
                         title: "APU";
-                        ApuDisplay {
-                            data: console_data.apu;
-                            width: 100%;
-                            height: 100%;
-                        }
-                    }
+                        TabWidget {
+                            Tab {
+                                title: "SPC 700";
+                                ApuDisplay {
+                                    data: console_data.apu;
+                                }
+                            }
 
-                    Tab {
-                        title: "DSP";
-                        DspDisplay {
-                            width: 100%;
-                            height: 100%;
-                            data: console_data.dsp;
-                        }
-                    }
+                            Tab {
+                                title: "DSP";
+                                DspDisplay {
+                                    data: console_data.dsp;
+                                }
+                            }
 
-                    Tab {
-                        title: "Voices";
-                        VoicesDisplay {
-                            data: console_data.voices;
+                            Tab {
+                                title: "Voices";
+                                VoicesDisplay {
+                                    data: console_data.voices;
+                                }
+                            }
                         }
                     }
                 }

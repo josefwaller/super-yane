@@ -10,7 +10,6 @@ use std::{
 
 use log::*;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use slint::{Image, ModelRc, RenderingState, SharedPixelBuffer, VecModel};
 
 mod apu_snapshot;
 mod audio;
@@ -73,12 +72,12 @@ fn main() {
             config.clone(),
             File::create("./super_yane.log").unwrap(),
         ),
-        // TermLogger::new(
-        //     log::LevelFilter::Debug,
-        //     config,
-        //     simplelog::TerminalMode::Mixed,
-        //     simplelog::ColorChoice::Always,
-        // ),
+        TermLogger::new(
+            log::LevelFilter::Debug,
+            config,
+            simplelog::TerminalMode::Mixed,
+            simplelog::ColorChoice::Always,
+        ),
     ])
     .unwrap();
     info!("Logger initialized");
