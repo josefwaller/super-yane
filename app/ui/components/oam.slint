@@ -1,0 +1,57 @@
+import { Register } from "register.slint";
+import { RegisterList } from "register_list.slint";
+import { Fmt } from "../globals.slint";
+import { Palette } from "../palette.slint";
+export struct OamData {
+    x: int,
+    y: int,
+    tile_index: int,
+    name_select: int,
+    flip_x: bool,
+    flip_y: bool,
+    priority: int,
+    palette_index: int,
+    size_select: int,
+    msb_x: bool,
+}
+
+component Reg inherits Register {
+    headerColor: Palette.ppu;
+}
+
+export component OamDisplay inherits RegisterList {
+    in property <[OamData]> data;
+
+    for d[i] in data: Reg {
+        name: "OAM " + i;
+        Reg {
+            name: "X";
+            value: Fmt.byte(d.x);
+        }
+
+        Reg {
+            name: "Y";
+            value: Fmt.byte(d.y);
+        }
+
+        Reg {
+            name: "Tile Index";
+            value: Fmt.address(d.tile_index);
+        }
+
+        Reg {
+            name: "Name Select";
+            value: Fmt.address(d.name_select);
+        }
+
+        Reg {
+            name: "Priority";
+            value: Fmt.byte(d.priority);
+        }
+
+        Reg {
+            name: "Palette Index";
+            value: Fmt.byte(d.palette_index);
+        }
+    }
+}

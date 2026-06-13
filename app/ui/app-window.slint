@@ -28,6 +28,7 @@ import { Backgrounds } from "components/backgrounds.slint";
 import { DspDisplay } from "components/dsp_display.slint";
 import { VoicesDisplay } from "components/voices_display.slint";
 import { Palette } from "palette.slint";
+import { OamDisplay, OamData } from "components/oam.slint";
 
 export { ExternalFunction, BinaryDataSrc }
 
@@ -40,6 +41,8 @@ export component AppWindow inherits Window {
     in property <[DisassemblyLine]> cpu_disassembly_lines;
     // The APU lines to display
     in property <[DisassemblyLine]> apu_disassembly_lines;
+    // OAM data to display
+    in property <[OamData]> oam_data;
     // Binary data to display
     in property <[[int]]> binary_data <=> binary_viewer.data;
     in property <image> binary_image <=> binary_viewer.data_image;
@@ -162,6 +165,13 @@ export component AppWindow inherits Window {
                                 title: "BGs";
                                 Backgrounds {
                                     backgrounds <=> backgrounds;
+                                }
+                            }
+
+                            Tab {
+                                title: "OAM";
+                                OamDisplay {
+                                    data <=> oam_data;
                                 }
                             }
                         }

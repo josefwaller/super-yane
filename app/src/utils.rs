@@ -4,12 +4,13 @@ use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use super_yane::{
     Background, Console, InputPort, Ppu,
     apu::{Apu, Dsp, Voice},
+    ppu::Sprite,
     utils::color_to_rgb_bytes,
 };
 use wdc65816::{Processor, StatusRegister};
 
 use crate::{
-    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, PpuData,
+    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, OamData, PpuData,
     StandardController, StatusRegisterData, Voice as SlintVoice,
 };
 
@@ -349,4 +350,21 @@ impl Into<InputPort> for StandardController {
             l,
         }
     }
+}
+
+pub fn get_oam_data(s: &Sprite) -> OamData {
+    let mut data = OamData::default();
+    copy_int_fields!(
+        s,
+        data,
+        x,
+        y,
+        tile_index,
+        name_select,
+        priority,
+        palette_index,
+        size_select
+    );
+    copy_fields!(s, data, flip_x, flip_y, msb_x);
+    data
 }

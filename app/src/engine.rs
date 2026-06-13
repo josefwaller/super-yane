@@ -1,11 +1,11 @@
 use crate::{
-    AppWindow, DisassemblyLine,
-    utils::{bytes_to_rgb, get_binary_data},
+    AppWindow, DisassemblyLine, OamData,
+    utils::{bytes_to_rgb, get_binary_data, get_oam_data},
 };
 use closure::closure;
 use derive_new::new;
 use log::*;
-use slint::{Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak};
+use slint::{Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel, Weak};
 use std::{
     collections::{BTreeMap, VecDeque},
     fmt::Display,
@@ -160,6 +160,21 @@ impl Engine {
                                                 c.ppu().backgrounds.iter().map(|b| b.into())
                                             ))
                                         ));
+                                        // Set up OAM data
+                                        if ui.get_oam_data().row_count() < c.ppu().oam_sprites.len() {
+                                            // Initialize OAM ModelRc
+                                            ui.set_oam_data(
+                                                ModelRc::from(Rc::from(VecModel::from_iter(c.ppu().oam_sprites.iter().map(
+                                                    |o| get_oam_data(o)
+                                                )))));
+                                        } else {
+                                            // Update in place
+                                            c.ppu().oam_sprites.iter().enumerate().for_each(
+                                                |(i, o)| {
+                                                    ui.get_oam_data().set_row_data(i, get_oam_data(o))
+                                                },
+                                            );
+                                        }
                                     }))
                                     .unwrap();
                             };
