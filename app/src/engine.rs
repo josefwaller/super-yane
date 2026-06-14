@@ -133,7 +133,7 @@ impl Engine {
                                 let pc = $c.pc();
                                 let pc = $c.cartridge().transform_address(pc);
                                 let cpu_dis_lines = cpu_dis.lock().unwrap().slint_instructions(pc, 16, 16);
-                                let apu_dis_lines = cpu_dis.lock().unwrap().slint_instructions($c.apu().core.pc as usize, 16, 16);
+                                let apu_dis_lines = apu_dis.lock().unwrap().slint_instructions($c.apu().core.pc as usize, 16, 16);
                                 // Clone the Arc<Mutex<Console>> instead of the console here
                                 ui_ptr
                                     .upgrade_in_event_loop(closure!(clone console, |ui| {
@@ -152,8 +152,15 @@ impl Engine {
                                         ui.set_binary_image(Image::from_rgb8(img_data));
                                         ui.set_binary_data_len(len as i32);
 
-                                        ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
-                                        ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
+                                        if ui.get_cpu_disassembly_lines().row_count() == 0 {
+                                            ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
+                                            ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
+                                        } else {
+                                            cpu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
+                                                ui.get_cpu_disassembly_lines().set_row_data(index, line));
+                                            apu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
+                                                ui.get_apu_disassembly_lines().set_row_data(index, line));
+                                        }
 
                                         ui.set_backgrounds(ModelRc::from(
                                             Rc::from(VecModel::from_iter(
