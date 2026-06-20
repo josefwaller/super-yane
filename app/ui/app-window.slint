@@ -61,7 +61,7 @@ export component AppWindow inherits Window {
     callback save_savestate();
 
     // The settings
-    out property <Settings> settings;
+    in-out property <Settings> settings;
     callback settings_changed(Settings);
     changed settings => {
         settings_changed(settings);

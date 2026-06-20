@@ -88,7 +88,7 @@ impl Engine {
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone console, clone settings, clone cpu_dis, clone apu_dis, || {
+            .spawn(closure!(clone console, clone settings, clone cpu_dis, clone apu_dis, clone ui_ptr, || {
                 {
                     let d = &mut cpu_dis.lock().unwrap();
                     // Add initial vectors and instruction
@@ -291,6 +291,11 @@ impl Engine {
             }))
             .expect("Unable to spawn thread");
 
+        // Set the initial settings
+        ui_ptr
+            .upgrade()
+            .unwrap()
+            .set_settings(settings.lock().unwrap().clone());
         Engine {
             to_emu,
             console,
