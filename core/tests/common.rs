@@ -21,8 +21,7 @@ macro_rules! rom_test {
                 ".bin",
                 c
                     .ppu()
-                    .screen_buffer
-                    .map(|b| b.to_le_bytes())
+                    .screen_data_rgb()
                     .into_iter()
                     .flatten()
                     .collect()
