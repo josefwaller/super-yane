@@ -41,7 +41,7 @@ fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
         Some(f) => match std::fs::read(&f) {
             Ok(bytes) => {
                 debug!("Reading {}", f);
-                if f.ends_with(".sy.bin") {
+                if f.ends_with(".bin") {
                     let mut c: Console = serde_brief::from_slice(&bytes)
                         .map_err(LoadConsoleError::DeserializationError)?;
                     c.ppu_mut().reset_vram_cache();
