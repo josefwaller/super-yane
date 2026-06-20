@@ -1058,11 +1058,14 @@ impl Ppu {
             .take(128)
             .for_each(|s| {
                 let size = self.oam_sizes[s.size_select];
-                if s.y <= y && s.y + size.1 > y {
+                if (s.y <= y && s.y + size.1 > y)
+                    || (s.y + size.1 >= 256 && y < (s.y + size.1 - 256))
+                {
+                    let y_diff = if s.y > y { 256 + y - s.y } else { y - s.y };
                     let (fine_y, tile_y) = if s.flip_y {
-                        (7 - (y - s.y) % 8, (size.1 - 1 - (y - s.y)) / 8)
+                        (7 - y_diff % 8, (size.1 - 1 - y_diff) / 8)
                     } else {
-                        ((y - s.y) % 8, (y - s.y) / 8)
+                        (y_diff % 8, y_diff / 8)
                     };
                     let slice_addr = self.sprite_tile_slice_addr(s, tile_y);
                     let width = size.0;
