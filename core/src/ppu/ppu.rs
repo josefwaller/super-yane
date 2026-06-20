@@ -97,8 +97,8 @@ fn default_oam_buffer() -> [Option<PixelData>; 0x100] {
     [None; 0x100]
 }
 
-fn default_screen_buffer() -> [u16; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-    [0; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]
+fn default_screen_buffer() -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
+    [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]
 }
 
 #[derive(Clone, Serialize, Deserialize, new)]
@@ -187,7 +187,7 @@ pub struct Ppu {
     /// Screen buffer
     #[serde(skip, default = "default_screen_buffer")]
     #[new(value = "default_screen_buffer()")]
-    pub screen_buffer: [u16; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+    pub screen_buffer: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
     /// The number of master cycles that have passed, used to track the dot
     #[new(value = "0")]
     pub master_cycles: usize,
@@ -1449,8 +1449,9 @@ impl Ppu {
                             })
                     };
                     // Set screen pixel
+                    let pixel_value = if self.forced_blanking { 0 } else { p & 0x7FFF };
                     self.screen_buffer[SCREEN_RESOLUTION[0] * y + x] =
-                        if self.forced_blanking { 0 } else { p & 0x7FFF };
+                        color_to_rgb_bytes(pixel_value, self.brightness)
                 }
             }
         })
@@ -1497,7 +1498,8 @@ impl Ppu {
     fn fixed_color_value(&self) -> u16 {
         rgb_to_color(self.fixed_color)
     }
+    /// Get the screen output as RBG pixel output
     pub fn screen_data_rgb(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-        core::array::from_fn(|i| color_to_rgb_bytes(self.screen_buffer[i], self.brightness))
+        self.screen_buffer
     }
 }
