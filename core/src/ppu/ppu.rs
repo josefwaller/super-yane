@@ -1446,7 +1446,8 @@ impl Ppu {
                             })
                     };
                     // Set screen pixel
-                    self.screen_buffer[SCREEN_RESOLUTION[0] * y + x] = p & 0x7FFF;
+                    self.screen_buffer[SCREEN_RESOLUTION[0] * y + x] =
+                        if self.forced_blanking { 0 } else { p & 0x7FFF };
                 }
             }
         })

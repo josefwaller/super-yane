@@ -275,7 +275,7 @@ impl Engine {
                                 let vblank = c.ppu().is_in_vblank();
                                 advance!(c, s);
                                 // Update canvas if we just entered vblank
-                                if vblank && !c.ppu().is_in_vblank() {
+                                if !vblank && c.ppu().is_in_vblank() {
                                     update_ui!(c, s);
                                 }
                             }
