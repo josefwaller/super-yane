@@ -352,7 +352,7 @@ impl Into<InputPort> for StandardController {
     }
 }
 
-pub fn get_oam_data(s: &Sprite) -> OamData {
+pub fn get_oam_data(s: &Sprite, ppu: &Ppu) -> OamData {
     let mut data = OamData::default();
     copy_int_fields!(
         s,
@@ -366,5 +366,6 @@ pub fn get_oam_data(s: &Sprite) -> OamData {
         size_select
     );
     copy_fields!(s, data, flip_x, flip_y, msb_x);
+    data.tile_addr = ppu.sprite_tile_slice_addr(s, 0) as i32;
     data
 }

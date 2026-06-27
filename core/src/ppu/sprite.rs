@@ -14,3 +14,10 @@ pub struct Sprite {
     pub size_select: usize,
     pub msb_x: bool,
 }
+
+impl Sprite {
+    /// Get the index (not address) of the tile for this sprite
+    pub fn tile_index(&self) -> usize {
+        (self.name_select << 8) + self.tile_index
+    }
+}

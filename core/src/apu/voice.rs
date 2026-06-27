@@ -293,7 +293,7 @@ impl Voice {
                 u16::from_le_bytes([ram[addr], ram[addr + 1]]) as usize
             });
             // Read the head and parse into flags
-            let head = ram[block_addr];
+            let head = ram[block_addr % ram.len()];
             // High nibble
             let shift = head >> 4;
             // Low nibble

@@ -836,9 +836,7 @@ impl Ppu {
             match addr % 4 {
                 0 => sprite.x = value as usize,
                 1 => sprite.y = value as usize,
-                2 => {
-                    sprite.tile_index = value as usize;
-                }
+                2 => sprite.tile_index = value as usize,
                 3 => {
                     sprite.flip_y = (value & 0x80) != 0;
                     sprite.flip_x = (value & 0x40) != 0;
@@ -1457,19 +1455,19 @@ impl Ppu {
         })
     }
     pub fn sprite_tile_slice_addr(&self, s: &Sprite, tile_y: usize) -> usize {
-        let tile_index = (s.name_select << 8) + s.tile_index + 16 * tile_y;
         let base_addr = 2 * self.oam_name_addr;
+        // VRAM tile data is 16 tiles wide, so offset by 16 tiles for every tile down
+        let tile_index = s.tile_index() + 16 * tile_y;
         // Sprites are always 4bpp
         const BYTES_PER_SPRITE: usize = 4 * 8;
-        if BYTES_PER_SPRITE * tile_index < 0x2000 {
+        if tile_index < 0x100 {
             base_addr + BYTES_PER_SPRITE * tile_index
         } else {
-            base_addr + 2 * self.oam_name_select + (BYTES_PER_SPRITE * tile_index) - 0x2000
+            base_addr + 2 * self.oam_name_select + BYTES_PER_SPRITE * (tile_index - 0x100)
         }
     }
     pub fn can_write_vram(&self) -> bool {
-        // self.forced_blanking || self.is_in_vblank()
-        true
+        self.forced_blanking || self.is_in_vblank()
     }
     /// Returns the index of the first scanline in VBlank
     fn vblank_scanline(&self) -> usize {

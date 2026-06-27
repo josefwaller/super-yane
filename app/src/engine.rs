@@ -172,13 +172,13 @@ impl Engine {
                                             // Initialize OAM ModelRc
                                             ui.set_oam_data(
                                                 ModelRc::from(Rc::from(VecModel::from_iter(c.ppu().oam_sprites.iter().map(
-                                                    |o| get_oam_data(o)
+                                                    |o| get_oam_data(o, c.ppu())
                                                 )))));
                                         } else {
                                             // Update in place
                                             c.ppu().oam_sprites.iter().enumerate().for_each(
                                                 |(i, o)| {
-                                                    ui.get_oam_data().set_row_data(i, get_oam_data(o))
+                                                    ui.get_oam_data().set_row_data(i, get_oam_data(o, c.ppu()))
                                                 },
                                             );
                                         }
