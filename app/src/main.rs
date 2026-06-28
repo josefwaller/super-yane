@@ -163,9 +163,9 @@ fn main() {
     ui.run().expect("Unable to start Slint application");
 
     let e = engine.borrow();
-    let d = e.cpu_dis.lock().unwrap();
+    let d = e.emulation.lock().unwrap().cpu_dis.clone();
     buf_write("./cpu.asm", d.lines());
-    let d = e.apu_dis.lock().unwrap();
+    let d = e.emulation.lock().unwrap().apu_dis.clone();
     buf_write("./apu.asm", d.lines());
 }
 
