@@ -1,6 +1,6 @@
 use crate::{
     AppWindow, DisassemblyLine, OamData,
-    utils::{bytes_to_rgb, get_oam_data, update_binary_data},
+    utils::{get_oam_data, update_binary_data},
 };
 use closure::closure;
 use derive_new::new;
@@ -187,7 +187,7 @@ fn update_ui(emulation: Arc<Mutex<Emulation>>, ui_ptr: Weak<AppWindow>) {
                 &ui
             );
             ui.get_binary_data().iter().for_each(|row| row.set_row_data(0, 4));
-            ui.set_console_data(c.deref().into());
+            ui.set_console_data(c.into());
             ui.set_pixel_data(Image::from_rgb8(buf));
 
             if ui.get_cpu_disassembly_lines().row_count() == 0 {

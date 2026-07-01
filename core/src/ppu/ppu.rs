@@ -1082,7 +1082,7 @@ impl Ppu {
                             [0; 8]
                         }
                     });
-                    let palette_index = 0x80 + 0x10 * s.palette_index;
+                    let palette_index = s.palette_addr();
                     let palette = &self.cgram[palette_index..(palette_index + 0x10)];
                     (0..width).for_each(|i| {
                         // Check if the pixel at (sprite x + i) is on the screen

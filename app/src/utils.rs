@@ -8,7 +8,7 @@ use super_yane::{
     Background, Console, InputPort, Ppu,
     apu::{Apu, Dsp, Voice},
     ppu::Sprite,
-    utils::color_to_rgb_bytes,
+    utils::{color_to_rgb, color_to_rgb_bytes},
 };
 use wdc65816::{Processor, StatusRegister};
 
@@ -22,7 +22,7 @@ use crate::{
 /// * `height` is the height of the output in 8x8 tiles.
 /// * `buffer` is the buffer that is written to. 2BPP tiles are written sequentially, so the first 8 bytes are
 /// the first slice, the first 64 bytes are the first tile.
-fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buffer: &mut [u8]) {
+fn bytes_to_2bpp_index(bytes: &[u8], width_tiles: usize, height_tiles: usize, buffer: &mut [u8]) {
     let width_pixels = width_tiles * 8;
     (0..height_tiles).for_each(|tile_y| {
         (0..width_tiles).for_each(|tile_x| {
@@ -51,8 +51,8 @@ fn bytes_to_rgb_2bpp(bytes: &[u8], width_tiles: usize, height_tiles: usize, buff
         });
     })
 }
-
-pub fn bytes_to_rgb(
+/// Convert tile data bytes to an array where each entry represents the index of the color in the palette
+pub fn bytes_to_index(
     bytes: &[u8],
     width_tiles: usize,
     height_tiles: usize,
@@ -68,7 +68,7 @@ pub fn bytes_to_rgb(
         8 => 4,
         _ => 1,
     };
-    bytes_to_rgb_2bpp(bytes, width_tiles * multi, height_tiles, &mut buffer_2bpp);
+    bytes_to_2bpp_index(bytes, width_tiles * multi, height_tiles, &mut buffer_2bpp);
     // Get number of 2bpp pixels per slice
     let pixels_per_slice = 8 * multi;
     // Combine the slices
@@ -78,6 +78,28 @@ pub fn bytes_to_rgb(
         (0..8).for_each(|x| {
             buffer[8 * i + x] = (0..multi).map(|j| pixels[x + 8 * j] << (2 * j)).sum();
         })
+    });
+}
+/// Convert a chunk of tile data to an RGB 2D array
+pub fn bytes_to_rgb<const W: usize>(
+    src_bytes: &[u8],
+    width_tiles: usize,
+    height_tiles: usize,
+    bpp: usize,
+    palette: &[u16],
+    out_buf: &mut [[u8; 3]; W],
+) {
+    // Inner buf will hold the index
+    let mut inner_buf = [0u8; W];
+    bytes_to_index(src_bytes, width_tiles, height_tiles, bpp, &mut inner_buf);
+    const BRIGHTNESS: u8 = 0x0F;
+    // Convert to RGB
+    inner_buf.iter().enumerate().for_each(|(index, value)| {
+        out_buf[index] = if *value == 0 {
+            [0; 3]
+        } else {
+            color_to_rgb_bytes(palette[*value as usize], BRIGHTNESS)
+        };
     });
 }
 const DATA_WIDTH: usize = 32;
@@ -135,7 +157,7 @@ pub fn update_binary_data(
     const NUM_TILES_HEIGHT: usize = 4;
     let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
     // Copy data to image buffer
-    bytes_to_rgb(
+    bytes_to_index(
         &data_src[offset..],
         NUM_TILES_WIDTH,
         NUM_TILES_HEIGHT,
@@ -381,5 +403,26 @@ pub fn get_oam_data(s: &Sprite, ppu: &Ppu) -> OamData {
     );
     copy_fields!(s, data, flip_x, flip_y, msb_x);
     data.tile_addr = ppu.sprite_tile_slice_addr(s, 0) as i32;
+    let (width, height) = ppu.oam_sizes[s.size_select];
+    let mut pixel_buf = [[0u8; 3]; 64 * 64];
+    // Have to copy each horizontal segment separately
+    (0..(height / 8)).for_each(|h| {
+        let tile_addr = ppu.sprite_tile_slice_addr(s, h);
+        let palette = &ppu.cgram[s.palette_addr()..];
+        let mut b = [[0u8; 3]; 8 * 64];
+        bytes_to_rgb(&ppu.vram[tile_addr..], width / 8, 1, 4, &palette, &mut b);
+        let step = 8 * width;
+        let off = h * step;
+        pixel_buf[off..(off + step)].copy_from_slice(&b[0..step]);
+    });
+    let mut buf =
+        if data.tile.size().width as usize != width || data.tile.size().height as usize != height {
+            SharedPixelBuffer::new(width as u32, height as u32)
+        } else {
+            data.tile.to_rgb8().unwrap()
+        };
+    let b = buf.make_mut_bytes();
+    b.copy_from_slice(&pixel_buf.as_flattened()[0..b.len()]);
+    data.tile = Image::from_rgb8(buf);
     data
 }

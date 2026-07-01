@@ -20,4 +20,8 @@ impl Sprite {
     pub fn tile_index(&self) -> usize {
         (self.name_select << 8) + self.tile_index
     }
+    /// Get the address of the palette for thissprite
+    pub fn palette_addr(&self) -> usize {
+        0x80 + 0x10 * self.palette_index
+    }
 }
