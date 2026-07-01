@@ -1,6 +1,6 @@
 use crate::{
     AppWindow, DisassemblyLine, OamData,
-    utils::{bytes_to_rgb, get_binary_data, get_oam_data},
+    utils::{bytes_to_rgb, get_oam_data, update_binary_data},
 };
 use closure::closure;
 use derive_new::new;
@@ -168,25 +168,27 @@ fn update_ui(emulation: Arc<Mutex<Emulation>>, ui_ptr: Weak<AppWindow>) {
             let c = &e.console;
             let cpu_dis = &e.cpu_dis;
             let apu_dis = &e.apu_dis;
-            let buf: SharedPixelBuffer<Rgb8Pixel> =
-                SharedPixelBuffer::clone_from_slice(c.ppu().screen_data_rgb().as_flattened(), 256, 224);
+            let mut buf: SharedPixelBuffer<Rgb8Pixel> = if ui.get_pixel_data().size().width == 0 {
+                SharedPixelBuffer::new(256, 224)
+            } else {
+                ui.get_pixel_data().to_rgb8().unwrap()
+            };
+            buf.make_mut_bytes().copy_from_slice(c.ppu().screen_data_rgb().as_flattened());
             let pc = c.pc();
             let pc = c.cartridge().transform_address(pc);
             let cpu_dis_lines = cpu_dis.slint_instructions(pc, 16, 16);
             let apu_dis_lines = apu_dis.slint_instructions(c.apu().core.pc as usize, 16, 16);
-            let (data, img_data, len) =
-                get_binary_data(
-                    &c,
-                    ui.get_binary_data_offset() as usize,
-                    ui.get_binary_src(),
-                    ui.get_bpp(),
-                    ui.get_palette_index() as usize,
-                );
+            update_binary_data(
+                &c,
+                ui.get_binary_data_offset() as usize,
+                ui.get_binary_src(),
+                ui.get_bpp(),
+                ui.get_palette_index() as usize,
+                &ui
+            );
+            ui.get_binary_data().iter().for_each(|row| row.set_row_data(0, 4));
             ui.set_console_data(c.deref().into());
             ui.set_pixel_data(Image::from_rgb8(buf));
-            ui.set_binary_data(data);
-            ui.set_binary_image(Image::from_rgb8(img_data));
-            ui.set_binary_data_len(len as i32);
 
             if ui.get_cpu_disassembly_lines().row_count() == 0 {
                 ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));

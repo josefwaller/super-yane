@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use slint::{ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel};
+use log::debug;
+use slint::{
+    Image, Model, ModelExt, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
+};
 use super_yane::{
     Background, Console, InputPort, Ppu,
     apu::{Apu, Dsp, Voice},
@@ -10,8 +13,8 @@ use super_yane::{
 use wdc65816::{Processor, StatusRegister};
 
 use crate::{
-    ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, OamData, PpuData,
-    StandardController, StatusRegisterData, Voice as SlintVoice,
+    AppWindow, ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, OamData,
+    PpuData, StandardController, StatusRegisterData, Voice as SlintVoice,
 };
 
 /// Interprets a chunk of binary data as SNES 2bpp tile date, and rewrites it into a 2BPP format
@@ -77,15 +80,23 @@ pub fn bytes_to_rgb(
         })
     });
 }
-pub fn get_binary_data(
+const DATA_WIDTH: usize = 32;
+const DATA_HEIGHT: usize = 8;
+pub fn update_binary_data(
     c: &Console,
     offset: usize,
     ram_type: BinaryDataSrc,
     bpp: i32,
     palette_index: usize,
-) -> (ModelRc<ModelRc<i32>>, SharedPixelBuffer<Rgb8Pixel>, usize) {
-    // Copy some section of ram
-    let mut data = [[0u8; 32]; 8];
+    ui: &AppWindow,
+) {
+    // Initialize data if empty
+    if ui.get_binary_data().row_count() < DATA_HEIGHT {
+        ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter(
+            (0..DATA_HEIGHT)
+                .map(|_| ModelRc::from(Rc::from(VecModel::from_iter((0..DATA_WIDTH).map(|_| 0))))),
+        ))));
+    }
     // Create a copy of CGRAM as a u8 array
     let cgram_arr: [u8; 0x200] =
         core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
@@ -98,9 +109,17 @@ pub fn get_binary_data(
         Aram => (c.apu().ram(), c.apu().ram().len()),
         Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
     };
-    // Copy binary data to array
+    // Copy binary data
     let mut it = data_src.iter().skip(offset);
-    (0..8).for_each(|i| (0..32).for_each(|j| data[i][j] = it.next().unwrap_or(&0).clone()));
+    (0..DATA_HEIGHT).for_each(|i| {
+        (0..DATA_WIDTH).for_each(|j| {
+            ui.get_binary_data()
+                .row_data_tracked(i)
+                .unwrap()
+                .set_row_data(j, it.next().unwrap_or(&0).clone() as i32)
+        })
+    });
+    ui.set_binary_data_len(data_len as i32);
     // Collect colors
     let colors: [[u8; 3]; 256] =
         core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
@@ -126,20 +145,15 @@ pub fn get_binary_data(
     // Map data to RGB
     let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
         core::array::from_fn(|i| palette[buffer[i] as usize]);
-    let buf = SharedPixelBuffer::clone_from_slice(
-        rgb_data.as_flattened(),
-        8 * NUM_TILES_WIDTH as u32,
-        8 * NUM_TILES_HEIGHT as u32,
-    );
-    return (
-        ModelRc::from(Rc::from(VecModel::from_iter((0..8).map(|i| {
-            ModelRc::from(Rc::from(VecModel::from_iter(
-                (0..32).map(|j| data[i][j] as i32),
-            )))
-        })))),
-        buf,
-        data_len,
-    );
+    // Copy to slint buffer
+    let mut buf = if ui.get_binary_image().size().width == 0 {
+        SharedPixelBuffer::new(8 * NUM_TILES_WIDTH as u32, 8 * NUM_TILES_HEIGHT as u32)
+    } else {
+        ui.get_binary_image().to_rgb8().unwrap()
+    };
+    buf.make_mut_bytes()
+        .copy_from_slice(rgb_data.as_flattened());
+    ui.set_binary_image(Image::from_rgb8(buf));
 }
 // Macro to copy a bunch of fields between structs
 macro_rules! copy_fields {
