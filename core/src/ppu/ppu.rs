@@ -415,7 +415,7 @@ impl Ppu {
                 (u8::from(self.interlace_field) << 7) | (c << 6)
             }
             _ => {
-                warn!("Unknown read PPU register {:04X}", addr);
+                todo!("Unknown read PPU register {:04X}", addr);
                 open_bus
             }
         }
@@ -437,7 +437,7 @@ impl Ppu {
                 self.brightness = value & 0x0F;
             }
             0x2101 => {
-                self.oam_name_addr = (value as usize & 0x03) << 13;
+                self.oam_name_addr = (value as usize & 0x07) << 13;
                 self.oam_name_select = ((value as usize & 0x18) + 0x08) << (12 - 3);
                 let size_select = (value & 0xE0) >> 5;
                 self.oam_sizes = [

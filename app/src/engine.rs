@@ -72,10 +72,11 @@ impl Emulation {
         let s = &mut self.settings;
         let cpu_dis = &mut self.cpu_dis;
         let apu_dis = &mut self.apu_dis;
+        let pc = c.pc();
         // let before_master_cycles = *c.total_master_clocks();
         c.step_cpu();
         cpu_dis.add_current_instruction(&c);
-        if s.log_cpu {
+        if s.log_cpu && c.pc() != pc {
             let inst = CpuSnapshot::from(&c);
             info!("[CPU] {}", inst);
         }

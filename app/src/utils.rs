@@ -248,7 +248,9 @@ impl Into<PpuData> for &Ppu {
             bg3_prio,
             mosaic_size,
             vram_addr,
-            cgram_addr
+            cgram_addr,
+            oam_name_addr,
+            oam_name_select
         );
         data.vram_increment_mode = format!("{}", self.vram_increment_mode).into();
         data
@@ -398,12 +400,13 @@ pub fn get_oam_data(s: &Sprite, ppu: &Ppu) -> OamData {
         tile_index,
         name_select,
         priority,
-        palette_index,
-        size_select
+        palette_index
     );
-    copy_fields!(s, data, flip_x, flip_y, msb_x);
+    copy_fields!(s, data, flip_x, flip_y);
     data.tile_addr = ppu.sprite_tile_slice_addr(s, 0) as i32;
     let (width, height) = ppu.oam_sizes[s.size_select];
+    data.size = (width as i32, height as i32);
+    // data.size.y = height as i32;
     let mut pixel_buf = [[0u8; 3]; 64 * 64];
     // Have to copy each horizontal segment separately
     (0..(height / 8)).for_each(|h| {

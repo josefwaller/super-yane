@@ -8,6 +8,7 @@ import { ScrollView } from "std-widgets.slint";
 export struct OamData {
     x: int,
     y: int,
+    size: { x: int, y: int},
     tile_index: int,
     tile_addr: int,
     name_select: int,
@@ -15,22 +16,20 @@ export struct OamData {
     flip_y: bool,
     priority: int,
     palette_index: int,
-    size_select: int,
-    msb_x: bool,
     // The tile, rendered to an image
     tile: image
 }
 
 export component OamDisplay inherits ScrollView {
     height: 100%;
-    width: 300px;
+    width: 100%;
     in property <[OamData]> data;
 
     GridLayout {
         padding: 5px;
         spacing: 1px;
         Row {
-            for header in ["X", "Y", "#", "Addr", "NS", "PRI", "PAL", "TILE"]: Text {
+            for header in ["INDEX", "X", "Y", "SIZE", "TILE INDEX", "Addr", "NS", "PRI", "PAL", "TILE"]: Text {
                 text: header;
             }
         }
@@ -38,7 +37,17 @@ export component OamDisplay inherits ScrollView {
         for d[i] in data: Row {
             Text {
                 vertical-alignment: center;
+                text: Fmt.byte(i);
+            }
+
+            Text {
+                vertical-alignment: center;
                 text: Fmt.byte(d.x);
+            }
+
+            Text {
+                vertical-alignment: center;
+                text: "(" + d.size.x + ", " + d.size.y + ")";
             }
 
             Text {

@@ -60,4 +60,14 @@ export component PpuDisplay inherits RegisterList {
         name: "CGRAM Address";
         value: Fmt.word(data.cgram-addr);
     }
+
+    Reg {
+        name: "OAM Name Address";
+        value: Fmt.address(data.oam_name_addr);
+    }
+
+    Reg {
+        name: "OAM Name Select";
+        value: Fmt.address(data.oam_name_select);
+    }
 }
