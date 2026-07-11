@@ -4,7 +4,7 @@
 // };
 use closure::closure;
 use derive_new::new;
-use egui::Context;
+use egui::{Context, Key};
 use log::*;
 use slint::{Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel, Weak};
 use std::{
@@ -33,11 +33,11 @@ use crate::{
 };
 
 #[derive(Copy, Clone)]
-struct Settings {
-    is_paused: bool,
-    log_apu: bool,
-    log_cpu: bool,
-    volume: f32,
+pub struct Settings {
+    pub is_paused: bool,
+    pub log_apu: bool,
+    pub log_cpu: bool,
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,6 +77,13 @@ pub struct Emulation {
 }
 
 impl Emulation {
+    /// Pre-advance hook, should be called before calling advance a bunch of times.
+    /// Sets up input ports.
+    fn pre_advance(&mut self) {
+        *self.console.input_ports_mut() = self.get_input_ports();
+    }
+    /// Advances the console 1 instruction.
+    /// Handles disassembly, profiling, logging, etc
     fn advance(&mut self) {
         let c = &mut self.console;
         let s = &mut self.settings;
@@ -100,10 +107,32 @@ impl Emulation {
         }
         // profiler.add_current_state(&console, before_master_cycles);
     }
+    /// Derives the input port state from the current keyboard/mouse state
+    fn get_input_ports(&self) -> [InputPort; 2] {
+        self.ctx.input(|i| {
+            // TODO: Use custom keybindings here
+            [InputPort::StandardController {
+                a: i.key_down(Key::B),
+                b: i.key_down(Key::Space),
+                x: i.key_down(Key::N),
+                y: i.key_down(Key::M),
+                up: i.key_down(Key::W),
+                left: i.key_down(Key::A),
+                right: i.key_down(Key::D),
+                down: i.key_down(Key::S),
+                start: i.key_down(Key::R),
+                select: i.key_down(Key::F),
+                r: i.key_down(Key::E),
+                l: i.key_down(Key::Q),
+            }; 2]
+        })
+    }
+
     pub fn on_command(&mut self, command: Command) {
         use Command::*;
         match command {
             Advance(a) => {
+                self.pre_advance();
                 use AdvanceAmount::*;
                 match a {
                     MasterCycles(n) => {
@@ -147,9 +176,9 @@ impl Emulation {
                     }
                 }
             }
-            UpdateInputPorts(input_ports) => {
-                *self.console.input_ports_mut() = input_ports;
-            }
+            // UpdateInputPorts(input_ports) => {
+            //     *self.console.input_ports_mut() = input_ports;
+            // }
             LoadRom(bytes) => {
                 self.console = Console::with_cartridge(&bytes);
             }
@@ -160,6 +189,7 @@ impl Emulation {
             Reset => {
                 self.console.reset();
             }
+            _ => unimplemented!(),
         };
     }
 }
@@ -170,70 +200,6 @@ pub struct Engine {
     to_emu: Sender<UpdateEmuPayload>,
     pub emulation: Arc<Mutex<Emulation>>,
 }
-
-// fn update_ui(emulation: Arc<Mutex<Emulation>>, ui_ptr: Weak<AppWindow>) {
-//     // Clone the Arc<Mutex<Console>> instead of the console here
-//     ui_ptr
-//         .upgrade_in_event_loop(closure!(clone emulation, |ui| {
-//             let e = emulation.lock().unwrap();
-//             let c = &e.console;
-//             let cpu_dis = &e.cpu_dis;
-//             let apu_dis = &e.apu_dis;
-//             let mut buf: SharedPixelBuffer<Rgb8Pixel> = if ui.get_pixel_data().size().width == 0 {
-//                 SharedPixelBuffer::new(256, 224)
-//             } else {
-//                 ui.get_pixel_data().to_rgb8().unwrap()
-//             };
-//             buf.make_mut_bytes().copy_from_slice(c.ppu().screen_data_rgb().as_flattened());
-//             let pc = c.pc();
-//             let pc = c.cartridge().transform_address(pc);
-//             let cpu_dis_lines = cpu_dis.slint_instructions(pc, 16, 16);
-//             let apu_dis_lines = apu_dis.slint_instructions(c.apu().core.pc as usize, 16, 16);
-//             update_binary_data(
-//                 &c,
-//                 ui.get_binary_data_offset() as usize,
-//                 ui.get_binary_src(),
-//                 ui.get_bpp(),
-//                 ui.get_palette_index() as usize,
-//                 &ui
-//             );
-//             ui.get_binary_data().iter().for_each(|row| row.set_row_data(0, 4));
-//             ui.set_console_data(c.into());
-//             ui.set_pixel_data(Image::from_rgb8(buf));
-
-//             if ui.get_cpu_disassembly_lines().row_count() == 0 {
-//                 ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
-//                 ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
-//             } else {
-//                 cpu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
-//                     ui.get_cpu_disassembly_lines().set_row_data(index, line));
-//                 apu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
-//                     ui.get_apu_disassembly_lines().set_row_data(index, line));
-//             }
-
-//             ui.set_backgrounds(ModelRc::from(
-//                 Rc::from(VecModel::from_iter(
-//                     c.ppu().backgrounds.iter().map(|b| b.into())
-//                 ))
-//             ));
-//             // Set up OAM data
-//             if ui.get_oam_data().row_count() < c.ppu().oam_sprites.len() {
-//                 // Initialize OAM ModelRc
-//                 ui.set_oam_data(
-//                     ModelRc::from(Rc::from(VecModel::from_iter(c.ppu().oam_sprites.iter().map(
-//                         |o| get_oam_data(o, c.ppu())
-//                     )))));
-//             } else {
-//                 // Update in place
-//                 c.ppu().oam_sprites.iter().enumerate().for_each(
-//                     |(i, o)| {
-//                         ui.get_oam_data().set_row_data(i, get_oam_data(o, c.ppu()))
-//                     },
-//                 );
-//             }
-//         }))
-//         .unwrap();
-// }
 
 impl Engine {
     pub fn new(
@@ -292,6 +258,7 @@ impl Engine {
                         let s = e.settings.clone();
                         // Advance emulator
                         if !s.is_paused {
+                            e.pre_advance();
                             let initial_master_cycles = e.console.total_master_clocks().clone();
                             while ((e.console.total_master_clocks() - initial_master_cycles) as f64)
                                 < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
