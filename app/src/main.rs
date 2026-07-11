@@ -4,6 +4,7 @@ pub mod audio;
 pub mod cpu_snapshot;
 pub mod disassembler;
 pub mod emu_state;
+pub mod emulation;
 pub mod engine;
 pub mod profiler;
 

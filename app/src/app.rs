@@ -35,10 +35,7 @@ impl eframe::App for App {
             .screen_data
             .get_or_insert_with(|| App::initialize_texture(ui));
         tex.set(
-            ColorImage::from_rgb(
-                SCREEN_RESOLUTION,
-                emu.console.ppu().screen_data_rgb().as_flattened(),
-            ),
+            ColorImage::from_rgb(SCREEN_RESOLUTION, &emu.screen_data_rgb),
             Default::default(),
         );
         if ui.button("Play/Pause").clicked() {
