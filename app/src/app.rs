@@ -28,8 +28,8 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         // Get lock on console
-        let lock = self.engine.emulation.clone();
-        let mut emu = lock.lock().expect("Unable to get a lock on emulation");
+        let emu_arc = self.engine.emulation.clone();
+        let mut emu = emu_arc.lock().expect("Unable to get a lock on emulation");
         // Update screen data
         let tex = self
             .screen_data
@@ -42,7 +42,7 @@ impl eframe::App for App {
             Default::default(),
         );
         if ui.button("Play/Pause").clicked() {
-            emu.settings.is_paused = !emu.settings.is_paused;
+            emu.is_paused = !emu.is_paused;
         }
         // Render screen
         ui.image((tex.id(), tex.size_vec2()));

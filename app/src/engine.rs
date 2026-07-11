@@ -4,7 +4,7 @@
 // };
 use closure::closure;
 use derive_new::new;
-use egui::{Context, Key};
+use egui::{Context as UiContext, Key};
 use log::*;
 use slint::{Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel, Weak};
 use std::{
@@ -33,12 +33,7 @@ use crate::{
 };
 
 #[derive(Copy, Clone)]
-pub struct Settings {
-    pub is_paused: bool,
-    pub log_apu: bool,
-    pub log_cpu: bool,
-    pub volume: f32,
-}
+pub struct EmulationContext {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdvanceAmount {
@@ -69,11 +64,16 @@ pub struct UpdateEmuPayload {
 /// Everything here is stored in an Arc<Mutex<>> so that it can be shared
 /// between the main thread and the emuation thread
 pub struct Emulation {
+    /// The console state
     pub console: Console,
-    pub settings: Settings,
+    pub is_paused: bool,
+    pub log_apu: bool,
+    pub log_cpu: bool,
+    pub volume: f32,
     pub cpu_dis: Disassembler<CpuInstruction>,
     pub apu_dis: Disassembler<ApuInstruction>,
-    pub ctx: Context,
+    /// The UI context, used to get input and trigger repaint.
+    pub ui_ctx: UiContext,
 }
 
 impl Emulation {
@@ -86,21 +86,18 @@ impl Emulation {
     /// Handles disassembly, profiling, logging, etc
     fn advance(&mut self) {
         let c = &mut self.console;
-        let s = &mut self.settings;
-        let cpu_dis = &mut self.cpu_dis;
-        let apu_dis = &mut self.apu_dis;
         let pc = c.pc();
         // let before_master_cycles = *c.total_master_clocks();
         c.step_cpu();
-        cpu_dis.add_current_instruction(&c);
-        if s.log_cpu && c.pc() != pc {
+        self.cpu_dis.add_current_instruction(&c);
+        if self.log_cpu && c.pc() != pc {
             let inst = CpuSnapshot::from(&c);
             info!("[CPU] {}", inst);
         }
         while c.apu_is_behind() {
             c.step_apu();
-            apu_dis.add_current_instruction(&c);
-            if s.log_apu {
+            self.apu_dis.add_current_instruction(&c);
+            if self.log_apu {
                 let inst = ApuSnapshot::from(&c);
                 info!("[APU] {}", inst);
             }
@@ -109,7 +106,7 @@ impl Emulation {
     }
     /// Derives the input port state from the current keyboard/mouse state
     fn get_input_ports(&self) -> [InputPort; 2] {
-        self.ctx.input(|i| {
+        self.ui_ctx.input(|i| {
             // TODO: Use custom keybindings here
             [InputPort::StandardController {
                 a: i.key_down(Key::B),
@@ -204,7 +201,7 @@ pub struct Engine {
 impl Engine {
     pub fn new(
         console: Console, //     , ui_ptr: Weak<AppWindow>
-        ctx: Context,
+        ui_ctx: UiContext,
     ) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (to_emu, from_main) = mpsc::channel::<UpdateEmuPayload>();
@@ -212,15 +209,13 @@ impl Engine {
         let mut audio = Audio::new();
         let emulation = Arc::new(Mutex::new(Emulation {
             console,
-            settings: Settings {
-                volume: 20.0,
-                is_paused: false,
-                log_apu: false,
-                log_cpu: false,
-            },
+            volume: 20.0,
+            is_paused: false,
+            log_apu: false,
+            log_cpu: false,
             cpu_dis: Disassembler::<CpuInstruction>::new(),
             apu_dis: Disassembler::<ApuInstruction>::new(),
-            ctx,
+            ui_ctx,
         }));
 
         thread::Builder::new()
@@ -255,9 +250,8 @@ impl Engine {
                         last_time = now;
                         {
                         let mut e = emulation.lock().unwrap();
-                        let s = e.settings.clone();
                         // Advance emulator
-                        if !s.is_paused {
+                        if !e.is_paused {
                             e.pre_advance();
                             let initial_master_cycles = e.console.total_master_clocks().clone();
                             while ((e.console.total_master_clocks() - initial_master_cycles) as f64)
@@ -273,12 +267,12 @@ impl Engine {
                             // Update audio
                             let samples = e.console.apu_mut().sample_queue();
                             let (a, b) = samples.as_slices();
-                            audio.push_samples(a, s.volume);
-                            audio.push_samples(b, s.volume);
+                            audio.push_samples(a, e.volume);
+                            audio.push_samples(b, e.volume);
 
                         }
                         // Repaint
-                        e.ctx.request_repaint();
+                        e.ui_ctx.request_repaint();
                     }
                         // Sleep
                         thread::sleep(SLEEP_TIME);
@@ -292,10 +286,6 @@ impl Engine {
         //     .unwrap()
         //     .set_settings(emulation.lock().unwrap().settings.clone());
         Engine { to_emu, emulation }
-    }
-
-    pub fn update_settings(&mut self, settings: Settings) {
-        self.emulation.lock().unwrap().settings = settings;
     }
 
     pub fn update(&mut self, command: Command) {
