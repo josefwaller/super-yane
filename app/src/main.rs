@@ -1,39 +1,27 @@
-use closure::closure;
-use rfd::FileDialog;
-use std::{
-    cell::RefCell,
-    env,
-    fs::File,
-    io::{BufWriter, Write},
-    rc::Rc,
-};
+mod app;
+pub mod apu_snapshot;
+pub mod audio;
+pub mod cpu_snapshot;
+pub mod disassembler;
+pub mod emu_state;
+pub mod engine;
+pub mod profiler;
 
-use log::*;
+use app::App;
+use log::{debug, error};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-
-mod apu_snapshot;
-mod audio;
-mod cpu_snapshot;
-mod engine;
-mod utils;
-
-use crate::{
-    LoadConsoleError::FileError,
-    engine::{AdvanceAmount, Command, Engine},
-};
+use std::{env, fs::File};
 use super_yane::Console;
-mod disassembler;
-mod profiler;
 
-const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
-
-slint::include_modules!();
+use crate::engine::{Command, Engine};
 
 #[derive(Debug)]
 enum LoadConsoleError {
     FileError(std::io::Error),
     DeserializationError(serde_brief::Error),
 }
+
+const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
 fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
     // Load ROM/savestate
@@ -52,14 +40,15 @@ fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
             }
             Err(e) => {
                 error!("Unable to read file {}: {:?}", f, e);
-                Err(FileError(e))
+                Err(LoadConsoleError::FileError(e))
             }
         },
         None => Ok(Console::with_cartridge(DEFAULT_CARTRIDGE)),
     }
 }
 
-fn main() {
+fn main() -> eframe::Result {
+    // Initialize logger
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
         .add_filter_allow_str("super_yane")
@@ -80,97 +69,143 @@ fn main() {
         ),
     ])
     .unwrap();
-    info!("Logger initialized");
-    // Initialize UI
-    let ui = AppWindow::new().unwrap();
-    let ui_ptr = ui.as_weak();
-    // Initialize engine
-    let engine = Rc::new(RefCell::new(Engine::new(
-        initial_console(env::args().nth(1)).unwrap(),
-        ui_ptr,
-    )));
-    // Update controllers
-    ui.on_controller_changed(closure!(clone engine, |controller| {
-        // Todo: Support player 2
-        // Copy controller values
-        let values = [controller.into(); 2];
-        engine.borrow_mut().update(Command::UpdateInputPorts(values));
-    }));
-    // Update settings
-    ui.on_settings_changed(closure!(clone engine, |s| {
-        engine.borrow_mut().update_settings(s);
-    }));
-    // Advance instructions
-    ui.on_advance_instructions(closure!(clone engine, |n| {
-        engine.borrow_mut().update(Command::Advance(AdvanceAmount::Instructions(n as u32)));
-    }));
-    // Advance frames
-    ui.on_advance_frames(closure!(clone engine, |n| {
-        engine.borrow_mut().update(Command::Advance(AdvanceAmount::Frames(n as u32)));
-    }));
-    ui.on_reset(closure!(clone engine, || {
-        engine.borrow_mut().update(Command::Reset);
-    }));
-    // Define rust functions
-    let funcs = ui.global::<ExternalFunction>();
-    funcs.on_byte_to_hex(|b| format!("{:02X}", b).into());
-    funcs.on_word_to_hex(|b| format!("{:04X}", b).into());
-    funcs.on_addr_to_hex(|b| format!("{:06X}", b).into());
-    ui.on_load_rom(closure!(clone engine, || {
-        match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc", "smc"]).pick_file() {
-            None => {}
-            Some(path) => {
-                match std::fs::read(&path) {
-                    Err(e) => {
-                        error!("Unable to read file {:?}: {:?}", &path, e);
-                    }
-                    Ok(bytes) => {
-                        engine.borrow_mut().update(Command::LoadRom(bytes))
-                    }
-                }
-            }
-        }
-    }));
-    ui.on_save_savestate(closure!(clone engine, || {
-        match FileDialog::new()
-            .set_title("Save game state")
-            .set_file_name("savestate.bin")
-            .save_file() {
-            None => {},
-            Some(path) => {
-                let data = engine.borrow().get_savestate();
-                match std::fs::write(&path, &data) {
-                    Ok(_) => {},
-                    Err(e) => error!("Unable to write to file {:?}: {:?}", path, e)
-                }
-            }
-        }
-    }));
-    ui.on_load_savestate(closure!(clone engine, || {
-        match FileDialog::new()
-            .add_filter("Super Y.A.N.E. Savestate", &["bin"])
-            .set_title("Load game state")
-            .pick_file() {
-                None => {},
-                Some(path) => {
-                    match std::fs::read(&path) {
-                        Ok(bytes) => engine.borrow_mut().load_savestate(&bytes).unwrap(),
-                        Err(e) => error!("Unable to read file {:?}: {:?}", &path, e)
-                    }
-                }
-            }
-    }));
-    ui.run().expect("Unable to start Slint application");
-
-    let e = engine.borrow();
-    let d = e.emulation.lock().unwrap().cpu_dis.clone();
-    buf_write("./cpu.asm", d.lines());
-    let d = e.emulation.lock().unwrap().apu_dis.clone();
-    buf_write("./apu.asm", d.lines());
+    // Initialize window
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([800.0, 600.0])
+            .with_title("Super Y.A.N.E"),
+        ..Default::default()
+    };
+    // Run
+    eframe::run_native(
+        "Super Y.A.N.E",
+        native_options,
+        Box::new(|cc| {
+            Ok(Box::new(App::new(
+                cc,
+                initial_console(env::args().nth(1)).unwrap(),
+            )))
+        }),
+    )
 }
 
-fn buf_write(p: &str, it: impl Iterator<Item = String>) {
-    let f = std::fs::File::create(p).unwrap();
-    let mut bw = BufWriter::new(f);
-    it.for_each(|line| writeln!(bw, "{}", line).unwrap());
-}
+// use closure::closure;
+// use rfd::FileDialog;
+// use std::{
+//     cell::RefCell,
+//     env,
+//     fs::File,
+//     io::{BufWriter, Write},
+//     rc::Rc,
+// };
+
+// use log::*;
+// use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
+
+// mod apu_snapshot;
+// mod audio;
+// mod cpu_snapshot;
+// mod engine;
+// mod utils;
+
+// use crate::{
+//     LoadConsoleError::FileError,
+//     engine::{AdvanceAmount, Command, Engine},
+// };
+// use super_yane::Console;
+// mod disassembler;
+// mod profiler;
+
+// slint::include_modules!();
+
+// fn main() {
+//    //     info!("Logger initialized");
+//     // Initialize UI
+//     let ui = AppWindow::new().unwrap();
+//     let ui_ptr = ui.as_weak();
+
+//     // Update controllers
+//     ui.on_controller_changed(closure!(clone engine, |controller| {
+//         // Todo: Support player 2
+//         // Copy controller values
+//         let values = [controller.into(); 2];
+//         engine.borrow_mut().update(Command::UpdateInputPorts(values));
+//     }));
+//     // Update settings
+//     ui.on_settings_changed(closure!(clone engine, |s| {
+//         engine.borrow_mut().update_settings(s);
+//     }));
+//     // Advance instructions
+//     ui.on_advance_instructions(closure!(clone engine, |n| {
+//         engine.borrow_mut().update(Command::Advance(AdvanceAmount::Instructions(n as u32)));
+//     }));
+//     // Advance frames
+//     ui.on_advance_frames(closure!(clone engine, |n| {
+//         engine.borrow_mut().update(Command::Advance(AdvanceAmount::Frames(n as u32)));
+//     }));
+//     ui.on_reset(closure!(clone engine, || {
+//         engine.borrow_mut().update(Command::Reset);
+//     }));
+//     // Define rust functions
+//     let funcs = ui.global::<ExternalFunction>();
+//     funcs.on_byte_to_hex(|b| format!("{:02X}", b).into());
+//     funcs.on_word_to_hex(|b| format!("{:04X}", b).into());
+//     funcs.on_addr_to_hex(|b| format!("{:06X}", b).into());
+//     ui.on_load_rom(closure!(clone engine, || {
+//         match FileDialog::new().add_filter("Super NES Rom", &["rom", "sfc", "smc"]).pick_file() {
+//             None => {}
+//             Some(path) => {
+//                 match std::fs::read(&path) {
+//                     Err(e) => {
+//                         error!("Unable to read file {:?}: {:?}", &path, e);
+//                     }
+//                     Ok(bytes) => {
+//                         engine.borrow_mut().update(Command::LoadRom(bytes))
+//                     }
+//                 }
+//             }
+//         }
+//     }));
+//     ui.on_save_savestate(closure!(clone engine, || {
+//         match FileDialog::new()
+//             .set_title("Save game state")
+//             .set_file_name("savestate.bin")
+//             .save_file() {
+//             None => {},
+//             Some(path) => {
+//                 let data = engine.borrow().get_savestate();
+//                 match std::fs::write(&path, &data) {
+//                     Ok(_) => {},
+//                     Err(e) => error!("Unable to write to file {:?}: {:?}", path, e)
+//                 }
+//             }
+//         }
+//     }));
+//     ui.on_load_savestate(closure!(clone engine, || {
+//         match FileDialog::new()
+//             .add_filter("Super Y.A.N.E. Savestate", &["bin"])
+//             .set_title("Load game state")
+//             .pick_file() {
+//                 None => {},
+//                 Some(path) => {
+//                     match std::fs::read(&path) {
+//                         Ok(bytes) => engine.borrow_mut().load_savestate(&bytes).unwrap(),
+//                         Err(e) => error!("Unable to read file {:?}: {:?}", &path, e)
+//                     }
+//                 }
+//             }
+//     }));
+//     ui.run().expect("Unable to start Slint application");
+
+//     let e = engine.borrow();
+//     let d = e.emulation.lock().unwrap().cpu_dis.clone();
+//     buf_write("./cpu.asm", d.lines());
+//     let d = e.emulation.lock().unwrap().apu_dis.clone();
+//     buf_write("./apu.asm", d.lines());
+// }
+
+// fn buf_write(p: &str, it: impl Iterator<Item = String>) {
+//     let f = std::fs::File::create(p).unwrap();
+//     let mut bw = BufWriter::new(f);
+//     it.for_each(|line| writeln!(bw, "{}", line).unwrap());
+// }

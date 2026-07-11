@@ -1,9 +1,10 @@
-use crate::{
-    AppWindow, DisassemblyLine, OamData,
-    utils::{get_oam_data, update_binary_data},
-};
+// use crate::{
+//     AppWindow, DisassemblyLine, OamData,
+//     utils::{get_oam_data, update_binary_data},
+// };
 use closure::closure;
 use derive_new::new;
+use egui::Context;
 use log::*;
 use slint::{Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel, Weak};
 use std::{
@@ -23,13 +24,21 @@ use super_yane::{Console, Cpu, InputPort, MASTER_CLOCK_SPEED_HZ, Ppu, ppu::SCREE
 const SLEEP_TIME: Duration = Duration::from_millis(5);
 
 use crate::{
-    ConsoleData, Settings,
+    // ConsoleData,
     apu_snapshot::ApuSnapshot,
     audio::Audio,
     cpu_snapshot::CpuSnapshot,
     disassembler::{ApuInstruction, CpuInstruction, Disassembler, Instruction},
     profiler::Profiler,
 };
+
+#[derive(Copy, Clone)]
+struct Settings {
+    is_paused: bool,
+    log_apu: bool,
+    log_cpu: bool,
+    volume: f32,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdvanceAmount {
@@ -60,10 +69,11 @@ pub struct UpdateEmuPayload {
 /// Everything here is stored in an Arc<Mutex<>> so that it can be shared
 /// between the main thread and the emuation thread
 pub struct Emulation {
-    console: Console,
-    settings: Settings,
+    pub console: Console,
+    pub settings: Settings,
     pub cpu_dis: Disassembler<CpuInstruction>,
     pub apu_dis: Disassembler<ApuInstruction>,
+    pub ctx: Context,
 }
 
 impl Emulation {
@@ -161,72 +171,75 @@ pub struct Engine {
     pub emulation: Arc<Mutex<Emulation>>,
 }
 
-fn update_ui(emulation: Arc<Mutex<Emulation>>, ui_ptr: Weak<AppWindow>) {
-    // Clone the Arc<Mutex<Console>> instead of the console here
-    ui_ptr
-        .upgrade_in_event_loop(closure!(clone emulation, |ui| {
-            let e = emulation.lock().unwrap();
-            let c = &e.console;
-            let cpu_dis = &e.cpu_dis;
-            let apu_dis = &e.apu_dis;
-            let mut buf: SharedPixelBuffer<Rgb8Pixel> = if ui.get_pixel_data().size().width == 0 {
-                SharedPixelBuffer::new(256, 224)
-            } else {
-                ui.get_pixel_data().to_rgb8().unwrap()
-            };
-            buf.make_mut_bytes().copy_from_slice(c.ppu().screen_data_rgb().as_flattened());
-            let pc = c.pc();
-            let pc = c.cartridge().transform_address(pc);
-            let cpu_dis_lines = cpu_dis.slint_instructions(pc, 16, 16);
-            let apu_dis_lines = apu_dis.slint_instructions(c.apu().core.pc as usize, 16, 16);
-            update_binary_data(
-                &c,
-                ui.get_binary_data_offset() as usize,
-                ui.get_binary_src(),
-                ui.get_bpp(),
-                ui.get_palette_index() as usize,
-                &ui
-            );
-            ui.get_binary_data().iter().for_each(|row| row.set_row_data(0, 4));
-            ui.set_console_data(c.into());
-            ui.set_pixel_data(Image::from_rgb8(buf));
+// fn update_ui(emulation: Arc<Mutex<Emulation>>, ui_ptr: Weak<AppWindow>) {
+//     // Clone the Arc<Mutex<Console>> instead of the console here
+//     ui_ptr
+//         .upgrade_in_event_loop(closure!(clone emulation, |ui| {
+//             let e = emulation.lock().unwrap();
+//             let c = &e.console;
+//             let cpu_dis = &e.cpu_dis;
+//             let apu_dis = &e.apu_dis;
+//             let mut buf: SharedPixelBuffer<Rgb8Pixel> = if ui.get_pixel_data().size().width == 0 {
+//                 SharedPixelBuffer::new(256, 224)
+//             } else {
+//                 ui.get_pixel_data().to_rgb8().unwrap()
+//             };
+//             buf.make_mut_bytes().copy_from_slice(c.ppu().screen_data_rgb().as_flattened());
+//             let pc = c.pc();
+//             let pc = c.cartridge().transform_address(pc);
+//             let cpu_dis_lines = cpu_dis.slint_instructions(pc, 16, 16);
+//             let apu_dis_lines = apu_dis.slint_instructions(c.apu().core.pc as usize, 16, 16);
+//             update_binary_data(
+//                 &c,
+//                 ui.get_binary_data_offset() as usize,
+//                 ui.get_binary_src(),
+//                 ui.get_bpp(),
+//                 ui.get_palette_index() as usize,
+//                 &ui
+//             );
+//             ui.get_binary_data().iter().for_each(|row| row.set_row_data(0, 4));
+//             ui.set_console_data(c.into());
+//             ui.set_pixel_data(Image::from_rgb8(buf));
 
-            if ui.get_cpu_disassembly_lines().row_count() == 0 {
-                ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
-                ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
-            } else {
-                cpu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
-                    ui.get_cpu_disassembly_lines().set_row_data(index, line));
-                apu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
-                    ui.get_apu_disassembly_lines().set_row_data(index, line));
-            }
+//             if ui.get_cpu_disassembly_lines().row_count() == 0 {
+//                 ui.set_cpu_disassembly_lines(ModelRc::new(VecModel::from(cpu_dis_lines)));
+//                 ui.set_apu_disassembly_lines(ModelRc::new(VecModel::from(apu_dis_lines)));
+//             } else {
+//                 cpu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
+//                     ui.get_cpu_disassembly_lines().set_row_data(index, line));
+//                 apu_dis_lines.into_iter().enumerate().for_each(|(index, line)|
+//                     ui.get_apu_disassembly_lines().set_row_data(index, line));
+//             }
 
-            ui.set_backgrounds(ModelRc::from(
-                Rc::from(VecModel::from_iter(
-                    c.ppu().backgrounds.iter().map(|b| b.into())
-                ))
-            ));
-            // Set up OAM data
-            if ui.get_oam_data().row_count() < c.ppu().oam_sprites.len() {
-                // Initialize OAM ModelRc
-                ui.set_oam_data(
-                    ModelRc::from(Rc::from(VecModel::from_iter(c.ppu().oam_sprites.iter().map(
-                        |o| get_oam_data(o, c.ppu())
-                    )))));
-            } else {
-                // Update in place
-                c.ppu().oam_sprites.iter().enumerate().for_each(
-                    |(i, o)| {
-                        ui.get_oam_data().set_row_data(i, get_oam_data(o, c.ppu()))
-                    },
-                );
-            }
-        }))
-        .unwrap();
-}
+//             ui.set_backgrounds(ModelRc::from(
+//                 Rc::from(VecModel::from_iter(
+//                     c.ppu().backgrounds.iter().map(|b| b.into())
+//                 ))
+//             ));
+//             // Set up OAM data
+//             if ui.get_oam_data().row_count() < c.ppu().oam_sprites.len() {
+//                 // Initialize OAM ModelRc
+//                 ui.set_oam_data(
+//                     ModelRc::from(Rc::from(VecModel::from_iter(c.ppu().oam_sprites.iter().map(
+//                         |o| get_oam_data(o, c.ppu())
+//                     )))));
+//             } else {
+//                 // Update in place
+//                 c.ppu().oam_sprites.iter().enumerate().for_each(
+//                     |(i, o)| {
+//                         ui.get_oam_data().set_row_data(i, get_oam_data(o, c.ppu()))
+//                     },
+//                 );
+//             }
+//         }))
+//         .unwrap();
+// }
 
 impl Engine {
-    pub fn new(console: Console, ui_ptr: Weak<AppWindow>) -> Engine {
+    pub fn new(
+        console: Console, //     , ui_ptr: Weak<AppWindow>
+        ctx: Context,
+    ) -> Engine {
         // Send data to the emulation thread telling it to update the emulator
         let (to_emu, from_main) = mpsc::channel::<UpdateEmuPayload>();
         // Initialize audio
@@ -241,11 +254,14 @@ impl Engine {
             },
             cpu_dis: Disassembler::<CpuInstruction>::new(),
             apu_dis: Disassembler::<ApuInstruction>::new(),
+            ctx,
         }));
 
         thread::Builder::new()
             .name("Super Y.A.N.E. helper".to_string())
-            .spawn(closure!(clone emulation, clone ui_ptr, || {
+            .spawn(closure!(clone emulation,
+                //, clone ui_ptr,
+                 || {
                 {
                     let mut e = emulation.lock().unwrap();
                     let c = e.console.clone();
@@ -263,7 +279,7 @@ impl Engine {
                         match p {
                             Ok(payload) => {
                                 emulation.lock().unwrap().on_command(payload.command);
-                                update_ui(emulation.clone(), ui_ptr.clone());
+                                // update_ui(emulation.clone(), ui_ptr.clone());
                             },
                             Err(_) => {}
                         }
@@ -284,7 +300,7 @@ impl Engine {
                                 e.advance();
                                 // Update canvas if we just entered vblank
                                 if !vblank && e.console.ppu().is_in_vblank() {
-                                    update_ui(emulation.clone(), ui_ptr.clone());
+                                    // update_ui(emulation.clone(), ui_ptr.clone());
                                 }
                             }
                             // Update audio
@@ -292,8 +308,10 @@ impl Engine {
                             let (a, b) = samples.as_slices();
                             audio.push_samples(a, s.volume);
                             audio.push_samples(b, s.volume);
-                        }
 
+                        }
+                        // Repaint
+                        e.ctx.request_repaint();
                     }
                         // Sleep
                         thread::sleep(SLEEP_TIME);
@@ -302,10 +320,10 @@ impl Engine {
             .expect("Unable to spawn thread");
 
         // Set the initial settings
-        ui_ptr
-            .upgrade()
-            .unwrap()
-            .set_settings(emulation.lock().unwrap().settings.clone());
+        // ui_ptr
+        //     .upgrade()
+        //     .unwrap()
+        //     .set_settings(emulation.lock().unwrap().settings.clone());
         Engine { to_emu, emulation }
     }
 

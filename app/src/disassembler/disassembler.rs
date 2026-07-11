@@ -6,7 +6,7 @@ use super_yane::Console;
 use wdc65816::opcodes::*;
 
 use crate::{
-    DisassemblyLine,
+    // DisassemblyLine,
     disassembler::{Instruction, Label},
 };
 
@@ -140,30 +140,30 @@ impl<I: Instruction> Disassembler<I> {
         &self.instructions
     }
 
-    pub fn slint_instructions(
-        &self,
-        pc: usize,
-        num_before: usize,
-        num_after: usize,
-    ) -> Vec<DisassemblyLine> {
-        let index = self
-            .instructions
-            .iter()
-            .position(|(k, _)| *k == pc)
-            .unwrap_or(0);
-        self.instructions
-            .iter()
-            .enumerate()
-            .skip(index.saturating_sub(num_before))
-            .take(num_before + num_after + 1)
-            .map(|(i, (_, inst))| DisassemblyLine {
-                pc: inst.addr().into(),
-                instruction: inst.opcode_name().into(),
-                arguments: inst.operands(&BTreeMap::new()).into(),
-                is_current: i == index,
-            })
-            .collect()
-    }
+    // pub fn slint_instructions(
+    //     &self,
+    //     pc: usize,
+    //     num_before: usize,
+    //     num_after: usize,
+    // ) -> Vec<DisassemblyLine> {
+    //     let index = self
+    //         .instructions
+    //         .iter()
+    //         .position(|(k, _)| *k == pc)
+    //         .unwrap_or(0);
+    //     self.instructions
+    //         .iter()
+    //         .enumerate()
+    //         .skip(index.saturating_sub(num_before))
+    //         .take(num_before + num_after + 1)
+    //         .map(|(i, (_, inst))| DisassemblyLine {
+    //             pc: inst.addr().into(),
+    //             instruction: inst.opcode_name().into(),
+    //             arguments: inst.operands(&BTreeMap::new()).into(),
+    //             is_current: i == index,
+    //         })
+    //         .collect()
+    // }
 
     /// Iterator over the lines in the disassembly so far
     pub fn lines(&self) -> impl Iterator<Item = String> {

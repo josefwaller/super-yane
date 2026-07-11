@@ -17,6 +17,8 @@ serde-brief = { version = "0.2.0", features = ["alloc"] }
 slint = "1.16.0"
 rodio = "0.22.2"
 closure = "0.3.0"
+eframe = "0.35.0"
+egui = "0.35.0"
 
 [build-dependencies]
 slint-build = "1.14.1"
