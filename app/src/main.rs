@@ -108,6 +108,9 @@ fn main() -> eframe::Result {
                     egui::FontId::new(12.0, FontFamily::Monospace),
                 );
             });
+            #[cfg(debug_assertions)]
+            cc.egui_ctx
+                .global_style_mut(|s| s.debug.warn_if_rect_changes_id = false);
             Ok(Box::new(App::new(
                 cc,
                 initial_console(env::args().nth(1)).unwrap(),

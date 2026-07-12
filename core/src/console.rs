@@ -648,7 +648,8 @@ impl Console {
     pub fn opcode(&self) -> u8 {
         self.rest.cartridge.read_byte(self.pc())
     }
-    /// Get the current program counter of the console
+    /// Get the current program counter of the console.
+    /// This is the untransformed address, the cartridge will transform it before reading from its data.
     /// TODO: Move this to either CPU or wdc65816
     pub fn pc(&self) -> usize {
         self.cpu.core.pbr as usize * 0x10000 + self.cpu.core.pc as usize

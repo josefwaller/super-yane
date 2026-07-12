@@ -23,49 +23,74 @@ where
     labels: &'a BTreeMap<usize, Label>,
 }
 
+pub struct Line<I>
+where
+    I: Instruction,
+{
+    pub pc: usize,
+    pub label: Option<Label>,
+    pub instruction: I,
+}
+
+impl<I> Line<I>
+where
+    I: Instruction,
+{
+    pub fn new(pc: usize, instruction: I, labels: &BTreeMap<usize, Label>) -> Self {
+        Line {
+            pc: pc,
+            label: labels.get(&pc).map(|l| l.to_owned()),
+            instruction,
+        }
+    }
+}
+
 impl<'a, I> Iterator for LinesIterator<'a, I>
 where
     I: Instruction,
 {
-    type Item = String;
+    type Item = Line<I>;
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.instructions
+            .iter()
+            .nth(n)
+            // .map(|(pc, i)| format!("{:8}{} {}", " ", i.opcode_name(), i.operands(self.labels)))
+            .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels))
+    }
     fn next(&mut self) -> Option<Self::Item> {
-        let inst = self
-            .instructions
+        self.instructions
             .iter()
             .nth(self.instruction_index)
-            .map(|(pc, i)| {
-                (
-                    pc,
-                    format!("{:8}{} {}", " ", i.opcode_name(), i.operands(self.labels)),
-                )
-            });
-        let lab = self
-            .labels
-            .iter()
-            .nth(self.labels_index)
-            .map(|(pc, l)| (pc, format!("{}:", l.to_string())));
-        if inst.is_some() {
-            let (ipc, i) = inst.unwrap();
-            Some(if lab.is_some() {
-                let (lpc, l) = lab.unwrap();
-                if lpc <= ipc {
-                    self.labels_index += 1;
-                    l
-                } else {
-                    self.instruction_index += 1;
-                    i
-                }
-            } else {
-                self.instruction_index += 1;
-                i
-            })
-        } else {
-            lab.map(|(_, l)| {
-                self.labels_index += 1;
-                l
-            })
-        }
+            .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels))
     }
+    // fn next(&mut self) -> Option<Self::Item> {
+    //     let lab = self
+    //         .labels
+    //         .iter()
+    //         .nth(self.labels_index)
+    //         .map(|(pc, l)| (pc, format!("{}:", l.to_string())));
+    //     if inst.is_some() {
+    //         let (ipc, i) = inst.unwrap();
+    //         Some(if lab.is_some() {
+    //             let (lpc, l) = lab.unwrap();
+    //             if lpc <= ipc {
+    //                 self.labels_index += 1;
+    //                 l
+    //             } else {
+    //                 self.instruction_index += 1;
+    //                 i
+    //             }
+    //         } else {
+    //             self.instruction_index += 1;
+    //             i
+    //         })
+    //     } else {
+    //         lab.map(|(_, l)| {
+    //             self.labels_index += 1;
+    //             l
+    //         })
+    //     }
+    // }
 }
 
 /// Contains all the information required to disassemble the machine code into ASM
@@ -140,33 +165,11 @@ impl<I: Instruction> Disassembler<I> {
         &self.instructions
     }
 
-    // pub fn slint_instructions(
-    //     &self,
-    //     pc: usize,
-    //     num_before: usize,
-    //     num_after: usize,
-    // ) -> Vec<DisassemblyLine> {
-    //     let index = self
-    //         .instructions
-    //         .iter()
-    //         .position(|(k, _)| *k == pc)
-    //         .unwrap_or(0);
-    //     self.instructions
-    //         .iter()
-    //         .enumerate()
-    //         .skip(index.saturating_sub(num_before))
-    //         .take(num_before + num_after + 1)
-    //         .map(|(i, (_, inst))| DisassemblyLine {
-    //             pc: inst.addr().into(),
-    //             instruction: inst.opcode_name().into(),
-    //             arguments: inst.operands(&BTreeMap::new()).into(),
-    //             is_current: i == index,
-    //         })
-    //         .collect()
-    // }
-
     /// Iterator over the lines in the disassembly so far
-    pub fn lines(&self) -> impl Iterator<Item = String> {
+    pub fn lines(&self) -> impl Iterator<Item = Line<I>> {
         return LinesIterator::new(0, 0, &self.instructions, &self.labels);
+    }
+    pub fn labels(&self) -> &BTreeMap<usize, Label> {
+        &self.labels
     }
 }

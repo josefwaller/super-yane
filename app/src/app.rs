@@ -1,18 +1,20 @@
 use eframe::CreationContext;
 use egui::{Color32, ColorImage, TextureHandle, Ui};
 use egui_dock::{DockArea, DockState};
+use egui_infinite_scroll::InfiniteScroll;
 use super_yane::ppu::SCREEN_RESOLUTION;
 
 use crate::{
     Console, Engine,
     engine::Command,
-    ui::{Tab, TabViewer, cpu_data},
+    ui::{EmuTab, TabViewer, cpu_data},
 };
 
 pub struct App {
     engine: Engine,
     screen_data: Option<TextureHandle>,
-    tree: DockState<Tab>,
+    tree: DockState<EmuTab>,
+    scroll: InfiniteScroll<i32, i32>,
 }
 
 impl App {
@@ -20,7 +22,17 @@ impl App {
         App {
             engine: Engine::new(console, cc.egui_ctx.clone()),
             screen_data: None,
-            tree: DockState::new(vec![Tab::Screen, Tab::Cpu, Tab::Controls]),
+            tree: DockState::new(vec![
+                EmuTab::Screen,
+                EmuTab::Cpu,
+                EmuTab::Controls,
+                EmuTab::CpuDisassembly,
+            ]),
+            scroll: InfiniteScroll::new().end_loader(|cursor, callback| {
+                let start = cursor.unwrap_or(0);
+                let end = 1;
+                callback(Ok(((start..end).collect(), Some(end))));
+            }),
         }
     }
     fn initialize_texture(ui: &mut Ui) -> TextureHandle {
@@ -55,6 +67,7 @@ impl eframe::App for App {
                 &mut TabViewer {
                     engine: &mut self.engine,
                     screen: tex,
+                    scroll: &mut self.scroll,
                 },
             );
     }

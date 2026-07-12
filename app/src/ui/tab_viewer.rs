@@ -1,29 +1,36 @@
-use egui::TextureHandle;
-use super_yane::Console;
+use egui::{
+    Align, Color32, RichText, TextureHandle, UiKind::ScrollArea, hex_color, style::ScrollAnimation,
+};
+use egui_infinite_scroll::InfiniteScroll;
 
 use crate::{
-    engine::{Command, Engine},
+    disassembler::{CpuInstruction, Instruction},
+    engine::{AdvanceAmount, Command, Engine},
     ui::cpu_data,
 };
 
-pub enum Tab {
+pub enum EmuTab {
     Screen,
     Cpu,
     Controls,
+    CpuDisassembly,
 }
 pub struct TabViewer<'a> {
     pub engine: &'a mut Engine,
     pub screen: &'a TextureHandle,
+    pub scroll: &'a mut InfiniteScroll<i32, i32>,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
-    type Tab = Tab;
+    type Tab = EmuTab;
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        use EmuTab::*;
         egui::WidgetText::Text(
             match tab {
-                Tab::Cpu => "WDC 65816",
-                Tab::Screen => "Screen",
-                Tab::Controls => "Controls",
+                Cpu => "WDC 65816",
+                Screen => "Screen",
+                Controls => "Controls",
+                CpuDisassembly => "CPU DIS",
             }
             .to_owned(),
         )
@@ -37,11 +44,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 .emulation
                 .lock()
                 .expect("Unable to get a lock on Emulation");
+            use EmuTab::*;
             match tab {
-                Tab::Cpu => {
+                Cpu => {
                     cpu_data(ui, &emu.console);
                 }
-                Tab::Screen => {
+                Screen => {
                     ui.vertical_centered(|ui| {
                         ui.label(emu.console.cartridge().title());
                         // Render screen
@@ -52,13 +60,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.add(img);
                     });
                 }
-                Tab::Controls => {
+                Controls => {
                     ui.horizontal(|ui| {
                         if ui
                             .button(if emu.is_paused { "Resume" } else { "Pause" })
                             .clicked()
                         {
                             emu.is_paused = !emu.is_paused;
+                        }
+                        if ui.button("Advance").clicked() {
+                            to_send = Some(Command::Advance(AdvanceAmount::Instructions(1)));
                         }
                         if ui.button("Reset").clicked() {
                             to_send = Some(Command::Reset);
@@ -67,6 +78,63 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.add(egui::Slider::new(&mut vol, 0.0..=100.0).text("Volume"));
                         emu.volume = vol;
                     });
+                }
+                CpuDisassembly => {
+                    let mut scroll = egui::ScrollArea::vertical().hscroll(emu.is_paused);
+                    let pc = emu.console.cartridge().transform_address(emu.console.pc());
+                    // Get height of each row (since they're just text, it's just hte text height)
+                    let height = ui.text_style_height(&egui::TextStyle::Body);
+                    if !emu.is_paused {
+                        // Scroll to current instruction
+                        let index = {
+                            let inst = CpuInstruction::current_instruction(&emu.console);
+                            emu.cpu_dis
+                                .instructions()
+                                .keys()
+                                .position(|k| *k == inst.key())
+                        };
+                        if let Some(i) = index {
+                            // Compute the scroll offset
+                            scroll = scroll
+                                .vertical_scroll_offset(
+                                    (height + ui.spacing().item_spacing.y) * i as f32,
+                                )
+                                .animated(false);
+                        }
+                    }
+                    scroll.show_rows(
+                        ui,
+                        height,
+                        emu.cpu_dis.instructions().len(),
+                        |ui, row_range| {
+                            for index in row_range {
+                                ui.set_width(ui.available_width());
+                                // self.scroll.ui(ui, 10, |ui, index, item| {
+                                let line = emu.cpu_dis.lines().nth(index);
+                                match line {
+                                    None => {}
+                                    Some(l) => {
+                                        let is_current_inst = if l.pc == pc { true } else { false };
+                                        ui.columns(4, |cols| {
+                                            if is_current_inst {
+                                                cols[0].label(
+                                                    RichText::new("->").color(hex_color!("FF0000")),
+                                                );
+                                            }
+                                            if let Some(label) = l.label {
+                                                cols[1].label(label.to_string());
+                                            }
+                                            cols[2].label(format!("{:06X}", l.pc));
+                                            cols[3].label(RichText::new(
+                                                l.instruction.to_string(emu.cpu_dis.labels()),
+                                            ));
+                                        })
+                                    }
+                                }
+                            }
+                            // });
+                        },
+                    );
                 }
             }
         }
