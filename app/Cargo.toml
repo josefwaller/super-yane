@@ -19,6 +19,7 @@ rodio = "0.22.2"
 closure = "0.3.0"
 eframe = "0.35.0"
 egui = { version = "0.35.0", features = ["color-hex"] }
+egui_dock = "0.20.1"
 
 [build-dependencies]
 slint-build = "1.14.1"
