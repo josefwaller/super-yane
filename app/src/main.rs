@@ -7,11 +7,13 @@ pub mod emu_state;
 pub mod emulation;
 pub mod engine;
 pub mod profiler;
+pub mod ui;
 
 use app::App;
+use egui::{FontData, FontDefinitions, FontFamily, FontId};
 use log::{debug, error};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use std::{env, fs::File};
+use std::{env, fs::File, sync::Arc};
 use super_yane::Console;
 
 use crate::engine::{Command, Engine};
@@ -77,11 +79,35 @@ fn main() -> eframe::Result {
             .with_title("Super Y.A.N.E"),
         ..Default::default()
     };
+    // Load font
+    macro_rules! FONT_PATH {
+        () => {
+            "../assets/VeraMono.ttf"
+        };
+    }
+    let font_data = include_bytes!(FONT_PATH!());
+    let mut fonts = FontDefinitions::default();
+    fonts.font_data.insert(
+        FONT_PATH!().to_owned(),
+        Arc::new(FontData::from_static(font_data)),
+    );
+    fonts
+        .families
+        .entry(FontFamily::Monospace)
+        .or_default()
+        .insert(0, FONT_PATH!().to_owned());
     // Run
     eframe::run_native(
         "Super Y.A.N.E",
         native_options,
         Box::new(|cc| {
+            cc.egui_ctx.set_fonts(fonts);
+            cc.egui_ctx.global_style_mut(|s| {
+                s.text_styles.insert(
+                    egui::TextStyle::Body,
+                    egui::FontId::new(12.0, FontFamily::Monospace),
+                );
+            });
             Ok(Box::new(App::new(
                 cc,
                 initial_console(env::args().nth(1)).unwrap(),

@@ -156,7 +156,6 @@ impl Emulation {
             Reset => {
                 self.console.reset();
             }
-            _ => unimplemented!(),
         };
     }
 }

@@ -4,7 +4,7 @@
 // };
 use closure::closure;
 use derive_new::new;
-use egui::{Context as UiContext, Key};
+use egui::Context as UiContext;
 use std::{
     sync::{
         Arc, Mutex,
@@ -13,15 +13,11 @@ use std::{
     thread::{self},
     time::{Duration, Instant},
 };
-use super_yane::{Console, InputPort, MASTER_CLOCK_SPEED_HZ};
+use super_yane::{Console, MASTER_CLOCK_SPEED_HZ};
 
 const SLEEP_TIME: Duration = Duration::from_millis(5);
 
-use crate::{
-    audio::Audio,
-    disassembler::{ApuInstruction, CpuInstruction, Disassembler},
-    emulation::Emulation,
-};
+use crate::{audio::Audio, emulation::Emulation};
 
 #[derive(Copy, Clone)]
 pub struct EmulationContext {}
@@ -127,11 +123,6 @@ impl Engine {
             }))
             .expect("Unable to spawn thread");
 
-        // Set the initial settings
-        // ui_ptr
-        //     .upgrade()
-        //     .unwrap()
-        //     .set_settings(emulation.lock().unwrap().settings.clone());
         Engine { to_emu, emulation }
     }
 
