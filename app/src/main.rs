@@ -75,7 +75,7 @@ fn main() -> eframe::Result {
     // Initialize window
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0])
+            .with_inner_size([1600.0, 1200.0])
             .with_title("Super Y.A.N.E"),
         ..Default::default()
     };

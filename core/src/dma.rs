@@ -19,7 +19,7 @@ impl From<AddressAdjustMode> for u8 {
     }
 }
 
-const TRANSFER_PATTERS: &[&[u8]] = &[
+pub const TRANSFER_PATTERNS: &[&[u8]] = &[
     &[0],
     &[0, 1],
     &[0, 0],
@@ -94,7 +94,7 @@ impl Default for Channel {
 }
 impl Channel {
     pub fn transfer_pattern(&self) -> &[u8] {
-        TRANSFER_PATTERS[self.transfer_pattern_index]
+        TRANSFER_PATTERNS[self.transfer_pattern_index]
     }
     pub fn current_hdma_table_addr(&self, offset: u16) -> usize {
         self.hdma_table_bank as usize * 0x1_0000
