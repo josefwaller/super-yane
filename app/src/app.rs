@@ -13,7 +13,7 @@ use crate::{
 pub struct App {
     engine: Engine,
     screen_data: Option<TextureHandle>,
-    tree: DockState<EmuTab>,
+    tree: DockState<(egui::Id, EmuTab)>,
     scroll: InfiniteScroll<i32, i32>,
 }
 
@@ -29,7 +29,7 @@ impl App {
         App {
             engine: Engine::new(console, cc.egui_ctx.clone()),
             screen_data: None,
-            tree,
+            tree: tree.map_tabs(|tab| (egui::Id::new(rand::random::<i32>()), *tab)),
             scroll: InfiniteScroll::new().end_loader(|cursor, callback| {
                 let start = cursor.unwrap_or(0);
                 let end = 1;
@@ -62,15 +62,25 @@ impl eframe::App for App {
                 Default::default(),
             );
         }
+        // Gather nodes to add
+        let mut added_nodes = vec![];
         DockArea::new(&mut self.tree)
             .show_add_buttons(true)
+            .show_add_popup(true)
+            .show_leaf_collapse_buttons(false)
             .show_inside(
                 ui,
                 &mut TabViewer {
                     engine: &mut self.engine,
                     screen: tex,
                     scroll: &mut self.scroll,
+                    added_tabs: &mut added_nodes,
                 },
             );
+        for (path, tab) in added_nodes {
+            self.tree.set_focused_node_and_surface(path);
+            self.tree
+                .push_to_focused_leaf((egui::Id::new(rand::random::<i32>()), tab));
+        }
     }
 }

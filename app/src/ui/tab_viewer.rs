@@ -2,7 +2,9 @@ use egui::{
     Align, Color32, Layout, RichText, TextureHandle, UiKind::ScrollArea, hex_color,
     style::ScrollAnimation,
 };
+use egui_dock::{DockState, NodePath};
 use egui_infinite_scroll::InfiniteScroll;
+use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     disassembler::{CpuInstruction, Instruction},
@@ -10,33 +12,41 @@ use crate::{
     ui::cpu_data,
 };
 
+#[derive(EnumIter, Copy, Clone)]
 pub enum EmuTab {
     Screen,
     Cpu,
     CpuDisassembly,
     BinaryData,
 }
+impl ToString for EmuTab {
+    fn to_string(&self) -> String {
+        use EmuTab::*;
+        match self {
+            Screen => "Screen",
+            Cpu => "WDC65816",
+            CpuDisassembly => "CPU Instructions",
+            BinaryData => "Binary",
+        }
+        .to_owned()
+    }
+}
 pub struct TabViewer<'a> {
     pub engine: &'a mut Engine,
     pub screen: &'a TextureHandle,
     pub scroll: &'a mut InfiniteScroll<i32, i32>,
+    pub added_tabs: &'a mut Vec<(NodePath, EmuTab)>,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
-    type Tab = EmuTab;
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        use EmuTab::*;
-        egui::WidgetText::Text(
-            match tab {
-                Cpu => "WDC 65816",
-                Screen => "Screen",
-                CpuDisassembly => "CPU DIS",
-                BinaryData => "HEX DATA",
-            }
-            .to_owned(),
-        )
+    type Tab = (egui::Id, EmuTab);
+    fn title(&mut self, (_, tab): &mut Self::Tab) -> egui::WidgetText {
+        egui::WidgetText::Text(tab.to_string())
     }
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+    fn id(&mut self, (id, _): &mut Self::Tab) -> egui::Id {
+        *id
+    }
+    fn ui(&mut self, ui: &mut egui::Ui, (_, tab): &mut Self::Tab) {
         // Move command out to respect rust memory safety rules
         let mut to_send: Option<Command> = None;
         {
@@ -147,5 +157,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         if let Some(command) = to_send {
             self.engine.update(command);
         }
+    }
+    fn add_popup(&mut self, ui: &mut egui::Ui, path: egui_dock::NodePath) {
+        ui.vertical(|ui| {
+            EmuTab::iter().for_each(|tab| {
+                if ui.button(tab.to_string()).clicked() {
+                    self.added_tabs.push((path, tab));
+                }
+            });
+        });
     }
 }
