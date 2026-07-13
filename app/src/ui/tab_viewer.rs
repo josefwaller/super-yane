@@ -1,5 +1,6 @@
 use egui::{
-    Align, Color32, RichText, TextureHandle, UiKind::ScrollArea, hex_color, style::ScrollAnimation,
+    Align, Color32, Layout, RichText, TextureHandle, UiKind::ScrollArea, hex_color,
+    style::ScrollAnimation,
 };
 use egui_infinite_scroll::InfiniteScroll;
 
@@ -12,8 +13,8 @@ use crate::{
 pub enum EmuTab {
     Screen,
     Cpu,
-    Controls,
     CpuDisassembly,
+    BinaryData,
 }
 pub struct TabViewer<'a> {
     pub engine: &'a mut Engine,
@@ -29,8 +30,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             match tab {
                 Cpu => "WDC 65816",
                 Screen => "Screen",
-                Controls => "Controls",
                 CpuDisassembly => "CPU DIS",
+                BinaryData => "HEX DATA",
             }
             .to_owned(),
         )
@@ -58,25 +59,26 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 .max_size(ui.available_size())
                                 .fit_to_exact_size(ui.available_size());
                         ui.add(img);
-                    });
-                }
-                Controls => {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .button(if emu.is_paused { "Resume" } else { "Pause" })
-                            .clicked()
-                        {
-                            emu.is_paused = !emu.is_paused;
-                        }
-                        if ui.button("Advance").clicked() {
-                            to_send = Some(Command::Advance(AdvanceAmount::Instructions(1)));
-                        }
-                        if ui.button("Reset").clicked() {
-                            to_send = Some(Command::Reset);
-                        }
-                        let mut vol = emu.volume;
-                        ui.add(egui::Slider::new(&mut vol, 0.0..=100.0).text("Volume"));
-                        emu.volume = vol;
+                        ui.with_layout(Layout::bottom_up(egui::Align::Center), |ui| {
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button(if emu.is_paused { "Resume" } else { "Pause" })
+                                    .clicked()
+                                {
+                                    emu.is_paused = !emu.is_paused;
+                                }
+                                if ui.button("Advance").clicked() {
+                                    to_send =
+                                        Some(Command::Advance(AdvanceAmount::Instructions(1)));
+                                }
+                                if ui.button("Reset").clicked() {
+                                    to_send = Some(Command::Reset);
+                                }
+                                let mut vol = emu.volume;
+                                ui.add(egui::Slider::new(&mut vol, 0.0..=100.0).text("Volume"));
+                                emu.volume = vol;
+                            });
+                        });
                     });
                 }
                 CpuDisassembly => {
@@ -120,6 +122,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 cols[0].label(
                                                     RichText::new("->").color(hex_color!("FF0000")),
                                                 );
+                                                cols[0].set_max_width(20.0);
                                             }
                                             if let Some(label) = l.label {
                                                 cols[1].label(label.to_string());
@@ -135,6 +138,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             // });
                         },
                     );
+                }
+                BinaryData => {
+                    ui.label("Binary Data");
                 }
             }
         }

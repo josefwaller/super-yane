@@ -33,7 +33,7 @@ impl Emulation {
         Emulation {
             console,
             screen_data_rgb: [0; 3 * SCREEN_RESOLUTION[1] * SCREEN_RESOLUTION[0]],
-            volume: 20.0,
+            volume: 5.0,
             is_paused: false,
             log_apu: false,
             log_cpu: false,

@@ -1,6 +1,6 @@
 use eframe::CreationContext;
 use egui::{Color32, ColorImage, TextureHandle, Ui};
-use egui_dock::{DockArea, DockState};
+use egui_dock::{DockArea, DockState, NodeIndex};
 use egui_infinite_scroll::InfiniteScroll;
 use super_yane::ppu::SCREEN_RESOLUTION;
 
@@ -19,15 +19,17 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &CreationContext<'_>, console: Console) -> Self {
+        // Set up iniital layout
+        let mut tree = DockState::new(vec![EmuTab::Screen]);
+        let s = tree.main_surface_mut();
+        let [main, _binary] = s.split_below(NodeIndex::root(), 0.75, vec![EmuTab::BinaryData]);
+        let [main, _debug] = s.split_right(main, 0.75, vec![EmuTab::CpuDisassembly]);
+        // 33 because the panel should now be one third the size of the container
+        s.split_left(main, 0.33, vec![EmuTab::Cpu]);
         App {
             engine: Engine::new(console, cc.egui_ctx.clone()),
             screen_data: None,
-            tree: DockState::new(vec![
-                EmuTab::Screen,
-                EmuTab::Cpu,
-                EmuTab::Controls,
-                EmuTab::CpuDisassembly,
-            ]),
+            tree,
             scroll: InfiniteScroll::new().end_loader(|cursor, callback| {
                 let start = cursor.unwrap_or(0);
                 let end = 1;
