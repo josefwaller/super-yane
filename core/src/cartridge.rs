@@ -88,7 +88,7 @@ fn compute_checksum(data: &[u8]) -> u16 {
 pub struct Cartridge {
     memory_map: MemoryMap,
     pub data: Vec<u8>,
-    sram: Vec<u8>,
+    pub sram: Vec<u8>,
 }
 
 impl Cartridge {

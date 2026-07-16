@@ -4,7 +4,7 @@ use egui::{
 };
 use egui_dock::{DockState, NodePath};
 use egui_infinite_scroll::InfiniteScroll;
-use strum::{EnumIter, IntoEnumIterator};
+use strum::{EnumIter, EnumString, IntoEnumIterator};
 use super_yane::dma::TRANSFER_PATTERNS;
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     ui::cpu_data,
 };
 
-#[derive(EnumIter, Copy, Clone)]
+#[derive(EnumIter, EnumString, Copy, Clone)]
 pub enum EmuTab {
     Screen,
     Cpu,

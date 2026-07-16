@@ -149,13 +149,21 @@ impl Emulation {
             LoadRom(bytes) => {
                 self.console = Console::with_cartridge(&bytes);
             }
-            LoadSavestate(state) => {
-                self.console = state;
-                self.console.ppu_mut().reset_vram_cache();
-            }
+            LoadSavestate(state) => {}
             Reset => {
                 self.console.reset();
             }
         };
+    }
+    pub fn load_rom(&mut self, rom: &[u8]) {
+        self.console = Console::with_cartridge(rom);
+    }
+    pub fn load_savestate(&mut self, state: Console) {
+        self.console = state;
+        self.console.ppu_mut().reset_vram_cache();
+    }
+    pub fn load_sram(&mut self, sram: &[u8]) {
+        self.console.cartridge_mut().sram = sram.to_owned();
+        self.console.reset();
     }
 }

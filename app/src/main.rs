@@ -3,20 +3,24 @@ pub mod apu_snapshot;
 pub mod audio;
 pub mod cpu_snapshot;
 pub mod disassembler;
-pub mod emu_state;
 pub mod emulation;
 pub mod engine;
+mod menu;
 pub mod profiler;
 pub mod ui;
+pub mod utils;
 
 use app::App;
 use egui::{FontData, FontDefinitions, FontFamily, FontId};
 use log::{debug, error};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use std::{env, fs::File, sync::Arc};
+use std::{env, error::Error, fmt::format, fs::File, sync::Arc};
 use super_yane::Console;
 
-use crate::engine::{Command, Engine};
+use crate::{
+    engine::{Command, Engine},
+    menu::initialize_menu,
+};
 
 #[derive(Debug)]
 enum LoadConsoleError {
@@ -49,8 +53,7 @@ fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
         None => Ok(Console::with_cartridge(DEFAULT_CARTRIDGE)),
     }
 }
-
-fn main() -> eframe::Result {
+fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logger
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -72,13 +75,17 @@ fn main() -> eframe::Result {
         ),
     ])
     .unwrap();
+
     // Initialize window
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1600.0, 1200.0])
+            // .with_decorations(false)
+            .with_taskbar(false)
             .with_title("Super Y.A.N.E"),
         ..Default::default()
     };
+
     // Load font
     macro_rules! FONT_PATH {
         () => {
@@ -114,7 +121,9 @@ fn main() -> eframe::Result {
             Ok(Box::new(App::new(
                 cc,
                 initial_console(env::args().nth(1)).unwrap(),
+                initialize_menu().unwrap(),
             )))
         }),
-    )
+    )?;
+    Ok(())
 }

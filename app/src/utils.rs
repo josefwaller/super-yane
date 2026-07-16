@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{error::Error, rc::Rc};
 
 use log::debug;
 use slint::{
@@ -12,11 +12,13 @@ use super_yane::{
 };
 use wdc65816::{Processor, StatusRegister};
 
-use crate::{
-    AppWindow, ApuData, BackgroundData, BinaryDataSrc, ConsoleData, CpuData, DspData, OamData,
-    PpuData, StandardController, StatusRegisterData, Voice as SlintVoice,
-};
-
+pub enum BinaryDataSrc {
+    Wram,
+    Vram,
+    Cgram,
+    Aram,
+    Cartridge,
+}
 /// Interprets a chunk of binary data as SNES 2bpp tile date, and rewrites it into a 2BPP format
 /// * `width` is the width of the output in 8x8 tiles.
 /// * `height` is the height of the output in 8x8 tiles.
@@ -104,328 +106,76 @@ pub fn bytes_to_rgb<const W: usize>(
 }
 const DATA_WIDTH: usize = 32;
 const DATA_HEIGHT: usize = 8;
-pub fn update_binary_data(
-    c: &Console,
-    offset: usize,
-    ram_type: BinaryDataSrc,
-    bpp: i32,
-    palette_index: usize,
-    ui: &AppWindow,
-) {
-    // Initialize data if empty
-    if ui.get_binary_data().row_count() < DATA_HEIGHT {
-        ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter(
-            (0..DATA_HEIGHT)
-                .map(|_| ModelRc::from(Rc::from(VecModel::from_iter((0..DATA_WIDTH).map(|_| 0))))),
-        ))));
-    }
-    // Create a copy of CGRAM as a u8 array
-    let cgram_arr: [u8; 0x200] =
-        core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
-    // Get data as slice
-    use BinaryDataSrc::*;
-    let (data_src, data_len): (&[u8], usize) = match ram_type {
-        Vram => (&c.ppu().vram, c.ppu().vram.len()),
-        Cgram => (&cgram_arr, 2 * c.ppu().cgram.len()),
-        Wram => (c.ram().as_slice(), c.ram().len()),
-        Aram => (c.apu().ram(), c.apu().ram().len()),
-        Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
-    };
-    // Copy binary data
-    let mut it = data_src.iter().skip(offset);
-    (0..DATA_HEIGHT).for_each(|i| {
-        (0..DATA_WIDTH).for_each(|j| {
-            ui.get_binary_data()
-                .row_data_tracked(i)
-                .unwrap()
-                .set_row_data(j, it.next().unwrap_or(&0).clone() as i32)
-        })
-    });
-    ui.set_binary_data_len(data_len as i32);
-    // Collect colors
-    let colors: [[u8; 3]; 256] =
-        core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
-    let palette_size = match bpp {
-        2 => 4,
-        4 => 16,
-        8 => 64,
-        _ => 4,
-    };
-    let palette = &colors[palette_index as usize * palette_size..];
-    // Map data to 2BPP tile
-    const NUM_TILES_WIDTH: usize = 16;
-    const NUM_TILES_HEIGHT: usize = 4;
-    let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
-    // Copy data to image buffer
-    bytes_to_index(
-        &data_src[offset..],
-        NUM_TILES_WIDTH,
-        NUM_TILES_HEIGHT,
-        bpp as usize,
-        &mut buffer,
-    );
-    // Map data to RGB
-    let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
-        core::array::from_fn(|i| palette[buffer[i] as usize]);
-    // Copy to slint buffer
-    let mut buf = if ui.get_binary_image().size().width == 0 {
-        SharedPixelBuffer::new(8 * NUM_TILES_WIDTH as u32, 8 * NUM_TILES_HEIGHT as u32)
-    } else {
-        ui.get_binary_image().to_rgb8().unwrap()
-    };
-    buf.make_mut_bytes()
-        .copy_from_slice(rgb_data.as_flattened());
-    ui.set_binary_image(Image::from_rgb8(buf));
-}
-// Macro to copy a bunch of fields between structs
-macro_rules! copy_fields {
-    ($from: ident, $to: ident, $($field:ident),*) => {
-        $(
-            $to.$field = $from.$field.into();
-        )*
-    };
-}
-// Macro to copy a bunch of integer fields between structs
-macro_rules! copy_int_fields {
-    ($from: ident, $to: ident, $($field:ident),*) => {
-        $(
-            $to.$field = ($from.$field as i32).into();
-        )*
-    };
-}
-// Macro to copy an array of fields
-macro_rules! copy_array_fields {
-    ($from: ident, $to: ident, $($field: ident),*) => {
-        $(
-            $to.$field = ModelRc::from(Rc::from(VecModel::from_iter($from.$field.iter().map(|v| v.clone().into()))));
-        )*
-    };
-}
-
-impl Into<ConsoleData> for &Console {
-    fn into(self) -> ConsoleData {
-        let mut data = ConsoleData {
-            cpu: self.cpu().into(),
-            ppu: self.ppu().into(),
-            apu: self.apu().into(),
-            dsp: self.apu().dsp().into(),
-            ..ConsoleData::default()
-        };
-        let dsp = self.apu().dsp();
-        copy_array_fields!(dsp, data, voices);
-        data
-    }
-}
-
-impl Into<StatusRegisterData> for &StatusRegister {
-    fn into(self) -> StatusRegisterData {
-        let mut data = StatusRegisterData::default();
-        data.value = self.to_byte(false) as i32;
-        copy_fields!(self, data, c, z, n, d, i, m, v, e, xb);
-        data
-    }
-}
-
-impl Into<CpuData> for &Processor {
-    fn into(self) -> CpuData {
-        let mut data = CpuData::default();
-        copy_int_fields!(self, data, pc, pbr, a, b, yl, yh, dl, dh, dbr, s);
-        data.p = (&self.p).into();
-        data
-    }
-}
-
-impl Into<PpuData> for &Ppu {
-    fn into(self) -> PpuData {
-        let mut data = PpuData::default();
-        copy_int_fields!(
-            self,
-            data,
-            vblank,
-            forced_blanking,
-            brightness,
-            bg_mode,
-            bg3_prio,
-            mosaic_size,
-            vram_addr,
-            cgram_addr,
-            oam_name_addr,
-            oam_name_select
-        );
-        data.vram_increment_mode = format!("{}", self.vram_increment_mode).into();
-        data
-    }
-}
-
-impl Into<BackgroundData> for &Background {
-    fn into(self) -> BackgroundData {
-        let mut data = BackgroundData::default();
-        copy_int_fields!(
-            self,
-            data,
-            tile_size,
-            num_horz_tilemaps,
-            num_vert_tilemaps,
-            tilemap_addr,
-            chr_addr,
-            h_off,
-            v_off
-        );
-        copy_fields!(
-            self,
-            data,
-            mosaic,
-            main_screen_enable,
-            sub_screen_enable,
-            windows_enabled_main,
-            windows_enabled_sub,
-            color_math_enable
-        );
-        copy_array_fields!(self, data, window_enabled, window_invert);
-        data
-    }
-}
-
-impl Into<ApuData> for &Apu {
-    fn into(self) -> ApuData {
-        let mut data = ApuData::default();
-        let c = &self.core;
-        copy_fields!(c, data, a, x, y, sp, pc);
-        data.psw_byte = c.psw.to_byte().into();
-        let c_psw = &c.psw;
-        let d_psw = &mut data.psw;
-        copy_fields!(c_psw, d_psw, n, v, p, b, h, i, z, c);
-        let r = &self.rest;
-        copy_fields!(r, data, expose_ipl_rom, dsp_addr, dsp_read_only);
-        copy_array_fields!(r, data, cpu_to_apu_reg, apu_to_cpu_reg);
-        data
-    }
-}
-
-impl Into<DspData> for &Dsp {
-    fn into(self) -> DspData {
-        let mut data = DspData::default();
-        copy_array_fields!(self, data, volume, fir_coeffs, echo_volume);
-        copy_int_fields!(
-            self,
-            data,
-            sample_dir,
-            echo_size,
-            echo_addr,
-            echo_feedback,
-            noise_frequency
-        );
-        copy_fields!(self, data, echo_enabled, mute);
-        data.fir_cache = ModelRc::from(Rc::from(VecModel::from_iter(
-            self.fir_cache.into_iter().map(|val| {
-                ModelRc::from(Rc::from(VecModel::from_iter(
-                    val.into_iter().map(|v| v.into()),
-                )))
-            }),
-        )));
-        data
-    }
-}
-
-impl Into<SlintVoice> for Voice {
-    fn into(self) -> SlintVoice {
-        let mut data = SlintVoice::default();
-        data.state = self.state.to_string().into();
-        copy_int_fields!(
-            self,
-            data,
-            sample_pitch,
-            sample_src,
-            decay_rate,
-            attack_rate,
-            sustain_level,
-            sustain_rate,
-            gain_rate,
-            envelope
-        );
-        copy_fields!(
-            self,
-            data,
-            adsr_enabled,
-            echo_enabled,
-            end_flag,
-            pitch_mod_enabled,
-            noise_enabled
-        );
-        copy_array_fields!(self, data, volume);
-        data
-    }
-}
-
-impl Into<InputPort> for StandardController {
-    fn into(self) -> InputPort {
-        let StandardController {
-            a,
-            b,
-            x,
-            y,
-            up,
-            left,
-            right,
-            down,
-            start,
-            select,
-            r,
-            l,
-        } = self;
-        InputPort::StandardController {
-            a,
-            b,
-            x,
-            y,
-            up,
-            left,
-            right,
-            down,
-            start,
-            select,
-            r,
-            l,
-        }
-    }
-}
-
-pub fn get_oam_data(s: &Sprite, ppu: &Ppu) -> OamData {
-    let mut data = OamData::default();
-    copy_int_fields!(
-        s,
-        data,
-        x,
-        y,
-        tile_index,
-        name_select,
-        priority,
-        palette_index
-    );
-    copy_fields!(s, data, flip_x, flip_y);
-    data.tile_addr = ppu.sprite_tile_slice_addr(s, 0) as i32;
-    let (width, height) = ppu.oam_sizes[s.size_select];
-    data.size = (width as i32, height as i32);
-    // data.size.y = height as i32;
-    let mut pixel_buf = [[0u8; 3]; 64 * 64];
-    // Have to copy each horizontal segment separately
-    (0..(height / 8)).for_each(|h| {
-        let tile_addr = ppu.sprite_tile_slice_addr(s, h);
-        let palette = &ppu.cgram[s.palette_addr()..];
-        let mut b = [[0u8; 3]; 8 * 64];
-        bytes_to_rgb(&ppu.vram[tile_addr..], width / 8, 1, 4, &palette, &mut b);
-        let step = 8 * width;
-        let off = h * step;
-        pixel_buf[off..(off + step)].copy_from_slice(&b[0..step]);
-    });
-    let mut buf =
-        if data.tile.size().width as usize != width || data.tile.size().height as usize != height {
-            SharedPixelBuffer::new(width as u32, height as u32)
-        } else {
-            data.tile.to_rgb8().unwrap()
-        };
-    let b = buf.make_mut_bytes();
-    b.copy_from_slice(&pixel_buf.as_flattened()[0..b.len()]);
-    data.tile = Image::from_rgb8(buf);
-    data
-}
+// pub fn update_binary_data(
+//     c: &Console,
+//     offset: usize,
+//     ram_type: BinaryDataSrc,
+//     bpp: i32,
+//     palette_index: usize,
+//     ui: &AppWindow,
+// ) {
+//     // Initialize data if empty
+//     if ui.get_binary_data().row_count() < DATA_HEIGHT {
+//         ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter(
+//             (0..DATA_HEIGHT)
+//                 .map(|_| ModelRc::from(Rc::from(VecModel::from_iter((0..DATA_WIDTH).map(|_| 0))))),
+//         ))));
+//     }
+//     // Create a copy of CGRAM as a u8 array
+//     let cgram_arr: [u8; 0x200] =
+//         core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
+//     // Get data as slice
+//     use BinaryDataSrc::*;
+//     let (data_src, data_len): (&[u8], usize) = match ram_type {
+//         Vram => (&c.ppu().vram, c.ppu().vram.len()),
+//         Cgram => (&cgram_arr, 2 * c.ppu().cgram.len()),
+//         Wram => (c.ram().as_slice(), c.ram().len()),
+//         Aram => (c.apu().ram(), c.apu().ram().len()),
+//         Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
+//     };
+//     // Copy binary data
+//     let mut it = data_src.iter().skip(offset);
+//     (0..DATA_HEIGHT).for_each(|i| {
+//         (0..DATA_WIDTH).for_each(|j| {
+//             ui.get_binary_data()
+//                 .row_data_tracked(i)
+//                 .unwrap()
+//                 .set_row_data(j, it.next().unwrap_or(&0).clone() as i32)
+//         })
+//     });
+//     ui.set_binary_data_len(data_len as i32);
+//     // Collect colors
+//     let colors: [[u8; 3]; 256] =
+//         core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
+//     let palette_size = match bpp {
+//         2 => 4,
+//         4 => 16,
+//         8 => 64,
+//         _ => 4,
+//     };
+//     let palette = &colors[palette_index as usize * palette_size..];
+//     // Map data to 2BPP tile
+//     const NUM_TILES_WIDTH: usize = 16;
+//     const NUM_TILES_HEIGHT: usize = 4;
+//     let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
+//     // Copy data to image buffer
+//     bytes_to_index(
+//         &data_src[offset..],
+//         NUM_TILES_WIDTH,
+//         NUM_TILES_HEIGHT,
+//         bpp as usize,
+//         &mut buffer,
+//     );
+//     // Map data to RGB
+//     let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
+//         core::array::from_fn(|i| palette[buffer[i] as usize]);
+//     // Copy to slint buffer
+//     let mut buf = if ui.get_binary_image().size().width == 0 {
+//         SharedPixelBuffer::new(8 * NUM_TILES_WIDTH as u32, 8 * NUM_TILES_HEIGHT as u32)
+//     } else {
+//         ui.get_binary_image().to_rgb8().unwrap()
+//     };
+//     buf.make_mut_bytes()
+//         .copy_from_slice(rgb_data.as_flattened());
+//     ui.set_binary_image(Image::from_rgb8(buf));
+// }
