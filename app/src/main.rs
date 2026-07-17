@@ -67,12 +67,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             config.clone(),
             File::create("./super_yane.log").unwrap(),
         ),
-        TermLogger::new(
-            log::LevelFilter::Debug,
-            config,
-            simplelog::TerminalMode::Mixed,
-            simplelog::ColorChoice::Always,
-        ),
+        // TermLogger::new(
+        //     log::LevelFilter::Debug,
+        //     config,
+        //     simplelog::TerminalMode::Mixed,
+        //     simplelog::ColorChoice::Always,
+        // ),
     ])
     .unwrap();
 

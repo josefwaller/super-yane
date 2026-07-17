@@ -1,6 +1,12 @@
 mod cpu_data;
+mod cpu_disassembly;
+mod dma_channels;
 mod reg_row;
+mod screen;
 mod tab_viewer;
 pub use cpu_data::cpu_data;
+pub use cpu_disassembly::cpu_disassembly;
+pub use dma_channels::dma_channels;
 pub use reg_row::reg_row;
+pub use screen::screen;
 pub use tab_viewer::{EmuTab, TabViewer};

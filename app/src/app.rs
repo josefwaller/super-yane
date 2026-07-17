@@ -80,6 +80,7 @@ impl eframe::App for App {
         // Gather nodes to add
         let mut added_nodes = vec![];
         let mut tree = self.tree.lock().unwrap();
+        let mut style = egui_dock::Style::default();
         DockArea::new(&mut *tree)
             .show_add_buttons(true)
             .show_add_popup(true)
@@ -89,7 +90,6 @@ impl eframe::App for App {
                 &mut TabViewer {
                     engine: &mut self.engine,
                     screen: tex,
-                    scroll: &mut self.scroll,
                     added_tabs: &mut added_nodes,
                 },
             );
