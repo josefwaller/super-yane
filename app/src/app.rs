@@ -30,7 +30,7 @@ impl App {
         let mut tree = DockState::new(vec![EmuTab::Screen]);
         let s = tree.main_surface_mut();
         let [main, _binary] = s.split_below(NodeIndex::root(), 0.75, vec![EmuTab::BinaryData]);
-        let [main, _debug] = s.split_right(main, 0.75, vec![EmuTab::CpuDisassembly]);
+        let [main, _debug] = s.split_right(main, 0.85, vec![EmuTab::CpuDisassembly]);
         // 33 because the panel should now be one third the size of the container
         s.split_left(main, 0.33, vec![EmuTab::Cpu, EmuTab::DmaChannels]);
         let tree = Arc::new(Mutex::new(

@@ -1,3 +1,4 @@
+pub mod colors;
 mod cpu_data;
 mod cpu_disassembly;
 mod dma_channels;
