@@ -10,13 +10,14 @@ use super_yane::dma::TRANSFER_PATTERNS;
 use crate::{
     disassembler::{CpuInstruction, Instruction},
     engine::{AdvanceAmount, Command, Engine},
-    ui::{cpu_data, cpu_disassembly, dma_channels, screen},
+    ui::{cpu_data, cpu_disassembly, dma_channels, ppu_data, screen},
 };
 
 #[derive(EnumIter, EnumString, Copy, Clone)]
 pub enum EmuTab {
     Screen,
     Cpu,
+    Ppu,
     DmaChannels,
     CpuDisassembly,
     BinaryData,
@@ -27,6 +28,7 @@ impl ToString for EmuTab {
         match self {
             Screen => "Emulation",
             Cpu => "WDC65816",
+            Ppu => "PPU",
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             BinaryData => "Binary",
@@ -60,9 +62,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             use EmuTab::*;
             match tab {
                 Cpu => cpu_data(ui, &emu.console),
-                Screen => screen(ui, &mut *emu, self.screen, &mut to_send),
-                DmaChannels => dma_channels(ui, &*emu),
-                CpuDisassembly => cpu_disassembly(ui, &*emu),
+                Ppu => ppu_data(ui, &emu),
+                Screen => screen(ui, &mut emu, self.screen, &mut to_send),
+                DmaChannels => dma_channels(ui, &emu),
+                CpuDisassembly => cpu_disassembly(ui, &emu),
                 BinaryData => {
                     ui.label("Binary Data");
                 }
