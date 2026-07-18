@@ -1,3 +1,4 @@
+mod binary_table;
 pub mod colors;
 mod cpu_data;
 mod cpu_disassembly;

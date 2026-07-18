@@ -1,16 +1,13 @@
-use egui::{
-    Align, Color32, ComboBox, Layout, RichText, TextureHandle, UiKind::ScrollArea, hex_color,
-    style::ScrollAnimation,
-};
-use egui_dock::{DockState, NodePath};
-use egui_infinite_scroll::InfiniteScroll;
+use egui::TextureHandle;
+use egui_dock::NodePath;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
-use super_yane::dma::TRANSFER_PATTERNS;
 
 use crate::{
-    disassembler::{CpuInstruction, Instruction},
-    engine::{AdvanceAmount, Command, Engine},
-    ui::{cpu_data, cpu_disassembly, dma_channels, ppu_data, screen},
+    engine::{Command, Engine},
+    ui::{
+        binary_table::binary_table, colors::LIGHT_BLUE_PRIMARY, cpu_data, cpu_disassembly,
+        dma_channels, ppu_data, screen,
+    },
 };
 
 #[derive(EnumIter, EnumString, Copy, Clone)]
@@ -20,7 +17,7 @@ pub enum EmuTab {
     Ppu,
     DmaChannels,
     CpuDisassembly,
-    BinaryData,
+    Wram,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -31,7 +28,7 @@ impl ToString for EmuTab {
             Ppu => "PPU",
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
-            BinaryData => "Binary",
+            Wram => "WRAM",
         }
         .to_owned()
     }
@@ -66,9 +63,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 Screen => screen(ui, &mut emu, self.screen, &mut to_send),
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
-                BinaryData => {
-                    ui.label("Binary Data");
-                }
+                Wram => binary_table(ui, emu.console.ram().as_slice(), LIGHT_BLUE_PRIMARY),
             }
         }
         if let Some(command) = to_send {
