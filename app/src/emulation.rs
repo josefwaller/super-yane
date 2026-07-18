@@ -14,7 +14,6 @@ use crate::{
 pub enum Breakpoint {
     Pc(usize),
     Opcode(u8),
-    Instruction(u8, Option<u8>, Option<u8>),
     Dma(usize),
 }
 
@@ -24,7 +23,6 @@ impl Breakpoint {
         match self {
             Pc(_) => "PC",
             Opcode(_) => "Opcode",
-            Instruction(_, _, _) => "Full Inst",
             Dma(_) => "DMA Transfer",
         }
     }

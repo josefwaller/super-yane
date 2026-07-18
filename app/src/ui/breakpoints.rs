@@ -3,15 +3,13 @@ use std::{fmt::UpperHex, sync::Arc};
 use egui::{
     ComboBox, Id, Layout, Response, RichText, ScrollArea, TextEdit, Ui, Widget, WidgetWithState,
 };
+use egui_extras::{Column, TableBuilder};
 use strum::IntoEnumIterator;
-use wdc65816::opcode_data;
+use wdc65816::{format_address_mode, opcode_data};
 
 use crate::{
-    emulation::{
-        Breakpoint::{self, Pc},
-        Emulation,
-    },
-    ui::colors::GREY,
+    emulation::{Breakpoint, Emulation},
+    ui::colors::{GREEN_PRIMARY, GREY, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
 };
 
 fn hex_input(ui: &mut Ui, value: &mut usize) -> Response {
@@ -72,11 +70,19 @@ fn breakpoint_adder(ui: &mut Ui) -> AdderResponse {
                         }
                     }
                 });
+            use Breakpoint::*;
             match &mut state.breakpoint {
                 Pc(value) => {
                     hex_input(ui, value);
                 }
-                _ => {}
+                Opcode(opcode) => {
+                    let mut value = *opcode as usize;
+                    hex_input(ui, &mut value);
+                    *opcode = value.clamp(u8::MIN as usize, u8::MAX as usize) as u8;
+                }
+                Dma(index) => {
+                    hex_input(ui, index);
+                }
             }
             if ui.button("Add").clicked() {
                 to_add = Some(state.breakpoint);
@@ -90,27 +96,61 @@ fn breakpoint_adder(ui: &mut Ui) -> AdderResponse {
 
 pub fn breakpoints(ui: &mut Ui, emu: &mut Emulation) {
     let bp = &mut emu.breakpoints;
-    ScrollArea::vertical().show_rows(ui, 15.0, bp.len(), |ui, rows| {
-        for index in rows {
-            ui.horizontal(|ui| {
+    // Row index to remove
+    let mut to_remove: Option<usize> = None;
+    TableBuilder::new(ui)
+        .columns(Column::remainder(), 2)
+        .column(Column::auto())
+        .header(15.0, |mut row| {
+            row.col(|ui| {
+                ui.label("TYPE");
+            });
+            row.col(|ui| {
+                ui.label("ARGS");
+            });
+            row.col(|_| {});
+        })
+        .body(|body| {
+            body.rows(15.0, bp.len(), |mut row| {
+                let index = row.index();
                 if let Some(bp) = bp.get(index) {
                     use Breakpoint::*;
-                    let text = match bp {
-                        Pc(pc) => RichText::new(format!("PC {:06X}", pc)),
+                    let (left, right) = match bp {
+                        Pc(pc) => (
+                            RichText::new("PC").color(RED_PRIMARY),
+                            format!("{:06X}", pc),
+                        ),
                         Opcode(opcode) => {
                             let data = opcode_data(*opcode, false, false);
-                            RichText::new(format!("OPCODE {:02X} ({})", opcode, data.name))
+                            (
+                                RichText::new("OPCODE").color(GREEN_PRIMARY),
+                                format!("{:02X} ({})", opcode, data.name),
+                            )
                         }
-                        _ => RichText::new(""),
+                        Dma(index) => (
+                            RichText::new("DMA").color(LIGHT_BLUE_PRIMARY),
+                            format!("{:X}", index),
+                        ),
                     };
-                    ui.label(text);
+                    row.col(|ui| {
+                        ui.label(left);
+                    });
+                    row.col(|ui| {
+                        ui.label(right);
+                    });
+                    row.col(|ui| {
+                        if ui.button("X").clicked() {
+                            to_remove = Some(index);
+                        }
+                    });
                 }
             });
-        }
-        let AdderResponse { response, to_add } = breakpoint_adder(ui);
-        if let Some(a) = to_add {
-            bp.push(a);
-        }
-        response
-    });
+        });
+    let AdderResponse { response, to_add } = breakpoint_adder(ui);
+    if let Some(r) = to_remove {
+        bp.remove(r);
+    }
+    if let Some(a) = to_add {
+        bp.push(a);
+    }
 }
