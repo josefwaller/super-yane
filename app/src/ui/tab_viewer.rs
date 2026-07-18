@@ -5,8 +5,9 @@ use strum::{EnumIter, EnumString, IntoEnumIterator};
 use crate::{
     engine::{Command, Engine},
     ui::{
-        binary_table::binary_table, colors::LIGHT_BLUE_PRIMARY, cpu_data, cpu_disassembly,
-        dma_channels, ppu_data, screen,
+        binary_table::binary_table,
+        colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
+        cpu_data, cpu_disassembly, dma_channels, ppu_data, screen,
     },
 };
 
@@ -18,6 +19,9 @@ pub enum EmuTab {
     DmaChannels,
     CpuDisassembly,
     Wram,
+    Vram,
+    Cgram,
+    Aram,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -29,6 +33,9 @@ impl ToString for EmuTab {
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             Wram => "WRAM",
+            Vram => "VRAM",
+            Cgram => "CGRAM",
+            Aram => "ARAM",
         }
         .to_owned()
     }
@@ -64,6 +71,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
                 Wram => binary_table(ui, emu.console.ram().as_slice(), LIGHT_BLUE_PRIMARY),
+                Vram => binary_table(ui, emu.console.ppu().vram.as_slice(), RED_PRIMARY),
+                Cgram => binary_table(
+                    ui,
+                    emu.console
+                        .ppu()
+                        .cgram
+                        .map(|f| f.to_le_bytes())
+                        .as_flattened(),
+                    COLOR_ORANGE,
+                ),
+                Aram => binary_table(ui, emu.console.apu().ram(), GREEN_PRIMARY),
             }
         }
         if let Some(command) = to_send {

@@ -33,7 +33,11 @@ impl App {
         // Set up iniital layout
         let mut tree = DockState::new(vec![EmuTab::Screen]);
         let s = tree.main_surface_mut();
-        let [main, _binary] = s.split_below(NodeIndex::root(), 0.65, vec![EmuTab::Wram]);
+        let [main, _binary] = s.split_below(
+            NodeIndex::root(),
+            0.65,
+            vec![EmuTab::Wram, EmuTab::Vram, EmuTab::Cgram, EmuTab::Aram],
+        );
         let [main, _debug] = s.split_right(main, 0.85, vec![EmuTab::CpuDisassembly]);
         // 33 because the panel should now be one third the size of the container
         s.split_left(
