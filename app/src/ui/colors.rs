@@ -13,8 +13,13 @@ macro_rules! from_hex {
     }};
 }
 
+pub const DARK_GREY: Color32 = from_hex!(0x090909);
+pub const WHITE: Color32 = from_hex!(0xFFFFFF);
+pub const GREY: Color32 = from_hex!(0x202020);
 pub const RED_PRIMARY: Color32 = from_hex!(0xff3b48);
 pub const RED_SECONDARY: Color32 = from_hex!(0xed878e);
 pub const COLOR_ORANGE: Color32 = from_hex!(0xf7cf97);
 pub const LIGHT_BLUE_PRIMARY: Color32 = from_hex!(0x2dc1f7);
-pub const COLOR_LIGHT_BLUE: Color32 = from_hex!(0x97eef7);
+pub const LIGHT_BLUE_SECONDARY: Color32 = from_hex!(0x97eef7);
+pub const GREEN_PRIMARY: Color32 = from_hex!(0x14fc4f);
+pub const GREEN_SECONDARY: Color32 = from_hex!(0x69f08b);

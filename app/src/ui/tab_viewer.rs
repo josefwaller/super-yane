@@ -1,5 +1,5 @@
 use egui::{
-    Align, Color32, Layout, RichText, TextureHandle, UiKind::ScrollArea, hex_color,
+    Align, Color32, ComboBox, Layout, RichText, TextureHandle, UiKind::ScrollArea, hex_color,
     style::ScrollAnimation,
 };
 use egui_dock::{DockState, NodePath};

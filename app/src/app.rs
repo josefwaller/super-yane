@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use eframe::CreationContext;
-use egui::{Color32, ColorImage, Context, Frame, TextureHandle, Ui};
+use egui::{Color32, ColorImage, Context, CornerRadius, Frame, TextureHandle, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use egui_infinite_scroll::InfiniteScroll;
 use muda::Menu;
@@ -12,7 +12,11 @@ use crate::{
     emulation::Emulation,
     engine::Command,
     menu::spawn_menu_thread,
-    ui::{EmuTab, TabViewer, cpu_data},
+    ui::{
+        EmuTab, TabViewer,
+        colors::{DARK_GREY, GREY, WHITE},
+        cpu_data,
+    },
 };
 
 pub struct App {
@@ -84,8 +88,26 @@ impl eframe::App for App {
         // Gather nodes to add
         let mut added_nodes = vec![];
         let mut tree = self.tree.lock().unwrap();
-        let mut style = egui_dock::Style::default();
+        let mut style = egui_dock::Style::from_egui(ui.style());
+        style.tab_bar.bg_fill = DARK_GREY;
+        style.tab_bar.corner_radius = CornerRadius::ZERO;
+        style.tab.active.bg_fill = DARK_GREY;
+        style.tab.active.text_color = WHITE;
+        style.tab.active.outline_color = GREY;
+        style.tab.inactive = style.tab.active.clone();
+        style.tab.inactive.text_color = WHITE;
+        style.tab.hovered = style.tab.inactive.clone();
+        style.separator.color_idle = GREY;
+        style.separator.color_dragged = WHITE;
+        style.separator.color_hovered = WHITE;
+        style.separator.width = 1.0;
+        style.tab.tab_body.bg_fill = DARK_GREY;
+        style.tab.tab_body.stroke.width = 0.0;
+        style.buttons.close_tab_bg_fill = DARK_GREY;
+        style.buttons.close_tab_color = WHITE;
+        style.buttons.close_tab_active_color = WHITE;
         DockArea::new(&mut *tree)
+            .style(style)
             .show_add_buttons(true)
             .show_add_popup(true)
             .show_leaf_collapse_buttons(false)

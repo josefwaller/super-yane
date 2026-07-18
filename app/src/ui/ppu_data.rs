@@ -41,5 +41,6 @@ pub fn ppu_data(ui: &mut Ui, emu: &Emulation) {
             Row::new("OAM Name Select", format!("{:04X}", ppu.oam_name_select)),
         ],
         RED_PRIMARY,
+        "PPU".to_owned(),
     );
 }

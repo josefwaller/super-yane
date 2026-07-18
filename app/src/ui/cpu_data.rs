@@ -3,7 +3,7 @@ use slint::Color;
 use super_yane::Console;
 
 use crate::ui::{
-    colors::{COLOR_LIGHT_BLUE, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
+    colors::{LIGHT_BLUE_PRIMARY, LIGHT_BLUE_SECONDARY, RED_PRIMARY},
     vertical_table::{Row, vertical_table},
 };
 
@@ -37,5 +37,5 @@ pub fn cpu_data(ui: &mut egui::Ui, console: &Console) {
         Row::new("P.e", format!("{}", u8::from(c.p.e))).indent(1),
         Row::new("P.xb", format!("{}", u8::from(c.p.xb))).indent(1),
     ];
-    vertical_table(ui, row_data, LIGHT_BLUE_PRIMARY);
+    vertical_table(ui, row_data, LIGHT_BLUE_PRIMARY, "CPU".to_string());
 }

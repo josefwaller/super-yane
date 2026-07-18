@@ -4,7 +4,7 @@ use egui_extras::{Column, TableBuilder};
 use crate::{
     disassembler::{CpuInstruction, Instruction},
     emulation::Emulation,
-    ui::colors::{COLOR_LIGHT_BLUE, COLOR_ORANGE, RED_PRIMARY},
+    ui::colors::{COLOR_ORANGE, LIGHT_BLUE_SECONDARY, RED_PRIMARY},
 };
 
 pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
@@ -63,7 +63,7 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
                                 "{}",
                                 inst.instruction.to_string(emu.cpu_dis.labels())
                             ))
-                            .color(COLOR_LIGHT_BLUE),
+                            .color(LIGHT_BLUE_SECONDARY),
                         );
                     });
                 }

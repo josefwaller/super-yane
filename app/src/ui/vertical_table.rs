@@ -1,6 +1,8 @@
 use egui::{Color32, Label, Margin, RichText, Ui};
 use egui_extras::{Column, TableBuilder};
 
+use crate::ui::colors::WHITE;
+
 #[derive(Clone)]
 pub struct Row<'a> {
     name: &'a str,
@@ -27,12 +29,14 @@ impl<'a> Row<'a> {
     }
 }
 
-pub fn vertical_table(ui: &mut Ui, row_data: &[Row], header_color: Color32) {
+pub fn vertical_table(ui: &mut Ui, row_data: &[Row], header_color: Color32, id: String) {
     TableBuilder::new(ui)
+        .id_salt(id)
         .column(Column::auto())
         .column(Column::remainder())
+        .vscroll(false)
         .body(|body| {
-            body.rows(16.0, row_data.len(), |mut row| {
+            body.rows(10.0, row_data.len(), |mut row| {
                 let index = row.index();
                 let data = row_data[index].clone();
                 row.col(|ui| {
@@ -51,7 +55,7 @@ pub fn vertical_table(ui: &mut Ui, row_data: &[Row], header_color: Color32) {
                         });
                 });
                 row.col(|ui| {
-                    let label = Label::new(RichText::new(data.value).color(Color32::WHITE))
+                    let label = Label::new(RichText::new(data.value).color(WHITE))
                         .wrap_mode(egui::TextWrapMode::Extend);
                     ui.add(label);
                 });
