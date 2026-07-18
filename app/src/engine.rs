@@ -96,6 +96,8 @@ impl Engine {
                         let initial_master_cycles = e.console.total_master_clocks().clone();
                         while ((e.console.total_master_clocks() - initial_master_cycles) as f64)
                             < dt.as_micros() as f64 / 1_000_000.0 * MASTER_CLOCK_SPEED_HZ as f64
+                            // Check if we're paused since we may have hit a breakpoint
+                            && !e.is_paused
                         {
                             let vblank = e.console.ppu().is_in_vblank();
                             e.advance();

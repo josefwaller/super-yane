@@ -1,5 +1,7 @@
 use egui::{Context as UiContext, Key};
+use strum::{EnumIter, EnumString};
 use super_yane::{Console, InputPort, ppu::SCREEN_RESOLUTION};
+use wdc65816::opcodes::{STP, WDM};
 
 use crate::{
     apu_snapshot::ApuSnapshot,
@@ -7,6 +9,26 @@ use crate::{
     disassembler::{ApuInstruction, CpuInstruction, Disassembler},
     engine::{AdvanceAmount, Command},
 };
+
+#[derive(EnumString, EnumIter, Debug, Clone, PartialEq, Copy)]
+pub enum Breakpoint {
+    Pc(usize),
+    Opcode(u8),
+    Instruction(u8, Option<u8>, Option<u8>),
+    Dma(usize),
+}
+
+impl Breakpoint {
+    pub fn type_name(&self) -> &'static str {
+        use Breakpoint::*;
+        match self {
+            Pc(_) => "PC",
+            Opcode(_) => "Opcode",
+            Instruction(_, _, _) => "Full Inst",
+            Dma(_) => "DMA Transfer",
+        }
+    }
+}
 
 /// The actual data for the emulation thread.
 /// Everything here is stored in an Arc<Mutex<>> so that it can be shared
@@ -26,6 +48,8 @@ pub struct Emulation {
     pub apu_dis: Disassembler<ApuInstruction>,
     /// The UI context, used to get input and trigger repaint.
     pub ui_ctx: UiContext,
+    /// All breakpoints
+    pub breakpoints: Vec<Breakpoint>,
 }
 
 impl Emulation {
@@ -40,6 +64,8 @@ impl Emulation {
             cpu_dis: Disassembler::<CpuInstruction>::new(),
             apu_dis: Disassembler::<ApuInstruction>::new(),
             ui_ctx,
+            // Default breakpoints
+            breakpoints: vec![Breakpoint::Opcode(WDM), Breakpoint::Opcode(STP)],
         }
     }
     /// Pre-advance hook, should be called before calling advance a bunch of times.
@@ -67,7 +93,19 @@ impl Emulation {
                 log::info!("[APU] {}", inst);
             }
         }
+        // Pause if we have hit a breakpoint
+        if self.is_in_breakpoint() {
+            self.is_paused = true;
+        }
         // profiler.add_current_state(&console, before_master_cycles);
+    }
+    fn is_in_breakpoint(&self) -> bool {
+        use Breakpoint::*;
+        self.breakpoints.iter().any(|b| match b {
+            Dma(index) => self.console.dma_channels()[*index].is_executing,
+            Pc(pc) => self.console.pc() == *pc,
+            _ => false,
+        })
     }
     /// Derives the input port state from the current keyboard/mouse state
     fn get_input_ports(&self) -> [InputPort; 2] {

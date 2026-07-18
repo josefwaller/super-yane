@@ -29,8 +29,11 @@ pub fn screen(
                 if ui.button("Step").clicked() {
                     *to_send = Some(Command::Advance(AdvanceAmount::Instructions(1)));
                 }
-                if ui.button("Frame").clicked() {
+                if ui.button("Start VBlank").clicked() {
                     *to_send = Some(Command::Advance(AdvanceAmount::StartVBlank));
+                }
+                if ui.button("Scanline").clicked() {
+                    *to_send = Some(Command::Advance(AdvanceAmount::Scanlines(1)));
                 }
                 if ui.button("Reset").clicked() {
                     *to_send = Some(Command::Reset);

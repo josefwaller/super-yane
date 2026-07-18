@@ -6,6 +6,7 @@ use crate::{
     engine::{Command, Engine},
     ui::{
         binary_table::binary_table,
+        breakpoints::breakpoints,
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
         cpu_data, cpu_disassembly, dma_channels, ppu_data, screen,
     },
@@ -18,6 +19,7 @@ pub enum EmuTab {
     Ppu,
     DmaChannels,
     CpuDisassembly,
+    CpuBreakpoints,
     Wram,
     Vram,
     Cgram,
@@ -32,6 +34,7 @@ impl ToString for EmuTab {
             Ppu => "PPU",
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
+            CpuBreakpoints => "CPU Breakpoints",
             Wram => "WRAM",
             Vram => "VRAM",
             Cgram => "CGRAM",
@@ -70,6 +73,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 Screen => screen(ui, &mut emu, self.screen, &mut to_send),
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
+                CpuBreakpoints => breakpoints(ui, &mut emu),
                 Wram => binary_table(ui, emu.console.ram().as_slice(), LIGHT_BLUE_PRIMARY),
                 Vram => binary_table(ui, emu.console.ppu().vram.as_slice(), RED_PRIMARY),
                 Cgram => binary_table(

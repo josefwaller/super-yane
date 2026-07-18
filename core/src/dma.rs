@@ -48,7 +48,7 @@ pub struct Channel {
     /// How many bytes have been transferred so far
     pub(crate) num_bytes_transferred: u16,
     /// Whether the DMA is being executed right now
-    pub(crate) is_executing: bool,
+    pub is_executing: bool,
     /// The line counter, if enabled as HDMA
     pub hdma_line_counter: u8,
     /// Bank of the indirect HDMA data.

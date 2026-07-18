@@ -38,7 +38,11 @@ impl App {
             0.65,
             vec![EmuTab::Wram, EmuTab::Vram, EmuTab::Cgram, EmuTab::Aram],
         );
-        let [main, _debug] = s.split_right(main, 0.85, vec![EmuTab::CpuDisassembly]);
+        let [main, _debug] = s.split_right(
+            main,
+            0.85,
+            vec![EmuTab::CpuDisassembly, EmuTab::CpuBreakpoints],
+        );
         // 33 because the panel should now be one third the size of the container
         s.split_left(
             main,
