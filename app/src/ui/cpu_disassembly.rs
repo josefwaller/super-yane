@@ -4,7 +4,7 @@ use egui_extras::{Column, TableBuilder};
 use crate::{
     disassembler::{CpuInstruction, Instruction},
     emulation::Emulation,
-    ui::colors::{COLOR_LIGHT_BLUE, COLOR_ORANGE, COLOR_RED},
+    ui::colors::{COLOR_LIGHT_BLUE, COLOR_ORANGE, RED_PRIMARY},
 };
 
 pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
@@ -51,7 +51,7 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
                 if let Some(inst) = emu.cpu_dis.lines().nth(row.index()) {
                     row.col(|ui| {
                         ui.label(
-                            RichText::new(if inst.pc == pc { "->" } else { "" }).color(COLOR_RED),
+                            RichText::new(if inst.pc == pc { "->" } else { "" }).color(RED_PRIMARY),
                         );
                     });
                     row.col(|ui| {

@@ -2,28 +2,40 @@ use egui::{Color32, RichText, hex_color};
 use slint::Color;
 use super_yane::Console;
 
-use crate::ui::reg_row::{high_low_reg, reg_row};
+use crate::ui::{
+    colors::{COLOR_LIGHT_BLUE, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
+    vertical_table::{Row, vertical_table},
+};
 
+// fn high_low_reg
 pub fn cpu_data(ui: &mut egui::Ui, console: &Console) {
-    egui::Grid::new("CpuData").num_columns(2).show(ui, |ui| {
-        reg_row(ui, "PC", format!("{:06X}", console.pc()), 0);
-        let c = console.cpu();
-        high_low_reg(ui, "C", "B", "A", c.c(), c.b, c.a);
-        high_low_reg(ui, "X", "Xh", "Xl", c.x(), c.xh, c.xl);
-        high_low_reg(ui, "Y", "Yh", "Yl", c.y(), c.yh, c.yl);
-        high_low_reg(ui, "D", "Dh", "Dl", c.dr(), c.dh, c.dl);
-        reg_row(ui, "DBR", format!("{:02X}", c.dbr), 0);
-        reg_row(ui, "SR", format!("{:04X}", c.s), 0);
-        reg_row(ui, "P (read)", format!("{:02X}", c.p.to_byte(true)), 0);
-        reg_row(ui, "P (actual)", format!("{:02X}", c.p.to_byte(false)), 0);
-        reg_row(ui, "P.c", format!("{}", u8::from(c.p.c)), 1);
-        reg_row(ui, "P.z", format!("{}", u8::from(c.p.z)), 1);
-        reg_row(ui, "P.n", format!("{}", u8::from(c.p.n)), 1);
-        reg_row(ui, "P.d", format!("{}", u8::from(c.p.d)), 1);
-        reg_row(ui, "P.i", format!("{}", u8::from(c.p.i)), 1);
-        reg_row(ui, "P.m", format!("{}", u8::from(c.p.m)), 1);
-        reg_row(ui, "P.v", format!("{}", u8::from(c.p.v)), 1);
-        reg_row(ui, "P.e", format!("{}", u8::from(c.p.e)), 1);
-        reg_row(ui, "P.xb", format!("{}", u8::from(c.p.xb)), 1);
-    });
+    let c = &console.cpu();
+    let row_data = &[
+        Row::new("PC", format!("{:06X}", console.pc())),
+        Row::new(
+            "PC (Transformed)",
+            format!(
+                "{:06X}",
+                console.cartridge().transform_address(console.pc())
+            ),
+        ),
+        // high_low_regRow::new(ui, "C", "B", "A", c.c(), c.b, c.a),;
+        // high_low_regRow::new(ui, "X", "Xh", "Xl", c.x(), c.xh, c.xl),;
+        // high_low_regRow::new(ui, "Y", "Yh", "Yl", c.y(), c.yh, c.yl),;
+        // high_low_regRow::new(ui, "D", "Dh", "Dl", c.dr(), c.dh, c.dl),;
+        Row::new("DBR", format!("{:02X}", c.dbr)),
+        Row::new("SR", format!("{:04X}", c.s)),
+        Row::new("P (read)", format!("{:02X}", c.p.to_byte(true))),
+        Row::new("P (actual)", format!("{:02X}", c.p.to_byte(false))).indent(1),
+        Row::new("P.c", format!("{}", u8::from(c.p.c))).indent(1),
+        Row::new("P.z", format!("{}", u8::from(c.p.z))).indent(1),
+        Row::new("P.n", format!("{}", u8::from(c.p.n))).indent(1),
+        Row::new("P.d", format!("{}", u8::from(c.p.d))).indent(1),
+        Row::new("P.i", format!("{}", u8::from(c.p.i))).indent(1),
+        Row::new("P.m", format!("{}", u8::from(c.p.m))).indent(1),
+        Row::new("P.v", format!("{}", u8::from(c.p.v))).indent(1),
+        Row::new("P.e", format!("{}", u8::from(c.p.e))).indent(1),
+        Row::new("P.xb", format!("{}", u8::from(c.p.xb))).indent(1),
+    ];
+    vertical_table(ui, row_data, LIGHT_BLUE_PRIMARY);
 }
