@@ -5,6 +5,7 @@ use strum::{EnumIter, EnumString, IntoEnumIterator};
 use crate::{
     engine::{Command, Engine},
     ui::{
+        binary_data,
         binary_table::binary_table,
         breakpoints::breakpoints,
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
@@ -74,9 +75,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
                 CpuBreakpoints => breakpoints(ui, &mut emu),
-                Wram => binary_table(ui, emu.console.ram().as_slice(), LIGHT_BLUE_PRIMARY),
-                Vram => binary_table(ui, emu.console.ppu().vram.as_slice(), RED_PRIMARY),
-                Cgram => binary_table(
+                Wram => binary_data(
+                    ui,
+                    emu.console.ram().as_slice(),
+                    LIGHT_BLUE_PRIMARY,
+                    &emu.console.ppu().cgram,
+                ),
+                Vram => binary_data(
+                    ui,
+                    emu.console.ppu().vram.as_slice(),
+                    RED_PRIMARY,
+                    &emu.console.ppu().cgram,
+                ),
+                Cgram => binary_data(
                     ui,
                     emu.console
                         .ppu()
@@ -84,8 +95,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         .map(|f| f.to_le_bytes())
                         .as_flattened(),
                     COLOR_ORANGE,
+                    &emu.console.ppu().cgram,
                 ),
-                Aram => binary_table(ui, emu.console.apu().ram(), GREEN_PRIMARY),
+                Aram => binary_data(
+                    ui,
+                    emu.console.apu().ram(),
+                    GREEN_PRIMARY,
+                    &emu.console.ppu().cgram,
+                ),
             }
         }
         if let Some(command) = to_send {

@@ -30,6 +30,7 @@ pub fn dma_channels(ui: &mut Ui, emu: &Emulation) {
                             ui,
                             &[
                                 Row::new("HDMA", format!("{}", c.is_hdma())),
+                                Row::new("Executing", format!("{}", c.is_executing)),
                                 Row::new("Source", format!("{:06X}", c.full_src_addr())),
                                 Row::new("Destination", format!("{:04X}", c.dest_addr)),
                                 Row::new("Indirect", format!("{}", c.indirect)),

@@ -1,3 +1,4 @@
+mod binary_data;
 mod binary_table;
 mod breakpoints;
 pub mod colors;
@@ -9,6 +10,7 @@ mod reg_row;
 mod screen;
 mod tab_viewer;
 mod vertical_table;
+pub use binary_data::binary_data;
 pub use cpu_data::cpu_data;
 pub use cpu_disassembly::cpu_disassembly;
 pub use dma_channels::dma_channels;

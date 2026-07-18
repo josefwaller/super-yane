@@ -83,16 +83,17 @@ pub fn bytes_to_index(
     });
 }
 /// Convert a chunk of tile data to an RGB 2D array
-pub fn bytes_to_rgb<const W: usize>(
+pub fn bytes_to_rgb(
     src_bytes: &[u8],
     width_tiles: usize,
     height_tiles: usize,
     bpp: usize,
     palette: &[u16],
-    out_buf: &mut [[u8; 3]; W],
+    out_buf: &mut [[u8; 3]],
 ) {
     // Inner buf will hold the index
-    let mut inner_buf = [0u8; W];
+    // TODO: Don't allocate every call
+    let mut inner_buf = vec![0u8; out_buf.len()];
     bytes_to_index(src_bytes, width_tiles, height_tiles, bpp, &mut inner_buf);
     const BRIGHTNESS: u8 = 0x0F;
     // Convert to RGB
