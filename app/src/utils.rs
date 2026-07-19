@@ -1,16 +1,6 @@
-use std::{error::Error, rc::Rc};
+use std::io::{BufWriter, Write};
 
-use log::debug;
-use slint::{
-    Image, Model, ModelExt, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
-};
-use super_yane::{
-    Background, Console, InputPort, Ppu,
-    apu::{Apu, Dsp, Voice},
-    ppu::Sprite,
-    utils::{color_to_rgb, color_to_rgb_bytes},
-};
-use wdc65816::{Processor, StatusRegister};
+use super_yane::utils::color_to_rgb_bytes;
 
 pub enum BinaryDataSrc {
     Wram,
@@ -105,78 +95,10 @@ pub fn bytes_to_rgb(
         };
     });
 }
-const DATA_WIDTH: usize = 32;
-const DATA_HEIGHT: usize = 8;
-// pub fn update_binary_data(
-//     c: &Console,
-//     offset: usize,
-//     ram_type: BinaryDataSrc,
-//     bpp: i32,
-//     palette_index: usize,
-//     ui: &AppWindow,
-// ) {
-//     // Initialize data if empty
-//     if ui.get_binary_data().row_count() < DATA_HEIGHT {
-//         ui.set_binary_data(ModelRc::from(Rc::from(VecModel::from_iter(
-//             (0..DATA_HEIGHT)
-//                 .map(|_| ModelRc::from(Rc::from(VecModel::from_iter((0..DATA_WIDTH).map(|_| 0))))),
-//         ))));
-//     }
-//     // Create a copy of CGRAM as a u8 array
-//     let cgram_arr: [u8; 0x200] =
-//         core::array::from_fn(|i| c.ppu().cgram[i / 2].to_le_bytes()[i % 2]);
-//     // Get data as slice
-//     use BinaryDataSrc::*;
-//     let (data_src, data_len): (&[u8], usize) = match ram_type {
-//         Vram => (&c.ppu().vram, c.ppu().vram.len()),
-//         Cgram => (&cgram_arr, 2 * c.ppu().cgram.len()),
-//         Wram => (c.ram().as_slice(), c.ram().len()),
-//         Aram => (c.apu().ram(), c.apu().ram().len()),
-//         Cartridge => (&c.cartridge().data, c.cartridge().data.len()),
-//     };
-//     // Copy binary data
-//     let mut it = data_src.iter().skip(offset);
-//     (0..DATA_HEIGHT).for_each(|i| {
-//         (0..DATA_WIDTH).for_each(|j| {
-//             ui.get_binary_data()
-//                 .row_data_tracked(i)
-//                 .unwrap()
-//                 .set_row_data(j, it.next().unwrap_or(&0).clone() as i32)
-//         })
-//     });
-//     ui.set_binary_data_len(data_len as i32);
-//     // Collect colors
-//     let colors: [[u8; 3]; 256] =
-//         core::array::from_fn(|i| color_to_rgb_bytes(c.ppu().cgram[i], 0xF));
-//     let palette_size = match bpp {
-//         2 => 4,
-//         4 => 16,
-//         8 => 64,
-//         _ => 4,
-//     };
-//     let palette = &colors[palette_index as usize * palette_size..];
-//     // Map data to 2BPP tile
-//     const NUM_TILES_WIDTH: usize = 16;
-//     const NUM_TILES_HEIGHT: usize = 4;
-//     let mut buffer = [0u8; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT];
-//     // Copy data to image buffer
-//     bytes_to_index(
-//         &data_src[offset..],
-//         NUM_TILES_WIDTH,
-//         NUM_TILES_HEIGHT,
-//         bpp as usize,
-//         &mut buffer,
-//     );
-//     // Map data to RGB
-//     let rgb_data: [[u8; 3]; 8 * 8 * NUM_TILES_WIDTH * NUM_TILES_HEIGHT] =
-//         core::array::from_fn(|i| palette[buffer[i] as usize]);
-//     // Copy to slint buffer
-//     let mut buf = if ui.get_binary_image().size().width == 0 {
-//         SharedPixelBuffer::new(8 * NUM_TILES_WIDTH as u32, 8 * NUM_TILES_HEIGHT as u32)
-//     } else {
-//         ui.get_binary_image().to_rgb8().unwrap()
-//     };
-//     buf.make_mut_bytes()
-//         .copy_from_slice(rgb_data.as_flattened());
-//     ui.set_binary_image(Image::from_rgb8(buf));
-// }
+
+/// Write using a buffered writer
+pub fn buf_write(p: &str, it: impl Iterator<Item = String>) {
+    let f = std::fs::File::create(p).unwrap();
+    let mut bw = BufWriter::new(f);
+    it.for_each(|line| writeln!(bw, "{}", line).unwrap());
+}

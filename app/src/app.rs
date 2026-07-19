@@ -9,6 +9,7 @@ use super_yane::ppu::SCREEN_RESOLUTION;
 
 use crate::{
     Console, Engine,
+    disassembler::Instruction,
     emulation::Emulation,
     engine::Command,
     menu::spawn_menu_thread,
@@ -17,13 +18,13 @@ use crate::{
         colors::{DARK_GREY, GREY, WHITE},
         cpu_data,
     },
+    utils::buf_write,
 };
 
 pub struct App {
     engine: Engine,
     screen_data: Option<TextureHandle>,
     tree: Arc<Mutex<DockState<(egui::Id, EmuTab)>>>,
-    scroll: InfiniteScroll<i32, i32>,
     // Menu needs to be kept in scope
     menu: Menu,
 }
@@ -66,11 +67,6 @@ impl App {
             engine: Engine::new(emulation),
             screen_data: None,
             tree,
-            scroll: InfiniteScroll::new().end_loader(|cursor, callback| {
-                let start = cursor.unwrap_or(0);
-                let end = 1;
-                callback(Ok(((start..end).collect(), Some(end))));
-            }),
             menu,
         }
     }
@@ -137,5 +133,26 @@ impl eframe::App for App {
             tree.set_focused_node_and_surface(path);
             tree.push_to_focused_leaf((egui::Id::new(rand::random::<i32>()), tab));
         }
+    }
+
+    fn on_exit(&mut self) {
+        // Write disassembly
+        let e = self.engine.emulation.lock().unwrap();
+        buf_write(
+            "./cpu.asm",
+            e.cpu_dis
+                .lines()
+                .map(|l| l.instruction.to_string(e.cpu_dis.labels())),
+        );
+        buf_write(
+            "./apu.asm",
+            e.apu_dis.lines().map(|l| {
+                format!(
+                    "{} {}",
+                    l.instruction.opcode_name(),
+                    l.instruction.operands(e.apu_dis.labels())
+                )
+            }),
+        );
     }
 }

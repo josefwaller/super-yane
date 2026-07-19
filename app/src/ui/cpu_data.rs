@@ -19,10 +19,18 @@ pub fn cpu_data(ui: &mut egui::Ui, console: &Console) {
                 console.cartridge().transform_address(console.pc())
             ),
         ),
-        // high_low_regRow::new(ui, "C", "B", "A", c.c(), c.b, c.a),;
-        // high_low_regRow::new(ui, "X", "Xh", "Xl", c.x(), c.xh, c.xl),;
-        // high_low_regRow::new(ui, "Y", "Yh", "Yl", c.y(), c.yh, c.yl),;
-        // high_low_regRow::new(ui, "D", "Dh", "Dl", c.dr(), c.dh, c.dl),;
+        Row::new("C", format!("{:02X}", c.c())),
+        Row::new("B", format!("{:02X}", c.b)).indent(1),
+        Row::new("A", format!("{:02X}", c.a)).indent(1),
+        Row::new("X", format!("{:02X}", c.x())),
+        Row::new("Xh", format!("{:02X}", c.xh)).indent(1),
+        Row::new("Xl", format!("{:02X}", c.xl)).indent(1),
+        Row::new("Y", format!("{:02X}", c.y())),
+        Row::new("Yh", format!("{:02X}", c.yh)).indent(1),
+        Row::new("Yl", format!("{:02X}", c.yl)).indent(1),
+        Row::new("D", format!("{:02X}", c.dr())),
+        Row::new("Dh", format!("{:02X}", c.dh)).indent(1),
+        Row::new("Dl", format!("{:02X}", c.dl)).indent(1),
         Row::new("DBR", format!("{:02X}", c.dbr)),
         Row::new("SR", format!("{:04X}", c.s)),
         Row::new("P (read)", format!("{:02X}", c.p.to_byte(true))),

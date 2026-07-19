@@ -14,7 +14,7 @@ use app::App;
 use egui::{FontData, FontDefinitions, FontFamily, FontId};
 use log::{debug, error};
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use std::{env, error::Error, fmt::format, fs::File, sync::Arc};
+use std::{env, error::Error, fmt::format, fs::File, io::BufWriter, sync::Arc};
 use super_yane::Console;
 
 use crate::{

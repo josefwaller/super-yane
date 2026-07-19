@@ -58,10 +58,13 @@ where
             .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels))
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.instructions
+        let v = self
+            .instructions
             .iter()
             .nth(self.instruction_index)
-            .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels))
+            .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels));
+        self.instruction_index += 1;
+        v
     }
     // fn next(&mut self) -> Option<Self::Item> {
     //     let lab = self
