@@ -531,12 +531,10 @@ impl Console {
         if !vblank && self.ppu().is_in_vblank() {
             // Trigger NMI
             if self.rest.nmi_enabled {
-                // debug!("NMI {}", self.rest.total_master_clocks);
                 self.cpu.on_nmi(&mut self.rest);
             }
-            // Disable all HDMA channels
+            // Reset all HDMA channels
             self.rest.dma_channels.iter_mut().for_each(|d| {
-                d.hdma_enable = false;
                 d.hdma_line_counter = 0;
             });
         }
@@ -568,7 +566,7 @@ impl Console {
                             // Read next byte
                             match self.rest.read_byte(d.current_hdma_table_addr(0)).0 {
                                 0 => {
-                                    d.hdma_enable = false;
+                                    // Noop
                                 }
                                 lc => {
                                     // Get line counter
