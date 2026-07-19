@@ -1,5 +1,6 @@
 mod binary_data;
 mod binary_table;
+mod binary_tiles;
 mod breakpoints;
 pub mod colors;
 mod cpu_data;
@@ -11,6 +12,7 @@ mod screen;
 mod tab_viewer;
 mod vertical_table;
 pub use binary_data::binary_data;
+pub use binary_tiles::binary_tiles;
 pub use cpu_data::cpu_data;
 pub use cpu_disassembly::cpu_disassembly;
 pub use dma_channels::dma_channels;
