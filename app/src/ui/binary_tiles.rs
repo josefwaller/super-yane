@@ -45,17 +45,20 @@ fn update_texture(
 struct State {
     texture: Option<TextureHandle>,
     bpp_index: usize,
+    palette_index: usize,
 }
 
 pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     let id = ui.unique_id();
-    // Show view tiles checkbox
+    // Get state
     let mut state = ui.ctx().data_mut(|d| {
         d.get_persisted(id).unwrap_or(State {
             texture: None,
             bpp_index: 0,
+            palette_index: 0,
         })
     });
+    // Show BPP selector
     const BPPS: [usize; 3] = [2, 4, 8];
     ComboBox::new(id, "BPP")
         .selected_text(format!("{}", state.bpp_index))
@@ -63,6 +66,21 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
             format!("{}", BPPS[i])
         });
     let bpp = BPPS[state.bpp_index];
+    // Show palette selector
+    let (num_palettes, palette_len) = match bpp {
+        2 => (64, 4),
+        4 => (16, 16),
+        8 => (1, 256),
+        _ => unimplemented!("Invalid BPP"),
+    };
+    ComboBox::new(id.with("bpp"), "Palette")
+        .selected_text(format!("{}", state.palette_index))
+        .show_index(ui, &mut state.palette_index, num_palettes, |i| {
+            format!("{}", i)
+        });
+    // Ensure palette index is not too high
+    state.palette_index = state.palette_index.min(num_palettes);
+
     let texture_height = data.len() * 8 / bpp / TEXTURE_WIDTH_PIXELS;
     let mut texture = state.texture.clone().unwrap_or_else(|| {
         ui.load_texture(
@@ -102,7 +120,14 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
             body.rows(row_height, texture_height / 8, |mut row| {
                 let index = row.index();
                 // Update row texture
-                update_texture(index, 1, data, palette, bpp, &mut texture);
+                update_texture(
+                    index,
+                    1,
+                    data,
+                    &palette[(palette_len * state.palette_index)..],
+                    bpp,
+                    &mut texture,
+                );
                 row.col(|ui| {
                     ui.label(
                         RichText::new(format!(
