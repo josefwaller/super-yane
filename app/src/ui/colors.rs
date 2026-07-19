@@ -17,6 +17,7 @@ pub const DARK_GREY: Color32 = from_hex!(0x090909);
 pub const WHITE: Color32 = from_hex!(0xFFFFFF);
 pub const GREY: Color32 = from_hex!(0x202020);
 pub const LIGHT_GREY: Color32 = from_hex!(0x878787);
+pub const PINK_PRIMARY: Color32 = from_hex!(0xe92ef0);
 pub const RED_PRIMARY: Color32 = from_hex!(0xff3b48);
 pub const RED_SECONDARY: Color32 = from_hex!(0xed878e);
 pub const COLOR_ORANGE: Color32 = from_hex!(0xf7cf97);

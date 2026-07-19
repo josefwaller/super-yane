@@ -8,6 +8,9 @@ use crate::utils::bytes_to_rgb;
 const TEXTURE_WIDTH_TILES: usize = 16;
 const TEXTURE_WIDTH_PIXELS: usize = 8 * TEXTURE_WIDTH_TILES;
 
+// WGPU enforced max texture height
+const TEXTURE_HEIGHT: usize = 8192;
+
 /// Update the texture, only updating the rows that the user has scrolled to right now.
 fn update_texture(
     tile_row: usize,
@@ -35,7 +38,7 @@ fn update_texture(
     );
     // Copy only section of texture
     texture.set_partial(
-        [0, pixel_row],
+        [0, pixel_row % TEXTURE_HEIGHT],
         ColorImage::from_rgb([TEXTURE_WIDTH_PIXELS, total_height], buf.as_flattened()),
         TextureOptions::NEAREST,
     );
@@ -60,7 +63,7 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     });
     // Show BPP selector
     const BPPS: [usize; 3] = [2, 4, 8];
-    ComboBox::new(id, "BPP")
+    ComboBox::new(id.with("bpp"), "BPP")
         .selected_text(format!("{}", state.bpp_index))
         .show_index(ui, &mut state.bpp_index, BPPS.len(), |i| {
             format!("{}", BPPS[i])
@@ -73,7 +76,7 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
         8 => (1, 256),
         _ => unimplemented!("Invalid BPP"),
     };
-    ComboBox::new(id.with("bpp"), "Palette")
+    ComboBox::new(id.with("palette"), "Palette")
         .selected_text(format!("{}", state.palette_index))
         .show_index(ui, &mut state.palette_index, num_palettes, |i| {
             format!("{}", i)
@@ -91,9 +94,9 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     });
     state.texture = Some(texture.clone());
     // Ensure texture size is correct
-    if texture.size() != [TEXTURE_WIDTH_PIXELS, texture_height] {
+    if texture.size() != [TEXTURE_WIDTH_PIXELS, TEXTURE_HEIGHT] {
         texture.set(
-            ColorImage::filled([TEXTURE_WIDTH_PIXELS, texture_height], Color32::RED),
+            ColorImage::filled([TEXTURE_WIDTH_PIXELS, TEXTURE_HEIGHT], Color32::RED),
             TextureOptions::NEAREST,
         );
     }
@@ -139,17 +142,18 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
                     );
                 });
                 let img_width = 1.0 / TEXTURE_WIDTH_TILES as f32;
-                let img_height = 1.0 / (texture_height / 8) as f32;
+                let img_height = 1.0 / (TEXTURE_HEIGHT / 8) as f32;
+                let texture_index = index % (TEXTURE_HEIGHT / 8);
                 for x in 0..TEXTURE_WIDTH_TILES {
                     row.col(|ui| {
                         ui.painter().image(
                             texture.id(),
                             ui.available_rect_before_wrap(),
                             Rect::from_min_max(
-                                Pos2::new(x as f32 * img_width, index as f32 * img_height),
+                                Pos2::new(x as f32 * img_width, texture_index as f32 * img_height),
                                 Pos2::new(
                                     (x + 1) as f32 * img_width,
-                                    (index + 1) as f32 * img_height,
+                                    (texture_index + 1) as f32 * img_height,
                                 ),
                             ),
                             Color32::WHITE,

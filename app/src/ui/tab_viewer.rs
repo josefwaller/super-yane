@@ -1,4 +1,4 @@
-use egui::TextureHandle;
+use egui::{ScrollArea, TextureHandle};
 use egui_dock::NodePath;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
 
@@ -6,9 +6,8 @@ use crate::{
     engine::{Command, Engine},
     ui::{
         binary_data,
-        binary_table::binary_table,
         breakpoints::breakpoints,
-        colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, RED_PRIMARY},
+        colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         cpu_data, cpu_disassembly, dma_channels, ppu_data, screen,
     },
 };
@@ -25,6 +24,7 @@ pub enum EmuTab {
     Vram,
     Cgram,
     Aram,
+    Cartridge,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -40,6 +40,7 @@ impl ToString for EmuTab {
             Vram => "VRAM",
             Cgram => "CGRAM",
             Aram => "ARAM",
+            Cartridge => "ROM",
         }
         .to_owned()
     }
@@ -101,6 +102,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     ui,
                     emu.console.apu().ram(),
                     GREEN_PRIMARY,
+                    &emu.console.ppu().cgram,
+                ),
+                Cartridge => binary_data(
+                    ui,
+                    &emu.console.cartridge().data,
+                    PINK_PRIMARY,
                     &emu.console.ppu().cgram,
                 ),
             }
