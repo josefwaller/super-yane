@@ -6,6 +6,7 @@ pub mod colors;
 mod cpu_data;
 mod cpu_disassembly;
 mod dma_channels;
+mod oam;
 mod ppu_data;
 mod reg_row;
 mod screen;

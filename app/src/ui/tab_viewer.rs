@@ -9,7 +9,9 @@ use crate::{
         binary_data,
         breakpoints::breakpoints,
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
-        cpu_data, cpu_disassembly, dma_channels, ppu_data, screen,
+        cpu_data, cpu_disassembly, dma_channels,
+        oam::oam,
+        ppu_data, screen,
     },
 };
 
@@ -21,6 +23,7 @@ pub enum EmuTab {
     DmaChannels,
     CpuDisassembly,
     CpuBreakpoints,
+    Oam,
     Wram,
     Vram,
     Cgram,
@@ -37,6 +40,7 @@ impl ToString for EmuTab {
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             CpuBreakpoints => "CPU Breakpoints",
+            Oam => "OAM",
             Wram => "WRAM",
             Vram => "VRAM",
             Cgram => "CGRAM",
@@ -77,6 +81,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
                 CpuBreakpoints => breakpoints(ui, &mut emu),
+                Oam => oam(ui, &emu),
                 Wram => binary_data(
                     ui,
                     emu.console.ram().as_slice(),
