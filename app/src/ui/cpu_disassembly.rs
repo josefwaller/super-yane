@@ -14,7 +14,7 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
     let height = ui.text_style_height(&egui::TextStyle::Body);
     let mut table = TableBuilder::new(ui)
         .resizable(false)
-        .columns(Column::auto(), 2)
+        .columns(Column::auto(), 3)
         .column(Column::remainder());
 
     // if !emu.is_paused {
@@ -43,7 +43,10 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
                 ui.label("PC");
             });
             row.col(|ui| {
-                ui.label("INST");
+                ui.label("OPCODE");
+            });
+            row.col(|ui| {
+                ui.label("OPERAND(S)");
             });
         })
         .body(|body| {
@@ -59,9 +62,16 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
                     });
                     row.col(|ui| {
                         ui.label(
+                            RichText::new(format!("{}", inst.instruction.opcode_name()))
+                                .color(LIGHT_BLUE_SECONDARY),
+                        );
+                    });
+
+                    row.col(|ui| {
+                        ui.label(
                             RichText::new(format!(
                                 "{}",
-                                inst.instruction.to_string(emu.cpu_dis.labels())
+                                inst.instruction.operands(emu.cpu_dis.labels())
                             ))
                             .color(LIGHT_BLUE_SECONDARY),
                         );
