@@ -20,6 +20,8 @@ pub const MASTER_CYCLES_PER_DOT: usize = 4;
 pub const DOTS_PER_SCANLINE: usize = 1364 / 4;
 pub const SCANLINES: usize = 262;
 
+pub const NUM_SPRITES: usize = 0x80;
+
 #[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
 pub enum TimerMode {
     #[default]
@@ -218,7 +220,7 @@ pub struct Ppu {
     /// The OAM data
     #[serde(with = "BigArray")]
     #[new(value = "[Sprite::default(); 0x80]")]
-    pub oam_sprites: [Sprite; 0x80],
+    pub oam_sprites: [Sprite; NUM_SPRITES],
     /// Buffer of OAM pixels for the scanline currently being rendered.
     /// Refreshed every HBlank
     #[serde(skip, default = "default_oam_buffer")]
