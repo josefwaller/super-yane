@@ -1,4 +1,4 @@
-use egui::{Color32, RichText, hex_color};
+use egui::{Color32, RichText};
 use slint::Color;
 use super_yane::Console;
 

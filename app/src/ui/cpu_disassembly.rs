@@ -1,4 +1,4 @@
-use egui::{RichText, Ui, hex_color};
+use egui::{RichText, Ui};
 use egui_extras::{Column, TableBuilder};
 
 use crate::{

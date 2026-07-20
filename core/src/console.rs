@@ -605,7 +605,6 @@ impl Console {
                                     // Trigger DMA
                                     d.is_executing = true;
                                     d.num_bytes_transferred = 0;
-                                    log::debug!("Started HDMA {}", i);
                                     // Since we just went over a scanline here, dec line counter
                                     d.hdma_line_counter -= 1;
                                 }

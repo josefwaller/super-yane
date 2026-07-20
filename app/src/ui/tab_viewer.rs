@@ -1,6 +1,7 @@
-use egui::{ScrollArea, TextureHandle};
+use egui::TextureHandle;
 use egui_dock::NodePath;
-use strum::{EnumIter, EnumString, IntoEnumIterator};
+use serde::{Deserialize, Serialize};
+use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     engine::{Command, Engine},
@@ -12,7 +13,7 @@ use crate::{
     },
 };
 
-#[derive(EnumIter, EnumString, Copy, Clone)]
+#[derive(Serialize, Deserialize, EnumIter, Copy, Clone)]
 pub enum EmuTab {
     Screen,
     Cpu,
@@ -119,7 +120,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     fn add_popup(&mut self, ui: &mut egui::Ui, path: egui_dock::NodePath) {
         ui.vertical(|ui| {
             EmuTab::iter().for_each(|tab| {
-                if ui.button(tab.to_string()).clicked() {
+                if ui.selectable_label(false, tab.to_string()).clicked() {
                     self.added_tabs.push((path, tab));
                 }
             });

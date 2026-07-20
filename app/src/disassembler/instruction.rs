@@ -27,7 +27,7 @@ impl CpuInstruction {
     pub fn to_string(&self, labels: &BTreeMap<usize, Label>) -> String {
         let data = self.data();
         let operands = self.operands(labels);
-        format!("{} {}", data.name, operands)
+        format!("{} {} -- PC={:04X}", data.name, operands, self.pc)
     }
     pub fn data(&self) -> OpcodeData {
         opcode_data(self.opcode, self.a, self.xy)

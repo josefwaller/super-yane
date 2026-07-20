@@ -13,6 +13,8 @@ pub mod utils;
 use app::App;
 use egui::{FontData, FontDefinitions, FontFamily, FontId};
 use log::{debug, error};
+use objc2::MainThreadMarker;
+use objc2_app_kit::NSWindow;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
 use std::{env, error::Error, fmt::format, fs::File, io::BufWriter, sync::Arc};
 use super_yane::Console;
@@ -85,6 +87,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .with_title("Super Y.A.N.E"),
         ..Default::default()
     };
+    // Don't allow automatic window tabbing to remove View menu bar options
+    NSWindow::setAllowsAutomaticWindowTabbing(false, unsafe { MainThreadMarker::new_unchecked() });
 
     // Load font
     macro_rules! FONT_PATH {

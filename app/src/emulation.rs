@@ -1,5 +1,5 @@
 use egui::{Context as UiContext, Key};
-use strum::{EnumIter, EnumString};
+use strum::EnumIter;
 use super_yane::{Console, InputPort, ppu::SCREEN_RESOLUTION};
 use wdc65816::opcodes::{STP, WDM};
 
@@ -10,7 +10,7 @@ use crate::{
     engine::{AdvanceAmount, Command},
 };
 
-#[derive(EnumString, EnumIter, Debug, Clone, PartialEq, Copy)]
+#[derive(EnumIter, Debug, Clone, PartialEq, Copy)]
 pub enum Breakpoint {
     Pc(usize),
     Opcode(u8),
