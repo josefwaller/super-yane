@@ -1,5 +1,5 @@
 use egui::{
-    Color32, ColorImage, Label, Layout, Pos2, Rect, RichText, TextWrapMode, TextureHandle,
+    Color32, ColorImage, Label, Layout, Pos2, Rect, RichText, Sense, TextWrapMode, TextureHandle,
     TextureOptions, Ui,
 };
 use egui_extras::{Column, TableBuilder};
@@ -60,8 +60,8 @@ pub fn oam(ui: &mut Ui, emu: &Emulation) {
 
     TableBuilder::new(ui)
         .column(Column::auto())
-        .column(Column::auto().at_least(SPRITE_COLUMN_SIZE))
-        .columns(Column::auto(), 9)
+        .column(Column::remainder().at_least(SPRITE_COLUMN_SIZE))
+        .columns(Column::remainder(), 9)
         .cell_layout(Layout::top_down_justified(egui::Align::Center))
         .header(15.0, |mut row| {
             macro_rules! col {
