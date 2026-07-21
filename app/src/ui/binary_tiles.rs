@@ -1,7 +1,9 @@
 use egui::{
-    Color32, ColorImage, ComboBox, Layout, Pos2, Rect, RichText, TextureHandle, TextureOptions, Ui,
+    Align, Atom, Button, Color32, ColorImage, ComboBox, Image, LayerId, Layout, Pos2, Rect,
+    RichText, Sense, TextureHandle, TextureOptions, Ui, Vec2,
 };
 use egui_extras::{Column, TableBuilder};
+use super_yane::utils::color_to_rgb_bytes;
 
 use crate::utils::bytes_to_rgb;
 
@@ -51,6 +53,8 @@ struct State {
     palette_index: usize,
 }
 
+fn palette_option(ui: &mut Ui) {}
+
 pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     let id = ui.unique_id();
     // Get state
@@ -76,13 +80,41 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
         8 => (1, 256),
         _ => unimplemented!("Invalid BPP"),
     };
-    ComboBox::new(id.with("palette"), "Palette")
-        .selected_text(format!("{}", state.palette_index))
-        .show_index(ui, &mut state.palette_index, num_palettes, |i| {
-            format!("{}", i)
-        });
     // Ensure palette index is not too high
-    state.palette_index = state.palette_index.min(num_palettes);
+    state.palette_index = state.palette_index.min(num_palettes - 1);
+    ComboBox::from_id_salt(id.with(bpp).with("palette"))
+        .selected_text(format!("Palette {}", state.palette_index))
+        .show_ui(ui, |ui| {
+            for i in 0..num_palettes {
+                // Create atom for palette colors
+                let atom_id = ui.unique_id().with("palette").with(i);
+                let atom = Atom::custom(atom_id, Vec2::new(16.0 * palette_len as f32, 16.0));
+                // Create button
+                let button =
+                    Button::selectable(i == state.palette_index, (format!("Palette {}", i), atom));
+                // Add button to UI
+                let response = button.atom_ui(ui);
+                if response.clicked() {
+                    state.palette_index = i;
+                }
+                // Draw palette if button is visible
+                if let Some(rect) = response.rect(atom_id) {
+                    let palette = &palette[(i * palette_len)..];
+                    let painter = ui.painter_at(rect);
+                    // Draw rect for every color
+                    for j in 0..palette_len {
+                        let color = color_to_rgb_bytes(palette[j], 0xF);
+                        let color = Color32::from_rgb(color[0], color[1], color[2]);
+                        painter.rect_filled(
+                            rect.with_min_x(rect.min.x + 16.0 * j as f32)
+                                .with_max_x(rect.min.x + 16.0 * (j + 1) as f32),
+                            0,
+                            color,
+                        );
+                    }
+                }
+            }
+        });
 
     let texture_height = data.len() * 8 / bpp / TEXTURE_WIDTH_PIXELS;
     let mut texture = state.texture.clone().unwrap_or_else(|| {
