@@ -25,3 +25,13 @@ pub fn color_to_rgb_bytes(color: u16, brightness: u8) -> [u8; 3] {
 pub fn rgb_to_color(rgb: [u16; 3]) -> u16 {
     rgb[0] as u16 + rgb[1] as u16 * 0x20 + rgb[2] as u16 * 0x400
 }
+/// Convert from a direct color encoded byte (BBGG GRRR) and optionally the palette index (bgr)
+/// to the regular 15 bit color format (0BBB BBGG GGGR RRRR)
+pub fn from_direct_color(byte: u8, palette_index: u8) -> u16 {
+    let byte = byte as u16;
+    let pal = palette_index as u16;
+    let r = byte & 0x07;
+    let g = byte & 0x38;
+    let b = byte & 0xC0;
+    (r << 2) | (g << 4) | (b << 7) | (pal & 0x04) | ((pal & 0x02) << 5) | ((pal & 0x01) << 11)
+}

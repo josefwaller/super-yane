@@ -20,6 +20,7 @@ fn update_texture(
     data: &[u8],
     palette: &[u16],
     bpp: usize,
+    direct_color: bool,
     texture: &mut TextureHandle,
 ) {
     // Due to how tiles are structured in VRAM, we need to round down to the nearest tile (i.e 8 pixels)
@@ -36,6 +37,7 @@ fn update_texture(
         total_height / 8,
         bpp,
         palette,
+        direct_color,
         &mut buf,
     );
     // Copy only section of texture
@@ -51,9 +53,8 @@ struct State {
     texture: Option<TextureHandle>,
     bpp_index: usize,
     palette_index: usize,
+    direct_color: bool,
 }
-
-fn palette_option(ui: &mut Ui) {}
 
 pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     let id = ui.unique_id();
@@ -63,6 +64,7 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
             texture: None,
             bpp_index: 0,
             palette_index: 0,
+            direct_color: false,
         })
     });
     // Show BPP selector
@@ -82,6 +84,8 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
     };
     // Ensure palette index is not too high
     state.palette_index = state.palette_index.min(num_palettes - 1);
+    // The actual index to drag, may be changed if we're hovering over an option
+    let mut palette_index_override = state.palette_index;
     ComboBox::from_id_salt(id.with(bpp).with("palette"))
         .selected_text(format!("Palette {}", state.palette_index))
         .show_ui(ui, |ui| {
@@ -91,11 +95,14 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
                 let atom = Atom::custom(atom_id, Vec2::new(16.0 * palette_len as f32, 16.0));
                 // Create button
                 let button =
-                    Button::selectable(i == state.palette_index, (format!("Palette {}", i), atom));
+                    Button::selectable(i == state.palette_index, (format!("Palette {} ", i), atom));
                 // Add button to UI
                 let response = button.atom_ui(ui);
                 if response.clicked() {
                     state.palette_index = i;
+                }
+                if response.hovered() {
+                    palette_index_override = i;
                 }
                 // Draw palette if button is visible
                 if let Some(rect) = response.rect(atom_id) {
@@ -115,6 +122,8 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
                 }
             }
         });
+
+    ui.checkbox(&mut state.direct_color, "Direct Color");
 
     let texture_height = data.len() * 8 / bpp / TEXTURE_WIDTH_PIXELS;
     let mut texture = state.texture.clone().unwrap_or_else(|| {
@@ -159,8 +168,9 @@ pub fn binary_tiles(ui: &mut Ui, data: &[u8], palette: &[u16], color: Color32) {
                     index,
                     1,
                     data,
-                    &palette[(palette_len * state.palette_index)..],
+                    &palette[(palette_len * palette_index_override)..],
                     bpp,
+                    state.direct_color,
                     &mut texture,
                 );
                 row.col(|ui| {

@@ -10,7 +10,7 @@ use crate::{
 };
 use derive_new::new;
 
-use crate::utils::{bit, color_to_rgb_bytes};
+use crate::utils::{bit, color_to_rgb_bytes, from_direct_color};
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
@@ -887,11 +887,14 @@ impl Ppu {
                 // Tile data is in the high byte
                 let pixel_index = (x % 8) + 8 * (y % 8);
                 let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
-                return if palette_byte == 0 {
+                if self.direct_color {
+                    // Mode 7 has no attr byte
+                    Some((from_direct_color(palette_byte, 0), false))
+                } else if palette_byte == 0 {
                     None
                 } else {
                     Some((self.cgram[palette_byte as usize & 0x7F], false))
-                };
+                }
             }
         };
     }
@@ -988,16 +991,6 @@ impl Ppu {
         (0..(bpp as usize / 2))
             .for_each(|i| slices[i] = self.get_2bpp_slice_at(slice_addr + 16 * i));
 
-        // Todo: Make this actually change
-        let direct_color = false;
-        let temp: [u16; 256] = core::array::from_fn(|i| {
-            let i = i as u16;
-            let r = i & 0x07;
-            let g = i & 0x38;
-            let b = i & 0xC0;
-            (r << 2) | (g << 6) | (b << 7)
-        });
-
         // palette_index is at most 7, so the highest index is (16 * 7 + 16 - 1) = 127
         let palette = match bpp {
             2 => {
@@ -1005,13 +998,7 @@ impl Ppu {
                 &self.cgram[(4 * 8 * i + 4 * palette_index)..(4 * 8 * i + 4 * palette_index + 4)]
             }
             4 => &self.cgram[(16 * palette_index)..(16 * palette_index + 16)],
-            8 => {
-                if direct_color {
-                    &temp
-                } else {
-                    &self.cgram
-                }
-            }
+            8 => &self.cgram,
             _ => panic!("Unsupported bpp: {}", bpp),
         };
         let slice_values: [BackgroundPixel; 8] = core::array::from_fn(|i| {
@@ -1025,7 +1012,14 @@ impl Ppu {
             if v == 0 {
                 None
             } else {
-                Some((palette[v], priority))
+                Some((
+                    if self.direct_color && bpp == 8 {
+                        from_direct_color(v as u8, palette_index as u8)
+                    } else {
+                        palette[v]
+                    },
+                    priority,
+                ))
             }
         });
         // We "skip" the first (x % 8) pixels
@@ -1430,7 +1424,7 @@ impl Ppu {
                     } else {
                         mainscreen_val
                             .map(|b| {
-                                if b.1 {
+                                if b.1 && false {
                                     match color_math_source {
                                         Some(c) => self.color_blend_mode.compute(b.0, c),
                                         None => b.0,

@@ -1,6 +1,6 @@
 use std::io::{BufWriter, Write};
 
-use super_yane::utils::color_to_rgb_bytes;
+use super_yane::utils::{color_to_rgb_bytes, from_direct_color};
 
 pub enum BinaryDataSrc {
     Wram,
@@ -79,6 +79,7 @@ pub fn bytes_to_rgb(
     height_tiles: usize,
     bpp: usize,
     palette: &[u16],
+    direct_color: bool,
     out_buf: &mut [[u8; 3]],
 ) {
     // Inner buf will hold the index
@@ -91,7 +92,14 @@ pub fn bytes_to_rgb(
         out_buf[index] = if *value == 0 {
             [0; 3]
         } else {
-            color_to_rgb_bytes(palette[*value as usize], BRIGHTNESS)
+            color_to_rgb_bytes(
+                if direct_color {
+                    from_direct_color(*value, 0)
+                } else {
+                    palette[*value as usize]
+                },
+                BRIGHTNESS,
+            )
         };
     });
 }

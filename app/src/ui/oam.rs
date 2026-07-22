@@ -30,6 +30,8 @@ fn update_texture(texture: &mut TextureHandle, console: &Console, index: usize) 
             1,
             4,
             &console.ppu().cgram[s.palette_addr()..],
+            // No direct color for sprites
+            false,
             &mut buf[0..(size.0 * 8)],
         );
         // Copy only section of texture
