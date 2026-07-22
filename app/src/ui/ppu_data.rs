@@ -39,6 +39,25 @@ pub fn ppu_data(ui: &mut Ui, emu: &Emulation) {
             Row::new("OAM Sizes", format!("{:?}", ppu.oam_sizes)),
             Row::new("OAM Name Address", format!("{:04X}", ppu.oam_name_addr)),
             Row::new("OAM Name Select", format!("{:04X}", ppu.oam_name_select)),
+            Row::new("Fixed color", format!("{:04X?}", ppu.fixed_color)),
+            Row::new(
+                "Color Math Enabled Backdrop",
+                format!("{}", ppu.color_math_enable_backdrop),
+            ),
+            Row::new(
+                "Color Math Enabled Sprites",
+                format!("{}", ppu.color_math_enable_obj),
+            ),
+            Row::new("Color Math Source", format!("{:?}", ppu.color_math_src)),
+            Row::new("Color Blend Mode", format!("{:?}", ppu.color_blend_mode)),
+            Row::new(
+                "Color Math Main Region",
+                format!("{:?}", ppu.color_window_main_region),
+            ),
+            Row::new(
+                "Color Math Sub Region",
+                format!("{:?}", ppu.color_window_sub_region),
+            ),
         ],
         RED_PRIMARY,
         "PPU".to_owned(),
