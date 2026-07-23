@@ -1424,7 +1424,7 @@ impl Ppu {
                     } else {
                         mainscreen_val
                             .map(|b| {
-                                if b.1 && false {
+                                if b.1 {
                                     match color_math_source {
                                         Some(c) => self.color_blend_mode.compute(b.0, c),
                                         None => b.0,

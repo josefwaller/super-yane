@@ -11,15 +11,25 @@ pub mod ui;
 pub mod utils;
 
 use app::App;
+use clap::Parser;
 use egui::{FontData, FontDefinitions, FontFamily, FontId};
 use log::{debug, error};
 use objc2::MainThreadMarker;
 use objc2_app_kit::NSWindow;
 use simplelog::{CombinedLogger, ConfigBuilder, TermLogger, WriteLogger};
-use std::{env, error::Error, fmt::format, fs::File, io::BufWriter, sync::Arc};
+use std::{
+    env,
+    error::Error,
+    fmt::format,
+    fs::File,
+    io::BufWriter,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use super_yane::Console;
 
 use crate::{
+    emulation::Emulation,
     engine::{Command, Engine},
     menu::initialize_menu,
 };
@@ -30,14 +40,22 @@ enum LoadConsoleError {
     DeserializationError(serde_brief::Error),
 }
 
+#[derive(Parser, Debug)]
+struct Args {
+    file: Option<PathBuf>,
+    #[arg(short, long, default_value_t = false)]
+    paused: bool,
+    #[arg(short, long, default_value_t = 5.0)]
+    volume: f32,
+}
+
 const DEFAULT_CARTRIDGE: &[u8] = include_bytes!("../roms/HelloWorld.sfc");
 
-fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
+fn initial_console(arg: Option<PathBuf>) -> Result<Console, LoadConsoleError> {
     // Load ROM/savestate
     match arg {
         Some(f) => match std::fs::read(&f) {
             Ok(bytes) => {
-                debug!("Reading {}", f);
                 if f.ends_with(".bin") {
                     let mut c: Console = serde_brief::from_slice(&bytes)
                         .map_err(LoadConsoleError::DeserializationError)?;
@@ -48,7 +66,7 @@ fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
                 }
             }
             Err(e) => {
-                error!("Unable to read file {}: {:?}", f, e);
+                error!("Unable to read file {:?}: {:?}", f, e);
                 Err(LoadConsoleError::FileError(e))
             }
         },
@@ -56,6 +74,7 @@ fn initial_console(arg: Option<String>) -> Result<Console, LoadConsoleError> {
     }
 }
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
     // Initialize logger
     let config = ConfigBuilder::new()
         .add_filter_allow_str("app")
@@ -122,11 +141,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             #[cfg(debug_assertions)]
             cc.egui_ctx
                 .global_style_mut(|s| s.debug.warn_if_rect_changes_id = false);
-            Ok(Box::new(App::new(
-                cc,
-                initial_console(env::args().nth(1)).unwrap(),
-                initialize_menu().unwrap(),
-            )))
+            // Initialize emulation
+            let console = initial_console(args.file).unwrap();
+            // TODO: Add settings to Emulation to parse from args
+            let emu = Arc::new(Mutex::new(Emulation::new(console, cc.egui_ctx.clone())));
+            emu.lock().unwrap().is_paused = args.paused;
+            emu.lock().unwrap().volume = args.volume;
+            Ok(Box::new(App::new(cc, emu, initialize_menu().unwrap())))
         }),
     )?;
     Ok(())

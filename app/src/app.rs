@@ -1,22 +1,19 @@
 use std::sync::{Arc, Mutex};
 
 use eframe::CreationContext;
-use egui::{Color32, ColorImage, Context, CornerRadius, Frame, TextureHandle, Ui};
+use egui::{Color32, ColorImage, CornerRadius, TextureHandle, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex};
-use egui_infinite_scroll::InfiniteScroll;
 use muda::Menu;
 use super_yane::ppu::SCREEN_RESOLUTION;
 
 use crate::{
-    Console, Engine,
+    Engine,
     disassembler::Instruction,
     emulation::Emulation,
-    engine::Command,
     menu::spawn_menu_thread,
     ui::{
         EmuTab, TabViewer,
         colors::{DARK_GREY, GREY, WHITE},
-        cpu_data,
     },
     utils::buf_write,
 };
@@ -30,7 +27,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(cc: &CreationContext<'_>, console: Console, menu: Menu) -> Self {
+    pub fn new(cc: &CreationContext<'_>, emu: Arc<Mutex<Emulation>>, menu: Menu) -> Self {
         // Set up iniital layout
         let mut tree = DockState::new(vec![EmuTab::Screen]);
         let s = tree.main_surface_mut();
@@ -59,12 +56,10 @@ impl App {
         let tree = Arc::new(Mutex::new(
             tree.map_tabs(|tab| (egui::Id::new(rand::random::<i32>()), *tab)),
         ));
-        // Initialize emulation
-        let emulation = Arc::new(Mutex::new(Emulation::new(console, cc.egui_ctx.clone())));
         // Initialize menu thread
-        spawn_menu_thread(emulation.clone(), tree.clone());
+        spawn_menu_thread(emu.clone(), tree.clone());
         App {
-            engine: Engine::new(emulation),
+            engine: Engine::new(emu),
             screen_data: None,
             tree,
             menu,
