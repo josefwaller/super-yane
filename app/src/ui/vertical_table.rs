@@ -1,4 +1,4 @@
-use egui::{Color32, Label, Margin, RichText, Ui};
+use egui::{AsIdSalt, Color32, Id, Label, Margin, RichText, Ui};
 use egui_extras::{Column, TableBuilder};
 
 use crate::ui::colors::WHITE;
@@ -29,7 +29,7 @@ impl<'a> Row<'a> {
     }
 }
 
-pub fn vertical_table(ui: &mut Ui, row_data: &[Row], header_color: Color32, id: String) {
+pub fn vertical_table(ui: &mut Ui, row_data: &[Row], header_color: Color32, id: impl AsIdSalt) {
     TableBuilder::new(ui)
         .id_salt(id)
         .column(Column::auto())

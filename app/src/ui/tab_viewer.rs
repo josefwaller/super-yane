@@ -8,6 +8,7 @@ use crate::{
     ui::{
         binary_data,
         breakpoints::breakpoints,
+        cartridge_data,
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         cpu_data, cpu_disassembly, dma_channels,
         oam::oam,
@@ -28,7 +29,8 @@ pub enum EmuTab {
     Vram,
     Cgram,
     Aram,
-    Cartridge,
+    CartridgeRom,
+    CartridgeInfo,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -45,7 +47,8 @@ impl ToString for EmuTab {
             Vram => "VRAM",
             Cgram => "CGRAM",
             Aram => "ARAM",
-            Cartridge => "ROM",
+            CartridgeRom => "ROM",
+            CartridgeInfo => "Cartridge",
         }
         .to_owned()
     }
@@ -110,12 +113,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     GREEN_PRIMARY,
                     &emu.console.ppu().cgram,
                 ),
-                Cartridge => binary_data(
+                CartridgeRom => binary_data(
                     ui,
                     &emu.console.cartridge().data,
                     PINK_PRIMARY,
                     &emu.console.ppu().cgram,
                 ),
+                CartridgeInfo => cartridge_data(ui, &emu.console),
             }
         }
         if let Some(command) = to_send {

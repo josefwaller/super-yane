@@ -84,9 +84,25 @@ fn compute_checksum(data: &[u8]) -> u16 {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Coprocessor {
+    Dsp,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Cartridge {
-    memory_map: MemoryMap,
+    /// Memory mapping mode
+    pub memory_map: MemoryMap,
+    /// Cartridge title located at 0xFFC0, with spaces stripped
+    pub title: String,
+    /// Onboard coprocessor
+    pub coprocessor: Option<Coprocessor>,
+    /// Country code
+    pub country_code: u8,
+    /// Developer ID
+    pub developer_id: u8,
+    /// Rom version (starts at 0)
+    pub rom_version: u8,
     pub data: Vec<u8>,
     pub sram: Vec<u8>,
 }
@@ -128,10 +144,22 @@ impl Cartridge {
             "Country is {}",
             data[memory_map.transform_address(0x00FFD9) % data.len()]
         );
+        let mapped_header: [u8; 0x20] =
+            core::array::from_fn(|i| data[memory_map.transform_address(0xFFC0 + i)]);
         Cartridge {
-            data,
+            title: String::from_utf8_lossy(&mapped_header[0..0x15])
+                .trim()
+                .to_string(),
+            coprocessor: match mapped_header[0x16] {
+                0x03 => Some(Coprocessor::Dsp),
+                _ => None,
+            },
+            country_code: mapped_header[0x19],
+            developer_id: mapped_header[0x1A],
+            rom_version: mapped_header[0x1B],
             sram: vec![0; sram_len],
             memory_map,
+            data,
         }
     }
     pub fn transform_address(&self, address: usize) -> usize {
