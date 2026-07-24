@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use derive_new::new;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
@@ -36,7 +37,13 @@ impl WindowMaskLogic {
     }
 }
 
-pub type BackgroundPixel = Option<(u16, bool)>; // (color, priority)
+/// Internal data structure for representing a background pixel value after rendering.
+/// Will be "mixed" with the other background pixels and OAM pixels to get the final output
+#[derive(Copy, Clone, Serialize, Deserialize, new)]
+pub(crate) struct BackgroundPixel {
+    pub color: u16,
+    pub priority: bool,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Background {
@@ -52,7 +59,7 @@ pub struct Background {
     pub main_screen_enable: bool,
     pub sub_screen_enable: bool,
     /// Buffer for pixel data, used by PPU to render the background
-    pub(super) pixel_buffer: VecDeque<BackgroundPixel>,
+    pub(super) pixel_buffer: VecDeque<Option<BackgroundPixel>>,
     pub window_mask_logic: WindowMaskLogic,
     pub windows_enabled_main: bool,
     pub windows_enabled_sub: bool,
@@ -62,7 +69,7 @@ pub struct Background {
     /// Colors of the top-left pixel for each mosaic block.
     /// Not all of these values will be used
     #[serde(with = "BigArray")]
-    pub mosaic_values: [BackgroundPixel; 256],
+    pub(crate) mosaic_values: [Option<BackgroundPixel>; 256],
 }
 impl Default for Background {
     fn default() -> Self {
@@ -84,7 +91,7 @@ impl Default for Background {
             window_enabled: [false; 4],
             window_invert: [false; 4],
             color_math_enable: false,
-            mosaic_values: [None; 256],
+            mosaic_values: [const { None }; 256],
         }
     }
 }

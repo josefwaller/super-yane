@@ -869,7 +869,7 @@ impl Ppu {
     fn get_2bpp_slice_at(&self, addr: usize) -> [u8; 8] {
         self.vram_cache_2bpp[(addr / 2) % self.vram_cache_2bpp.len()]
     }
-    fn get_m7_background_slice(&self, x: f32, y: f32) -> BackgroundPixel {
+    fn get_m7_background_slice(&self, x: f32, y: f32) -> Option<BackgroundPixel> {
         let pixel = if x >= 0.0 && x < 1024.0 && y >= 0.0 && y < 1024.0 {
             Some((x, y))
         } else if self.m7_repeat {
@@ -897,11 +897,17 @@ impl Ppu {
                 let palette_byte = self.vram[2 * (tile_addr + pixel_index) + 1];
                 if self.direct_color {
                     // Mode 7 has no attr byte
-                    Some((from_direct_color(palette_byte, 0), false))
+                    Some(BackgroundPixel::new(
+                        from_direct_color(palette_byte, 0),
+                        false,
+                    ))
                 } else if palette_byte == 0 {
                     None
                 } else {
-                    Some((self.cgram[palette_byte as usize & 0x7F], false))
+                    Some(BackgroundPixel::new(
+                        self.cgram[palette_byte as usize & 0x7F],
+                        false,
+                    ))
                 }
             }
         };
@@ -914,7 +920,7 @@ impl Ppu {
         bg_index: usize,
         (x, y): (usize, usize),
         bpp: usize,
-    ) -> ([BackgroundPixel; 8], usize) {
+    ) -> ([Option<BackgroundPixel>; 8], usize) {
         let b = &self.backgrounds[bg_index];
         // Get the tilemaps to render, relative to the current tilemap address
         // So thi is basically an offset to add to the tilemap address
@@ -1009,7 +1015,7 @@ impl Ppu {
             8 => &self.cgram,
             _ => panic!("Unsupported bpp: {}", bpp),
         };
-        let slice_values: [BackgroundPixel; 8] = core::array::from_fn(|i| {
+        let slice_values: [Option<BackgroundPixel>; 8] = core::array::from_fn(|i| {
             let v = (0..4)
                 .map(|j| {
                     let s = slices[j];
@@ -1020,7 +1026,7 @@ impl Ppu {
             if v == 0 {
                 None
             } else {
-                Some((
+                Some(BackgroundPixel::new(
                     if self.direct_color && bpp == 8 {
                         from_direct_color(v as u8, palette_index as u8)
                     } else {
@@ -1043,7 +1049,8 @@ impl Ppu {
         let (slices, offset) = self.get_background_slice(index, (x, y), bpp);
         // Extend the buffer
         let b = &mut self.backgrounds[index];
-        b.pixel_buffer.extend(&slices[offset..slices.len()]);
+        b.pixel_buffer
+            .extend(slices[offset..slices.len()].iter().copied());
     }
     fn reset_oam_buffer(&mut self, y: usize) {
         // Reset old data
@@ -1218,29 +1225,31 @@ impl Ppu {
                                     self.extend_background_byte_buffer(*i, (x, y), *bpp);
                                 }
                             }
-                            let bg_pixels: [BackgroundPixel; 4] = core::array::from_fn(|i| {
-                                if i >= backgrounds.len() {
-                                    return None;
-                                }
-                                // Should be impossible to there to be no pixels right now
-                                let b = &mut self.backgrounds[backgrounds[i].0];
-                                if b.main_screen_enable || b.sub_screen_enable {
-                                    // Get next pixel in the buffer
-                                    let v = b.pixel_buffer.pop_front().unwrap();
-                                    // Use/update mosaic latch if enabled
-                                    if b.mosaic {
-                                        let p = &mut b.mosaic_values[x / self.mosaic_size];
-                                        if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0 {
-                                            *p = v;
-                                        }
-                                        *p
-                                    } else {
-                                        v
+                            let bg_pixels: [Option<BackgroundPixel>; 4] =
+                                core::array::from_fn(|i| {
+                                    if i >= backgrounds.len() {
+                                        return None;
                                     }
-                                } else {
-                                    None
-                                }
-                            });
+                                    // Should be impossible to there to be no pixels right now
+                                    let b = &mut self.backgrounds[backgrounds[i].0];
+                                    if b.main_screen_enable || b.sub_screen_enable {
+                                        // Get next pixel in the buffer
+                                        let v = b.pixel_buffer.pop_front().unwrap();
+                                        // Use/update mosaic latch if enabled
+                                        if b.mosaic {
+                                            let p = &mut b.mosaic_values[x / self.mosaic_size];
+                                            if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0
+                                            {
+                                                *p = v;
+                                            }
+                                            *p
+                                        } else {
+                                            v
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                });
                             bg_pixels
                         }
                     };
@@ -1248,8 +1257,8 @@ impl Ppu {
                     macro_rules! bg_value {
                         ($index: expr, $priority: expr) => {{
                             bg_pixels[$index]
-                                .filter(|(_, p)| *p == $priority)
-                                .map(|(v, _)| v)
+                                .filter(|bg_pixel| bg_pixel.priority == $priority)
+                                .map(|bg_pixel| bg_pixel.color)
                         }};
                     }
                     // Get a bool returning true if a background is on a given layer (i.e. main or sub screen)
