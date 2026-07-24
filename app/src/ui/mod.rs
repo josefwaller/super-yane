@@ -1,3 +1,4 @@
+mod backgrounds;
 mod binary_data;
 mod binary_table;
 mod binary_tiles;
@@ -7,6 +8,7 @@ pub mod colors;
 mod cpu_data;
 mod cpu_disassembly;
 mod dma_channels;
+mod key_value_tree;
 mod oam;
 mod ppu_data;
 mod reg_row;

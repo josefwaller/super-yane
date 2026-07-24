@@ -6,6 +6,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use crate::{
     engine::{Command, Engine},
     ui::{
+        backgrounds::backgrounds,
         binary_data,
         breakpoints::breakpoints,
         cartridge_data,
@@ -24,6 +25,7 @@ pub enum EmuTab {
     DmaChannels,
     CpuDisassembly,
     CpuBreakpoints,
+    Backgrounds,
     Oam,
     Wram,
     Vram,
@@ -42,6 +44,7 @@ impl ToString for EmuTab {
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             CpuBreakpoints => "CPU Breakpoints",
+            Backgrounds => "Backgrounds",
             Oam => "OAM",
             Wram => "WRAM",
             Vram => "VRAM",
@@ -85,6 +88,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 CpuDisassembly => cpu_disassembly(ui, &emu),
                 CpuBreakpoints => breakpoints(ui, &mut emu),
                 Oam => oam(ui, &emu),
+                Backgrounds => backgrounds(ui, &emu),
                 Wram => binary_data(
                     ui,
                     emu.console.ram().as_slice(),
