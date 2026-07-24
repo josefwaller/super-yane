@@ -61,6 +61,7 @@ fn main() {
     let mut actual_time = Duration::ZERO;
     let mut is_paused = false;
     let start_clocks = *console.total_master_clocks();
+    let mut pixel_data = [[0u8; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]];
     'main_loop: loop {
         for e in event_pump.poll_iter() {
             match e {
@@ -105,15 +106,26 @@ fn main() {
             }
         }
         // Gather pixel data
-        let mut pixel_data: [[u8; 4]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] = console
-            .ppu()
-            .screen_data_rgb()
-            // SDL defaults to BGR
-            .map(|[r, g, b]| [b, g, r, 255]);
+        let data = console.ppu().screen_data_rgb();
+        pixel_data[0..data.len()]
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let [r, g, b] = data[i];
+                // SDL defaults to BGR
+                *v = [b, g, r, 255];
+            });
         // Create surface from data
         let format = unsafe { PixelFormat::from_ll(PixelFormatEnum::ARGB8888.to_ll()) };
-        let small_surface =
-            Surface::from_data(pixel_data.as_flattened_mut(), 256, 240, 256 * 4, format).unwrap();
+        let res = console.ppu().screen_resolution();
+        let small_surface = Surface::from_data(
+            pixel_data.as_flattened_mut(),
+            res[0] as u32,
+            res[1] as u32,
+            res[0] as u32 * 4,
+            format,
+        )
+        .unwrap();
         // Get window surface
         let mut window_surface = window
             .surface(&event_pump)
@@ -121,7 +133,7 @@ fn main() {
         // Apply to window
         small_surface
             .blit_scaled(
-                Rect::new(0, 0, 256, 240),
+                Rect::new(0, 0, res[0] as u32, res[1] as u32),
                 window_surface.deref_mut(),
                 Rect::new(
                     0,

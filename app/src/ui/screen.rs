@@ -1,4 +1,5 @@
-use egui::{Layout, TextureHandle, Ui};
+use egui::{Layout, Pos2, Rect, TextureHandle, Ui};
+use super_yane::ppu::SCREEN_RESOLUTION;
 
 use crate::{
     emulation::Emulation,
@@ -15,6 +16,13 @@ pub fn screen(
         ui.label(emu.console.cartridge().title());
         // Render screen
         let img = egui::Image::from_texture((screen.id(), screen.size_vec2()))
+            .uv(Rect::from_min_max(
+                Pos2::ZERO,
+                Pos2::new(
+                    1.0,
+                    emu.console.ppu().screen_resolution()[1] as f32 / SCREEN_RESOLUTION[1] as f32,
+                ),
+            ))
             .max_size(ui.available_size())
             .fit_to_exact_size(ui.available_size());
         ui.add(img);

@@ -22,9 +22,8 @@ macro_rules! rom_test {
                 c
                     .ppu()
                     .screen_data_rgb()
-                    .into_iter()
-                    .flatten()
-                    .collect()
+                    .as_flattened()
+                    .to_vec()
             )
         }
         }

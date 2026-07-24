@@ -15,7 +15,9 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-pub const SCREEN_RESOLUTION: [usize; 2] = [256, 224];
+pub const SCREEN_HEIGHT_NORMAL: usize = 2 * 226;
+pub const SCREEN_HEIGHT_OVERSCAN: usize = 2 * 240;
+pub const SCREEN_RESOLUTION: [usize; 2] = [512, 480];
 pub const MASTER_CYCLES_PER_DOT: usize = 4;
 pub const DOTS_PER_SCANLINE: usize = 1364 / 4;
 pub const SCANLINES: usize = 262;
@@ -99,8 +101,8 @@ fn default_oam_buffer() -> [Option<PixelData>; 0x100] {
     [None; 0x100]
 }
 
-fn default_screen_buffer() -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-    [[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]
+fn default_screen_buffer() -> Box<[[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]> {
+    Box::new([[0; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]])
 }
 
 #[derive(Clone, Serialize, Deserialize, new)]
@@ -114,6 +116,15 @@ pub struct Ppu {
     /// Brightness value
     #[new(value = "0xF")]
     pub brightness: u8,
+    /// High resolution move
+    #[new(value = "false")]
+    pub high_res: bool,
+    /// Interlacing
+    #[new(value = "false")]
+    pub interlacing: bool,
+    /// Overscan mode
+    #[new(value = "false")]
+    pub overscan: bool,
     /// The current background mode
     #[new(value = "0")]
     pub bg_mode: u32,
@@ -189,7 +200,7 @@ pub struct Ppu {
     /// Screen buffer
     #[serde(skip, default = "default_screen_buffer")]
     #[new(value = "default_screen_buffer()")]
-    pub screen_buffer: [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]],
+    pub screen_buffer: Box<[[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]]>,
     /// The number of master cycles that have passed, used to track the dot
     #[new(value = "0")]
     pub master_cycles: usize,
@@ -262,9 +273,6 @@ pub struct Ppu {
     /// Whether direct color is enabled
     #[new(value = "false")]
     pub direct_color: bool,
-    /// Whether overscan is enabled
-    #[new(value = "false")]
-    pub overscan: bool,
     // The matrix values (a, b, c, and d), some of which (a, b) are also used for the
     // multiplication result
     #[new(value = "Matrix::default()")]
@@ -1164,7 +1172,8 @@ impl Ppu {
 
                 // Check if we are in the rendering area
                 // Note that the rendering starts at x = 22
-                if x >= 22 && x < SCREEN_RESOLUTION[0] + 22 && y < SCREEN_RESOLUTION[1] {
+                if x >= 22 && x < (SCREEN_RESOLUTION[0] / 2) + 22 && y < (SCREEN_RESOLUTION[1] / 2)
+                {
                     let x = x - 22;
 
                     let window_vals: [bool; 2] = core::array::from_fn(|i| {
@@ -1444,8 +1453,13 @@ impl Ppu {
                     };
                     // Set screen pixel
                     let pixel_value = if self.forced_blanking { 0 } else { p & 0x7FFF };
-                    self.screen_buffer[SCREEN_RESOLUTION[0] * y + x] =
-                        color_to_rgb_bytes(pixel_value, self.brightness)
+                    for x_off in 0..2 {
+                        for y_off in 0..2 {
+                            self.screen_buffer
+                                [SCREEN_RESOLUTION[0] * (2 * y + y_off) + 2 * x + x_off] =
+                                color_to_rgb_bytes(pixel_value, self.brightness)
+                        }
+                    }
                 }
             }
         })
@@ -1492,8 +1506,21 @@ impl Ppu {
     fn fixed_color_value(&self) -> u16 {
         rgb_to_color(self.fixed_color)
     }
-    /// Get the screen output as RBG pixel output
-    pub fn screen_data_rgb(&self) -> [[u8; 3]; SCREEN_RESOLUTION[0] * SCREEN_RESOLUTION[1]] {
-        self.screen_buffer
+    /// Get the screen output as RBG pixel output.
+    /// The length will change depending on whether overscan is enabled.
+    pub fn screen_data_rgb(&self) -> &[[u8; 3]] {
+        let [w, h] = self.screen_resolution();
+        &self.screen_buffer[0..(w * h)]
+    }
+    /// Get the screen resolution. May be variable depending on the overscan flag.
+    pub fn screen_resolution(&self) -> [usize; 2] {
+        [
+            SCREEN_RESOLUTION[0],
+            if self.overscan {
+                SCREEN_HEIGHT_OVERSCAN
+            } else {
+                SCREEN_HEIGHT_NORMAL
+            },
+        ]
     }
 }

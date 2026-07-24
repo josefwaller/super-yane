@@ -127,8 +127,9 @@ impl Emulation {
     }
     /// Updates screen data after advancing.
     pub fn post_advance(&mut self) {
-        self.screen_data_rgb
-            .copy_from_slice(self.console.ppu().screen_data_rgb().as_flattened());
+        // Copy screen RBG value
+        let data = self.console.ppu().screen_data_rgb().as_flattened();
+        self.screen_data_rgb[0..data.len()].copy_from_slice(data);
         // Trigger UI refresh
         self.ui_ctx.request_repaint();
     }
