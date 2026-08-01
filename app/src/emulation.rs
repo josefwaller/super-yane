@@ -8,6 +8,7 @@ use crate::{
     cpu_snapshot::CpuSnapshot,
     disassembler::{ApuInstruction, CpuInstruction, Disassembler},
     engine::{AdvanceAmount, Command},
+    keybindings::{Keybindings, get_initial_keybindings},
 };
 
 #[derive(EnumIter, Debug, Clone, PartialEq, Copy)]
@@ -48,6 +49,8 @@ pub struct Emulation {
     pub ui_ctx: UiContext,
     /// All breakpoints
     pub breakpoints: Vec<Breakpoint>,
+    /// The user set keybingsins
+    pub keybindings: Keybindings,
 }
 
 impl Emulation {
@@ -64,6 +67,7 @@ impl Emulation {
             ui_ctx,
             // Default breakpoints
             breakpoints: vec![Breakpoint::Opcode(WDM), Breakpoint::Opcode(STP)],
+            keybindings: get_initial_keybindings(),
         }
     }
     /// Pre-advance hook, should be called before calling advance a bunch of times.
@@ -110,18 +114,18 @@ impl Emulation {
         self.ui_ctx.input(|i| {
             // TODO: Use custom keybindings here
             [InputPort::StandardController {
-                a: i.key_down(Key::B),
-                b: i.key_down(Key::Space),
-                x: i.key_down(Key::N),
-                y: i.key_down(Key::M),
-                up: i.key_down(Key::W),
-                left: i.key_down(Key::A),
-                right: i.key_down(Key::D),
-                down: i.key_down(Key::S),
-                start: i.key_down(Key::R),
-                select: i.key_down(Key::F),
-                r: i.key_down(Key::E),
-                l: i.key_down(Key::Q),
+                a: i.key_down(self.keybindings.a),
+                b: i.key_down(self.keybindings.b),
+                x: i.key_down(self.keybindings.x),
+                y: i.key_down(self.keybindings.y),
+                up: i.key_down(self.keybindings.up),
+                left: i.key_down(self.keybindings.left),
+                right: i.key_down(self.keybindings.right),
+                down: i.key_down(self.keybindings.down),
+                start: i.key_down(self.keybindings.start),
+                select: i.key_down(self.keybindings.select),
+                r: i.key_down(self.keybindings.r),
+                l: i.key_down(self.keybindings.l),
             }; 2]
         })
     }

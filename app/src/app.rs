@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use eframe::CreationContext;
-use egui::{Color32, ColorImage, CornerRadius, TextureHandle, Ui};
+use egui::{Color32, ColorImage, CornerRadius, Key, TextureHandle, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use muda::Menu;
 use super_yane::ppu::SCREEN_RESOLUTION;

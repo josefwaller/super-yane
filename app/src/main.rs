@@ -5,6 +5,7 @@ pub mod cpu_snapshot;
 pub mod disassembler;
 pub mod emulation;
 pub mod engine;
+mod keybindings;
 mod menu;
 pub mod profiler;
 pub mod ui;
