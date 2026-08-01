@@ -25,6 +25,7 @@ pub enum SourceType {
 
 #[derive(Serialize, Deserialize)]
 pub enum MenuCommand {
+    OpenSettings,
     Quit,
     Load(SourceType),
     Save(SourceType),
@@ -49,7 +50,14 @@ pub fn initialize_menu() -> Result<Menu, Box<dyn Error>> {
     use SourceType::*;
     // Initialize menu bar
     let menu = Menu::with_items(&[
-        &Submenu::with_items("App", true, &[&MenuItem::with_id(Quit, "Quit", true, None)])?,
+        &Submenu::with_items(
+            "App",
+            true,
+            &[
+                &MenuItem::with_id(OpenSettings, "Settings", true, None),
+                &MenuItem::with_id(Quit, "Quit", true, None),
+            ],
+        )?,
         &Submenu::with_items(
             "File",
             true,
@@ -192,6 +200,12 @@ pub fn spawn_menu_thread(emu: Arc<Mutex<Emulation>>, tree: Arc<Mutex<DockState<(
                                     .lock()
                                     .unwrap()
                                     .push_to_focused_leaf((Id::new(SystemTime::now()), tab)),
+                                OpenSettings => {
+                                    tree.lock().unwrap().add_window(vec![(
+                                        Id::new(SystemTime::now()),
+                                        EmuTab::Settings,
+                                    )]);
+                                }
                                 Quit => emu
                                     .lock()
                                     .unwrap()

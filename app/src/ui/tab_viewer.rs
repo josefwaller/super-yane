@@ -13,7 +13,7 @@ use crate::{
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         cpu_data, cpu_disassembly, dma_channels,
         oam::oam,
-        ppu_data, screen,
+        ppu_data, screen, settings,
     },
 };
 
@@ -33,6 +33,7 @@ pub enum EmuTab {
     Aram,
     CartridgeRom,
     CartridgeInfo,
+    Settings,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -52,6 +53,7 @@ impl ToString for EmuTab {
             Aram => "ARAM",
             CartridgeRom => "ROM",
             CartridgeInfo => "Cartridge",
+            Settings => "Settings",
         }
         .to_owned()
     }
@@ -124,6 +126,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     &emu.console.ppu().cgram,
                 ),
                 CartridgeInfo => cartridge_data(ui, &emu.console),
+                Settings => settings(ui, &mut emu),
             }
         }
         if let Some(command) = to_send {
