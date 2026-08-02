@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use eframe::CreationContext;
 use egui::{Color32, ColorImage, CornerRadius, Key, TextureHandle, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex};
+use gilrs::Gilrs;
 use muda::Menu;
 use super_yane::ppu::SCREEN_RESOLUTION;
 
@@ -24,6 +25,7 @@ pub struct App {
     tree: Arc<Mutex<DockState<(egui::Id, EmuTab)>>>,
     // Menu needs to be kept in scope
     menu: Menu,
+    gilrs: Gilrs,
 }
 
 impl App {
@@ -67,6 +69,7 @@ impl App {
             screen_data: None,
             tree,
             menu,
+            gilrs: Gilrs::new().unwrap(),
         }
     }
     fn initialize_texture(ui: &mut Ui) -> TextureHandle {
@@ -126,6 +129,7 @@ impl eframe::App for App {
                     engine: &mut self.engine,
                     screen: tex,
                     added_tabs: &mut added_nodes,
+                    gilrs: &mut self.gilrs,
                 },
             );
         for (path, tab) in added_nodes {

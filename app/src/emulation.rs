@@ -1,4 +1,5 @@
 use egui::{Context as UiContext, Key};
+use gilrs::Gilrs;
 use strum::EnumIter;
 use super_yane::{Console, InputPort, ppu::SCREEN_RESOLUTION};
 use wdc65816::opcodes::{STP, WDM};
@@ -8,7 +9,7 @@ use crate::{
     cpu_snapshot::CpuSnapshot,
     disassembler::{ApuInstruction, CpuInstruction, Disassembler},
     engine::{AdvanceAmount, Command},
-    keybindings::{Keybindings, get_initial_keybindings},
+    keybindings::{Input, Keybindings, get_default_keyboard_keybindings},
 };
 
 #[derive(EnumIter, Debug, Clone, PartialEq, Copy)]
@@ -25,6 +26,18 @@ impl Breakpoint {
             Pc(_) => "PC",
             Opcode(_) => "Opcode",
             Dma(_) => "DMA Transfer",
+        }
+    }
+}
+
+fn input_pressed(input: Input, ctx: &egui::Context, gilrs: &Gilrs) -> bool {
+    match input {
+        Input::Key(k) => ctx.input(|i| i.key_pressed(k)),
+        Input::Gamepad(id, button) => {
+            if gilrs.gamepad(id).is_pressed(button) {
+                return true;
+            }
+            return false;
         }
     }
 }
@@ -51,10 +64,12 @@ pub struct Emulation {
     pub breakpoints: Vec<Breakpoint>,
     /// The user set keybingsins
     pub keybindings: Keybindings,
+    gilrs: Gilrs,
 }
 
 impl Emulation {
     pub fn new(console: Console, ui_ctx: UiContext) -> Emulation {
+        let gilrs = Gilrs::new().unwrap();
         Emulation {
             console,
             screen_data_rgb: [0; 3 * SCREEN_RESOLUTION[1] * SCREEN_RESOLUTION[0]],
@@ -67,12 +82,16 @@ impl Emulation {
             ui_ctx,
             // Default breakpoints
             breakpoints: vec![Breakpoint::Opcode(WDM), Breakpoint::Opcode(STP)],
-            keybindings: get_initial_keybindings(),
+            keybindings: get_default_keyboard_keybindings(),
+            gilrs,
         }
     }
     /// Pre-advance hook, should be called before calling advance a bunch of times.
     /// Sets up input ports.
     pub fn pre_advance(&mut self) {
+        // Update GILRS
+        self.gilrs.inc();
+        while let Some(_) = self.gilrs.next_event() {}
         *self.console.input_ports_mut() = self.get_input_ports();
     }
     /// Advances the console 1 instruction.
@@ -111,23 +130,20 @@ impl Emulation {
     }
     /// Derives the input port state from the current keyboard/mouse state
     fn get_input_ports(&self) -> [InputPort; 2] {
-        self.ui_ctx.input(|i| {
-            // TODO: Use custom keybindings here
-            [InputPort::StandardController {
-                a: i.key_down(self.keybindings.a),
-                b: i.key_down(self.keybindings.b),
-                x: i.key_down(self.keybindings.x),
-                y: i.key_down(self.keybindings.y),
-                up: i.key_down(self.keybindings.up),
-                left: i.key_down(self.keybindings.left),
-                right: i.key_down(self.keybindings.right),
-                down: i.key_down(self.keybindings.down),
-                start: i.key_down(self.keybindings.start),
-                select: i.key_down(self.keybindings.select),
-                r: i.key_down(self.keybindings.r),
-                l: i.key_down(self.keybindings.l),
-            }; 2]
-        })
+        [InputPort::StandardController {
+            a: input_pressed(self.keybindings.a, &self.ui_ctx, &self.gilrs),
+            b: input_pressed(self.keybindings.b, &self.ui_ctx, &self.gilrs),
+            x: input_pressed(self.keybindings.x, &self.ui_ctx, &self.gilrs),
+            y: input_pressed(self.keybindings.y, &self.ui_ctx, &self.gilrs),
+            up: input_pressed(self.keybindings.up, &self.ui_ctx, &self.gilrs),
+            left: input_pressed(self.keybindings.left, &self.ui_ctx, &self.gilrs),
+            right: input_pressed(self.keybindings.right, &self.ui_ctx, &self.gilrs),
+            down: input_pressed(self.keybindings.down, &self.ui_ctx, &self.gilrs),
+            start: input_pressed(self.keybindings.start, &self.ui_ctx, &self.gilrs),
+            select: input_pressed(self.keybindings.select, &self.ui_ctx, &self.gilrs),
+            r: input_pressed(self.keybindings.r, &self.ui_ctx, &self.gilrs),
+            l: input_pressed(self.keybindings.l, &self.ui_ctx, &self.gilrs),
+        }; 2]
     }
     /// Updates screen data after advancing.
     pub fn post_advance(&mut self) {

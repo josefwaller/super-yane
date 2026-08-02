@@ -1,5 +1,6 @@
 use egui::TextureHandle;
 use egui_dock::NodePath;
+use gilrs::Gilrs;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -62,6 +63,7 @@ pub struct TabViewer<'a> {
     pub engine: &'a mut Engine,
     pub screen: &'a TextureHandle,
     pub added_tabs: &'a mut Vec<(NodePath, EmuTab)>,
+    pub gilrs: &'a mut Gilrs,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -126,7 +128,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     &emu.console.ppu().cgram,
                 ),
                 CartridgeInfo => cartridge_data(ui, &emu.console),
-                Settings => settings(ui, &mut emu),
+                Settings => settings(ui, &mut emu, &mut self.gilrs),
             }
         }
         if let Some(command) = to_send {
