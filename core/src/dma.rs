@@ -66,6 +66,7 @@ pub struct Channel {
     pub current_hdma_table_addr: u16,
     pub hdma_repeat: bool,
     pub hdma_enable: bool,
+    pub triggered_by_hdma: bool,
 }
 
 impl Default for Channel {
@@ -89,6 +90,7 @@ impl Default for Channel {
             indirect_data_addr: 0,
             hdma_repeat: false,
             hdma_enable: false,
+            triggered_by_hdma: false,
         }
     }
 }
@@ -123,7 +125,7 @@ impl Channel {
             } as usize;
     }
     pub fn is_hdma(&self) -> bool {
-        self.hdma_enable
+        self.triggered_by_hdma
     }
     pub fn get_num_bytes(&self) -> u16 {
         if self.is_hdma() {

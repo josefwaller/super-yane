@@ -337,6 +337,7 @@ impl ExternalArchitecture {
                                 let d = &mut self.dma_channels[i];
                                 d.is_executing = true;
                                 d.num_bytes_transferred = 0;
+                                d.triggered_by_hdma = false;
                             }
                         });
                         return 6;
@@ -604,6 +605,7 @@ impl Console {
                                     d.inc_table_addr();
                                     // Trigger DMA
                                     d.is_executing = true;
+                                    d.triggered_by_hdma = true;
                                     d.num_bytes_transferred = 0;
                                     // Since we just went over a scanline here, dec line counter
                                     d.hdma_line_counter -= 1;
@@ -614,6 +616,7 @@ impl Console {
                             d.hdma_line_counter -= 1;
                             if d.hdma_repeat {
                                 d.is_executing = true;
+                                d.triggered_by_hdma = true;
                                 d.num_bytes_transferred = 0;
                             }
                         }
