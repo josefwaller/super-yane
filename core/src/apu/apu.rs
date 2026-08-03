@@ -5,7 +5,6 @@ use crate::{
     apu::{Dsp, voice::State},
     utils::bit,
 };
-use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use serde_big_array::Array;
 use spc700::{HasAddressBus, IPL, Processor as Spc700Processor};
@@ -57,31 +56,42 @@ pub struct ApuMemory {
     pub dsp_addr: u8,
     pub dsp: Dsp,
     pub dsp_read_only: bool,
+    /// Test register flag to enable/disable timers
+    #[derivative(Default(value = "true"))]
+    pub timers_enabled: bool,
+    /// Disable reading RAM. Set on the TEST register.
+    pub disable_ram_read: bool,
+    /// Disable writing to RAM. Set on the TEST register.
+    pub disable_ram_write: bool,
+    /// Halt timers
+    pub halt_timers: bool,
 }
 
 impl ApuMemory {
     pub fn advance_apu_clocks(&mut self, clocks: usize) {
-        // Advance timers
+        // Advance
         (0..clocks).for_each(|_| {
             self.total_clocks += 1;
             if self.total_clocks % 3 == 0 {
                 // Clock the timers every 128 (timers 0 and 1) or 16 (timer 2) APU cycles
-                [128, 128, 16]
-                    .into_iter()
-                    .enumerate()
-                    .for_each(|(i, clks)| {
-                        if (self.total_clocks / 3) % clks == 0 {
-                            let t = &mut self.timers[i];
-                            // Increment timer and increment counter if it overflows
-                            t.value = t.value.wrapping_add(1);
-                            if t.value == t.target || t.value == 0 {
-                                t.counter = t.counter.wrapping_add(1);
-                                t.value = 0;
+                if !self.halt_timers && self.timers_enabled {
+                    [128, 128, 16]
+                        .into_iter()
+                        .enumerate()
+                        .for_each(|(i, clks)| {
+                            if (self.total_clocks / 3) % clks == 0 {
+                                let t = &mut self.timers[i];
+                                // Increment timer and increment counter if it overflows
+                                t.value = t.value.wrapping_add(1);
+                                if t.value == t.target || t.value == 0 {
+                                    t.counter = t.counter.wrapping_add(1);
+                                    t.value = 0;
+                                }
                             }
-                        }
-                    });
-                if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
-                    self.dsp.generate_sample(self.ram.as_mut_slice());
+                        });
+                    if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
+                        self.dsp.generate_sample(self.ram.as_mut_slice());
+                    }
                 }
             }
         });
@@ -106,12 +116,22 @@ impl HasAddressBus for ApuMemory {
                 self.timers[address - 0x00FD].counter = 0;
                 v & 0x0F
             }
-            0x0000..0xFFC0 => self.ram[address],
-            0xFFC0..0x1_0000 => {
-                if self.expose_ipl_rom {
-                    IPL[address - 0xFFC0]
+            0x0000..0xFFC0 => {
+                if self.disable_ram_read {
+                    0
                 } else {
                     self.ram[address]
+                }
+            }
+            0xFFC0..0x1_0000 => {
+                if self.disable_ram_read {
+                    0
+                } else {
+                    if self.expose_ipl_rom {
+                        IPL[address - 0xFFC0]
+                    } else {
+                        self.ram[address]
+                    }
                 }
             }
             _ => unreachable!("Invalid APU read address: {:X}", address),
@@ -120,7 +140,15 @@ impl HasAddressBus for ApuMemory {
     fn write(&mut self, address: usize, value: u8) {
         self.advance_apu_clocks(2);
         match address {
-            0xF0 => todo!(),
+            0xF0 => {
+                self.halt_timers = bit(value, 0);
+                self.disable_ram_write = !bit(value, 1);
+                self.disable_ram_read = bit(value, 2);
+                self.timers_enabled = bit(value, 3);
+                if value >= 0x10 {
+                    todo!("Write APU Test register {:02X}", value);
+                }
+            }
             0x00F1 => {
                 self.expose_ipl_rom = (value & 0x80) != 0;
                 if value & 0x10 != 0 {
@@ -154,7 +182,11 @@ impl HasAddressBus for ApuMemory {
             0x00FA..0x00FD => {
                 self.timers[address - 0x00FA].target = value;
             }
-            _ => self.ram[address] = value,
+            _ => {
+                if !self.disable_ram_write {
+                    self.ram[address] = value;
+                }
+            }
         }
     }
 }

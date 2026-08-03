@@ -8,10 +8,7 @@ use crate::{
 };
 
 pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
-    let mut scroll = egui::ScrollArea::vertical().hscroll(emu.is_paused);
     let pc = emu.console.cartridge().transform_address(emu.console.pc());
-    // Get height of each row (since they're just text, it's just hte text height)
-    let height = ui.text_style_height(&egui::TextStyle::Body);
     let mut table = TableBuilder::new(ui)
         .resizable(false)
         .columns(Column::auto(), 3)
@@ -28,9 +25,6 @@ pub fn cpu_disassembly(ui: &mut Ui, emu: &Emulation) {
     };
     if let Some(i) = index {
         // Compute the scroll offset
-        // scroll = scroll
-        //     .vertical_scroll_offset((height + ui.spacing().item_spacing.y) * i as f32)
-        //     .animated(false);
         table = table.scroll_to_row(i, None);
     }
     // }
