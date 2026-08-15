@@ -943,25 +943,28 @@ impl Ppu {
             let x = (x + b.h_off as usize) % 512;
             let y = (y + b.v_off as usize) % 512;
             const WORDS_PER_TILEMAP: usize = 32 * 32;
-            if x >= 256 {
-                if y >= 256 {
+            // Max width/height depends on the tile size
+            let max_width = 0x20 * b.tile_size as usize;
+            let max_height = 0x20 * b.tile_size as usize;
+            if x >= max_width {
+                if y >= max_height {
                     (
                         b.tilemap_addr + mirrored_tile_addrs[3] * WORDS_PER_TILEMAP,
-                        x % 256,
-                        y % 256,
+                        x % max_width,
+                        y % max_height,
                     )
                 } else {
                     (
                         b.tilemap_addr + mirrored_tile_addrs[1] * WORDS_PER_TILEMAP,
-                        x % 256,
+                        x % max_width,
                         y,
                     )
                 }
-            } else if y >= 256 {
+            } else if y >= max_height {
                 (
                     b.tilemap_addr + mirrored_tile_addrs[2] * WORDS_PER_TILEMAP,
                     x,
-                    y % 256,
+                    y % max_height,
                 )
             } else {
                 (b.tilemap_addr, x, y)
