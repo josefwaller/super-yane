@@ -1,3 +1,4 @@
+mod apu_data;
 mod backgrounds;
 mod binary_data;
 mod binary_table;

@@ -7,6 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use crate::{
     engine::{Command, Engine},
     ui::{
+        apu_data::apu_data,
         backgrounds::backgrounds,
         binary_data,
         breakpoints::breakpoints,
@@ -23,6 +24,7 @@ pub enum EmuTab {
     Screen,
     Cpu,
     Ppu,
+    Apu,
     DmaChannels,
     CpuDisassembly,
     CpuBreakpoints,
@@ -43,6 +45,7 @@ impl ToString for EmuTab {
             Screen => "Emulation",
             Cpu => "WDC65816",
             Ppu => "PPU",
+            Apu => "SPC700",
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             CpuBreakpoints => "CPU Breakpoints",
@@ -87,6 +90,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             match tab {
                 Cpu => cpu_data(ui, &emu.console),
                 Ppu => ppu_data(ui, &emu),
+                Apu => apu_data(ui, &emu),
                 Screen => screen(ui, &mut emu, self.screen, &mut to_send),
                 DmaChannels => dma_channels(ui, &emu),
                 CpuDisassembly => cpu_disassembly(ui, &emu),
