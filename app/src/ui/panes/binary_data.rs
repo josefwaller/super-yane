@@ -1,13 +1,6 @@
-use egui::{
-    AtomExt, Color32, ColorImage, Image, Layout, Pos2, Rect, RichText, ScrollArea, TextureHandle,
-    TextureOptions, Ui, Vec2,
-};
-use egui_extras::{Column, TableBuilder};
+use egui::{Color32, Ui};
 
-use crate::{
-    ui::{binary_table::binary_table, binary_tiles},
-    utils::bytes_to_rgb,
-};
+use crate::ui::{widgets::binary_table, widgets::binary_tiles};
 
 #[derive(Clone)]
 struct State {

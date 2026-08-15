@@ -4,7 +4,7 @@ use crate::{
     emulation::Emulation,
     ui::{
         colors::{PINK_PRIMARY, RED_PRIMARY, RED_SECONDARY},
-        key_value_tree::{KvNode, value_tree},
+        widgets::key_value_tree::{KvNode, value_tree},
     },
 };
 

@@ -2,7 +2,7 @@ use crate::{
     emulation::Emulation,
     ui::{
         colors::PINK_PRIMARY,
-        key_value_tree::{self, KvNode, value_tree},
+        widgets::key_value_tree::{KvNode, value_tree},
     },
 };
 

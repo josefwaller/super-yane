@@ -19,13 +19,18 @@ use crate::{
     utils::buf_write,
 };
 
+pub struct AppState {
+    pub screen_data: Option<TextureHandle>,
+    pub gilrs: Gilrs,
+}
+
 pub struct App {
     engine: Engine,
-    screen_data: Option<TextureHandle>,
     tree: Arc<Mutex<DockState<(egui::Id, EmuTab)>>>,
     // Menu needs to be kept in scope
     menu: Menu,
-    gilrs: Gilrs,
+    /// State that can't be stored in EGUI but needs to be made available to all panes to change
+    state: AppState,
 }
 
 impl App {
@@ -66,10 +71,12 @@ impl App {
         spawn_menu_thread(emu.clone(), tree.clone());
         App {
             engine: Engine::new(emu),
-            screen_data: None,
             tree,
             menu,
-            gilrs: Gilrs::new().unwrap(),
+            state: AppState {
+                screen_data: None,
+                gilrs: Gilrs::new().unwrap(),
+            },
         }
     }
     fn initialize_texture(ui: &mut Ui) -> TextureHandle {
@@ -87,15 +94,18 @@ impl eframe::App for App {
         let emu_arc = self.engine.emulation.clone();
 
         // Update screen data
-        let tex = self
-            .screen_data
-            .get_or_insert_with(|| App::initialize_texture(ui));
         {
-            let emu = emu_arc.lock().expect("Unable to get a lock on emulation");
-            tex.set(
-                ColorImage::from_rgb(SCREEN_RESOLUTION, &emu.screen_data_rgb),
-                Default::default(),
-            );
+            let tex = self
+                .state
+                .screen_data
+                .get_or_insert_with(|| App::initialize_texture(ui));
+            {
+                let emu = emu_arc.lock().expect("Unable to get a lock on emulation");
+                tex.set(
+                    ColorImage::from_rgb(SCREEN_RESOLUTION, &emu.screen_data_rgb),
+                    Default::default(),
+                );
+            }
         }
         // Gather nodes to add
         let mut added_nodes = vec![];
@@ -127,9 +137,8 @@ impl eframe::App for App {
                 ui,
                 &mut TabViewer {
                     engine: &mut self.engine,
-                    screen: tex,
                     added_tabs: &mut added_nodes,
-                    gilrs: &mut self.gilrs,
+                    app_state: &mut self.state,
                 },
             );
         for (path, tab) in added_nodes {

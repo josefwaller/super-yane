@@ -52,7 +52,7 @@ fn get_key<'a>(kb: &'a mut Keybindings, button: EmuButton) -> &'a mut Input {
     }
 }
 
-pub fn settings(ui: &mut egui::Ui, emu: &mut Emulation, gilrs: &mut Gilrs) {
+pub fn settings(ui: &mut egui::Ui, emu: &mut Emulation) {
     // All settings have the same state
     let id = Id::from("SETTINGS");
     let mut state = ui.ctx().data_mut(|data| {
@@ -60,6 +60,7 @@ pub fn settings(ui: &mut egui::Ui, emu: &mut Emulation, gilrs: &mut Gilrs) {
             editing_keybinding: None,
         })
     });
+    let mut gilrs = Gilrs::new().unwrap();
     ComboBox::from_label("Source")
         .selected_text(match emu.keybindings.source {
             InputSource::Keyboard => "Keyboard".to_owned(),
