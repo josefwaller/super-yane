@@ -32,7 +32,7 @@ impl Breakpoint {
 
 fn input_pressed(input: Input, ctx: &egui::Context, gilrs: &Gilrs) -> bool {
     match input {
-        Input::Key(k) => ctx.input(|i| i.key_pressed(k)),
+        Input::Key(k) => ctx.input(|i| i.key_down(k)),
         Input::Gamepad(id, button) => {
             if gilrs.gamepad(id).is_pressed(button) {
                 return true;

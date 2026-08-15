@@ -32,9 +32,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 .expect("Unable to get a lock on Emulation");
             render_tab_pane(ui, *tab, &mut emu, self.app_state);
         }
-        // if let Some(command) = to_send {
-        //     self.engine.update(command);
-        // }
     }
     fn add_popup(&mut self, ui: &mut egui::Ui, path: egui_dock::NodePath) {
         ui.vertical(|ui| {
