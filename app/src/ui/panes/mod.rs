@@ -22,3 +22,5 @@ mod screen;
 pub use screen::screen;
 mod settings;
 pub use settings::settings;
+mod voices;
+pub use voices::voices;

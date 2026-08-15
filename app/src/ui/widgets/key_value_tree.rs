@@ -95,3 +95,8 @@ pub fn value_tree(ui: &mut Ui, value: &KvNode, indent: usize, colors: &[Color32]
         );
     }
 }
+
+/// Value of "On" if true and "Off" if false
+pub fn enabled_flag(value: bool) -> Value {
+    Value::from(if value { "On" } else { "Off" })
+}

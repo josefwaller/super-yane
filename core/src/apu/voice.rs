@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::bit;
 
-#[derive(Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum GainMode {
     #[default]
     Fixed,
@@ -59,7 +59,7 @@ impl ToString for GainMode {
     }
 }
 
-#[derive(Default, Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum AdsrStage {
     #[default]
     Attack,
@@ -79,7 +79,7 @@ impl ToString for AdsrStage {
     }
 }
 
-#[derive(Default, Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum State {
     // Voice is using ADSR
     Adsr(AdsrStage),

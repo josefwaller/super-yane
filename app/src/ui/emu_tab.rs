@@ -9,7 +9,7 @@ use crate::{
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         panes::{
             apu_data, backgrounds, binary_data, breakpoints, cartridge_data, cpu_data,
-            cpu_disassembly, dma_channels, oam, ppu_data, screen, settings,
+            cpu_disassembly, dma_channels, oam, ppu_data, screen, settings, voices,
         },
     },
 };
@@ -33,6 +33,7 @@ pub enum EmuTab {
     CartridgeRom,
     CartridgeInfo,
     Settings,
+    Voices,
 }
 impl ToString for EmuTab {
     fn to_string(&self) -> String {
@@ -54,6 +55,7 @@ impl ToString for EmuTab {
             CartridgeRom => "ROM",
             CartridgeInfo => "Cartridge",
             Settings => "Settings",
+            Voices => "Voices",
         }
         .to_owned()
     }
@@ -107,5 +109,6 @@ pub fn render_tab_pane(ui: &mut Ui, tab: EmuTab, emu: &mut Emulation, app_state:
         ),
         CartridgeInfo => cartridge_data(ui, &emu.console),
         Settings => settings(ui, emu),
+        Voices => voices(ui, emu),
     }
 }
