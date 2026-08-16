@@ -108,7 +108,7 @@ pub fn render_tab_pane(ui: &mut Ui, tab: EmuTab, emu: &mut Emulation, app_state:
             &emu.console.ppu().cgram,
         ),
         CartridgeInfo => cartridge_data(ui, &emu.console),
-        Settings => settings(ui, emu),
+        Settings => settings(ui, emu, &mut app_state.gilrs),
         Voices => voices(ui, emu),
     }
 }
