@@ -19,7 +19,7 @@ pub fn voices(ui: &mut Ui, emu: &Emulation) {
                     &[
                         KvNode::new("Sample Pitch", v.sample_pitch),
                         KvNode::new("Pitch Modulation", enabled_flag(v.pitch_mod_enabled)),
-                        KvNode::new("State", format!("{:?}", v.state)),
+                        KvNode::new("Is Releasing", v.is_releasing),
                         KvNode::new(
                             "Volume",
                             format!("L: {:02X} R: {:02X}", v.volume[0], v.volume[1]),
@@ -29,13 +29,21 @@ pub fn voices(ui: &mut Ui, emu: &Emulation) {
                             "ADSR",
                             enabled_flag(v.adsr_enabled),
                             &[
+                                KvNode::new("Stage", format!("{:?}", v.adsr_stage)),
                                 KvNode::new("Attack Rate", v.attack_rate),
                                 KvNode::new("Decay Rate", v.decay_rate),
                                 KvNode::new("Sustain Rate", v.sustain_rate),
                                 KvNode::new("Sustain Level", format!("{:X}", v.sustain_level)),
                             ],
                         ),
-                        KvNode::new("Gain Rate", v.gain_rate),
+                        KvNode::with_children(
+                            "Gain",
+                            enabled_flag(!v.adsr_enabled),
+                            &[
+                                KvNode::new("Mode", format!("{:?}", v.gain_mode)),
+                                KvNode::new("Rate", v.gain_rate),
+                            ],
+                        ),
                         KvNode::new("Echo", enabled_flag(v.echo_enabled)),
                         KvNode::new("End Flag", v.end_flag),
                         KvNode::new("Envelope", v.envelope),

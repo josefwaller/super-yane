@@ -79,27 +79,6 @@ impl ToString for AdsrStage {
     }
 }
 
-#[derive(Default, Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum State {
-    // Voice is using ADSR
-    Adsr(AdsrStage),
-    // Voice is using gain
-    Gain(GainMode),
-    // Voice is in release (from KOFF)
-    #[default]
-    Release,
-}
-impl ToString for State {
-    fn to_string(&self) -> String {
-        use State::*;
-        match self {
-            Adsr(s) => s.to_string(),
-            Gain(s) => s.to_string(),
-            Release => "Release".to_string(),
-        }
-    }
-}
-
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Voice {
     /// Volume, first left, then right
@@ -110,8 +89,12 @@ pub struct Voice {
     pub sample_src: usize,
     /// ADSR enable
     pub adsr_enabled: bool,
-    /// Current state
-    pub state: State,
+    /// Whether we are currently in release mode
+    pub is_releasing: bool,
+    /// Current ADSR stage
+    pub adsr_stage: AdsrStage,
+    /// Current Gain mode
+    pub gain_mode: GainMode,
     /// ADSR decay rate
     pub decay_rate: usize,
     /// ADSR attack rate
@@ -168,14 +151,12 @@ impl Voice {
                 self.sustain_level = ((value >> 5) as u32 + 1) * 0x200;
             }
             7 => {
-                if !self.adsr_enabled {
-                    if !bit(value, 7) {
-                        self.envelope = (value as u16 & 0x7F) * 0x10;
-                        self.state = State::Gain(GainMode::Fixed);
-                    } else {
-                        self.gain_rate = (value & 0x1F) as usize;
-                        self.state = State::Gain(GainMode::from(value >> 5));
-                    }
+                if !bit(value, 7) {
+                    self.envelope = (value as u16 & 0x7F) * 0x10;
+                    self.gain_mode = GainMode::Fixed;
+                } else {
+                    self.gain_rate = (value & 0x1F) as usize;
+                    self.gain_mode = GainMode::from(value >> 5);
                 }
             }
             _ => {
@@ -205,65 +186,68 @@ impl Voice {
         };
         // Compute envelope value
         use AdsrStage::*;
-        self.envelope = match self.state {
-            State::Adsr(adsr_stage) => match adsr_stage {
-                Attack => {
-                    let v = if self.get_period_elapsed(self.attack_rate) {
-                        self.envelope + if self.attack_rate == 0x1F { 1024 } else { 32 }
-                    } else {
-                        self.envelope
-                    };
-                    if v >= 0x7E0 {
-                        self.state = State::Adsr(Decay);
-                    }
-                    v.min(0x7FF)
+        // Update ADSR stage
+        let adsr_envelope = match self.adsr_stage {
+            Attack => {
+                let v = if self.get_period_elapsed(self.attack_rate) {
+                    self.envelope + if self.attack_rate == 0x1F { 1024 } else { 32 }
+                } else {
+                    self.envelope
+                };
+                if v >= 0x7E0 {
+                    self.adsr_stage = AdsrStage::Decay;
                 }
-                Decay => {
-                    if self.get_period_elapsed(self.decay_rate) {
-                        let v = self.envelope.saturating_sub(1);
-                        let v = v.saturating_sub((v >> 8) + 1);
-                        if v <= self.sustain_level as u16 {
-                            self.state = State::Adsr(Sustain);
-                        }
-                        v
-                    } else {
-                        self.envelope
+                v.min(0x7FF)
+            }
+            Decay => {
+                if self.get_period_elapsed(self.decay_rate) {
+                    let v = self.envelope.saturating_sub(1);
+                    let v = v.saturating_sub((v >> 8) + 1);
+                    if v <= self.sustain_level as u16 {
+                        self.adsr_stage = AdsrStage::Sustain;
                     }
-                }
-                Sustain => {
-                    if self.get_period_elapsed(self.sustain_rate) {
-                        let v = self.envelope.saturating_sub(1);
-                        let v = v.saturating_sub((v >> 8) + 1);
-                        v
-                    } else {
-                        self.envelope
-                    }
-                }
-            },
-            State::Gain(gain_mode) => {
-                if self.get_period_elapsed(self.gain_rate) {
-                    use GainMode::*;
-                    match gain_mode {
-                        Fixed => self.envelope,
-                        LinearDecrease => self.envelope.saturating_sub(32),
-                        ExponentialDecrease => self
-                            .envelope
-                            .saturating_sub(((self.envelope.saturating_sub(1)) >> 8) + 1),
-                        LinearIncrease => self.envelope + 32,
-                        BentIncrease => {
-                            if self.envelope < 0x600 {
-                                self.envelope + 32
-                            } else {
-                                self.envelope + 8
-                            }
-                        }
-                    }
-                    .clamp(0, ENVELOPE_MAX_VALUE)
+                    v
                 } else {
                     self.envelope
                 }
             }
-            State::Release => self.envelope.saturating_sub(8),
+            Sustain => {
+                if self.get_period_elapsed(self.sustain_rate) {
+                    let v = self.envelope.saturating_sub(1);
+                    let v = v.saturating_sub((v >> 8) + 1);
+                    v
+                } else {
+                    self.envelope
+                }
+            }
+        };
+        self.envelope = if self.is_releasing {
+            self.envelope.saturating_sub(8)
+        } else if self.adsr_enabled {
+            adsr_envelope
+        } else {
+            // Compute value from gain register
+            if self.get_period_elapsed(self.gain_rate) {
+                use GainMode::*;
+                match self.gain_mode {
+                    Fixed => self.envelope,
+                    LinearDecrease => self.envelope.saturating_sub(32),
+                    ExponentialDecrease => self
+                        .envelope
+                        .saturating_sub(((self.envelope.saturating_sub(1)) >> 8) + 1),
+                    LinearIncrease => self.envelope + 32,
+                    BentIncrease => {
+                        if self.envelope < 0x600 {
+                            self.envelope + 32
+                        } else {
+                            self.envelope + 8
+                        }
+                    }
+                }
+                .clamp(0, ENVELOPE_MAX_VALUE)
+            } else {
+                self.envelope
+            }
         };
         self.envelope = self.envelope.clamp(0, ENVELOPE_MAX_VALUE);
     }
@@ -398,10 +382,12 @@ impl Voice {
         table_val != 0 && (self.period_counter + PERIOD_OFFSET_TABLE[rate]) % table_val == 0
     }
     pub fn key_on(&mut self) {
-        self.state = State::Adsr(AdsrStage::Attack);
+        self.adsr_stage = AdsrStage::Attack;
         self.block_addr = None;
+        self.envelope = 0;
+        self.is_releasing = false;
     }
     pub fn key_off(&mut self) {
-        self.state = State::Release;
+        self.is_releasing = true;
     }
 }

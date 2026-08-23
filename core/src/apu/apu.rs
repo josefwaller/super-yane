@@ -1,10 +1,7 @@
 use derive_new::new;
 use std::collections::VecDeque;
 
-use crate::{
-    apu::{Dsp, voice::State},
-    utils::bit,
-};
+use crate::{apu::Dsp, utils::bit};
 use serde::{Deserialize, Serialize};
 use serde_big_array::Array;
 use spc700::{HasAddressBus, IPL, Processor as Spc700Processor};
@@ -242,10 +239,6 @@ impl Apu {
         self.rest.expose_ipl_rom = true;
         self.rest.timers.iter_mut().for_each(|i| i.counter = 0);
         // Silence every voice
-        self.rest
-            .dsp
-            .voices
-            .iter_mut()
-            .for_each(|c| c.state = State::Release);
+        self.rest.dsp.voices.iter_mut().for_each(|c| c.key_off());
     }
 }

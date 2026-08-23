@@ -2,7 +2,6 @@ use crate::{
     apu::{
         Voice,
         constants::{LEFT, PERIOD_TABLE, RIGHT},
-        voice::AdsrStage,
     },
     utils::bit,
 };

@@ -47,6 +47,7 @@ pub fn screen(ui: &mut Ui, emu: &mut Emulation, app_state: &mut AppState) {
                             emu.on_command(Command::Reset);
                         }
                         ui.checkbox(&mut emu.log_cpu, "Log CPU");
+                        ui.checkbox(&mut emu.log_apu, "Log APU");
                         let mut vol = emu.volume;
                         ui.add(egui::Slider::new(&mut vol, 0.0..=100.0).text("Volume"));
                         emu.volume = vol;
