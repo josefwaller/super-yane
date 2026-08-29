@@ -4,12 +4,13 @@ use strum::EnumIter;
 
 use crate::{
     app::AppState,
+    disassembler::CpuInstruction,
     emulation::Emulation,
     ui::{
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         panes::{
-            apu_data, backgrounds, binary_data, breakpoints, cartridge_data, cpu_data,
-            cpu_disassembly, dma_channels, oam, ppu_data, screen, settings, voices,
+            apu_data, backgrounds, binary_data, breakpoints, cartridge_data, cpu_data, disassembly,
+            dma_channels, oam, ppu_data, screen, settings, voices,
         },
     },
 };
@@ -24,6 +25,7 @@ pub enum EmuTab {
     DmaChannels,
     CpuDisassembly,
     CpuBreakpoints,
+    ApuDisassembly,
     Backgrounds,
     Oam,
     Wram,
@@ -46,6 +48,7 @@ impl ToString for EmuTab {
             DmaChannels => "DMA",
             CpuDisassembly => "CPU Instructions",
             CpuBreakpoints => "CPU Breakpoints",
+            ApuDisassembly => "APU Instructions",
             Backgrounds => "Backgrounds",
             Oam => "OAM",
             Wram => "WRAM",
@@ -69,8 +72,9 @@ pub fn render_tab_pane(ui: &mut Ui, tab: EmuTab, emu: &mut Emulation, app_state:
         Apu => apu_data(ui, &emu),
         Screen => screen(ui, emu, app_state),
         DmaChannels => dma_channels(ui, &emu),
-        CpuDisassembly => cpu_disassembly(ui, &emu),
+        CpuDisassembly => disassembly(ui, &emu, &emu.cpu_dis),
         CpuBreakpoints => breakpoints(ui, emu),
+        ApuDisassembly => disassembly(ui, &emu, &emu.apu_dis),
         Oam => oam(ui, &emu),
         Backgrounds => backgrounds(ui, &emu),
         Wram => binary_data(

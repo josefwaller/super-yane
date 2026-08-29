@@ -1219,6 +1219,7 @@ impl Ppu {
                                 // TBA: OPT
                                 2 => &[(0, 4), (1, 4)],
                                 3 => &[(0, 8), (1, 4)],
+                                4 => &[(0, 8), (1, 2)],
                                 5 => &[(0, 4), (1, 2)],
                                 7 => unreachable!("Mode 7 should be custom handled"),
                                 _ => todo!("Background mode {} not implemented", self.bg_mode),
@@ -1366,27 +1367,7 @@ impl Ppu {
                             spr!(0),
                             bg!(2, false),
                         ],
-                        2 => &[
-                            spr!(3),
-                            bg!(0, true),
-                            spr!(2),
-                            bg!(1, true),
-                            spr!(1),
-                            bg!(0, false),
-                            spr!(0),
-                            bg!(1, false),
-                        ],
-                        3 => &[
-                            spr!(3),
-                            bg!(0, true),
-                            spr!(2),
-                            bg!(1, true),
-                            spr!(1),
-                            bg!(0, false),
-                            spr!(0),
-                            bg!(1, false),
-                        ],
-                        5 => &[
+                        2 | 3 | 4 | 5 => &[
                             spr!(3),
                             bg!(0, true),
                             spr!(2),

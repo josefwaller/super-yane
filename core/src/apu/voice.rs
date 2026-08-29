@@ -4,7 +4,6 @@ use crate::apu::constants::{
     ENVELOPE_MAX_VALUE, GAUSS_TABLE, LEFT, PERIOD_OFFSET_TABLE, PERIOD_TABLE, RELEASE_PERIOD_RATE,
     RIGHT,
 };
-use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::bit;
@@ -160,7 +159,7 @@ impl Voice {
                 }
             }
             _ => {
-                warn!("Unknown voice write {:02X} {:02X}", addr, value)
+                log::warn!("Unknown voice write {:02X} {:02X}", addr, value)
             }
         }
     }
@@ -173,7 +172,7 @@ impl Voice {
             4 => (self.sample_src / 0x04) as u8,
             8 => (self.envelope >> 4) as u8,
             _ => {
-                debug!("Read from {:02X}", addr);
+                log::warn!("Read from {:02X}", addr);
                 0
             }
         }

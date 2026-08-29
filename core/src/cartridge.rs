@@ -137,7 +137,7 @@ impl Cartridge {
         };
         let sram_len = {
             let n = data[(memory_map.transform_address(0x00FFD8)) % data.len()];
-            (1 << n) * 1024
+            (1 << n.min(7)) * 1024
         };
         debug!("SRAM len: {}", sram_len);
         debug!(

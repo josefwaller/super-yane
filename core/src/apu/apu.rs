@@ -80,7 +80,7 @@ impl ApuMemory {
                                 let t = &mut self.timers[i];
                                 // Increment timer and increment counter if it overflows
                                 t.value = t.value.wrapping_add(1);
-                                if t.value == t.target || t.value == 0 {
+                                if t.value >= t.target {
                                     t.counter = t.counter.wrapping_add(1);
                                     t.value = 0;
                                 }
