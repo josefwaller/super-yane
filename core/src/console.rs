@@ -313,6 +313,9 @@ impl ExternalArchitecture {
                     0x4200 => {
                         self.nmi_enabled = (value & 0x80) != 0;
                         self.ppu.timer_mode = crate::ppu::TimerMode::from(value >> 4);
+                        if self.ppu.timer_mode == crate::ppu::TimerMode::Disabled {
+                            self.ppu.trigger_irq = false;
+                        }
                         6
                     }
                     0x4207 => {
@@ -609,6 +612,7 @@ impl Console {
                                     d.num_bytes_transferred = 0;
                                     // Since we just went over a scanline here, dec line counter
                                     d.hdma_line_counter -= 1;
+                                    self.rest.advance(18);
                                 }
                             }
                         }

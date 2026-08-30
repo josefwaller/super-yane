@@ -24,7 +24,7 @@ pub const SCANLINES: usize = 262;
 
 pub const NUM_SPRITES: usize = 0x80;
 
-#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum TimerMode {
     #[default]
     Disabled,
