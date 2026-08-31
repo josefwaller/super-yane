@@ -13,7 +13,10 @@ use crate::{
 };
 use paste::paste;
 
-pub const APU_CLOCK_SPEED_HZ: u64 = 3_072_000;
+/// Clock speed of the APU ceramic resonator
+pub const APU_CR_CLOCK_SPEED_HZ: u64 = 24_576_000;
+/// Clock speed of the SPC700 (Clocked every 24 ceramic resonator clocks)
+pub const APU_PROCESSOR_CLOCK_SPEED_HZ: u64 = APU_CR_CLOCK_SPEED_HZ / 24;
 pub const MASTER_CLOCK_SPEED_HZ: u64 = 21_477_000;
 pub const WRAM_SIZE: usize = 0x20000;
 // Contains everything except the processor(s)
@@ -44,8 +47,6 @@ pub struct ExternalArchitecture {
     pub latched_indexes: [usize; 2],
     #[new(value = "0")]
     total_master_clocks: u64,
-    #[new(value = "0")]
-    total_apu_clocks: u64,
     #[new(value = "0")]
     open_bus_value: u8,
     #[new(value = "false")]
@@ -499,7 +500,6 @@ impl Console {
     rest_field! {cartridge, Cartridge}
     rest_field! {dma_channels, [DmaChannel; 8]}
     rest_field! {total_master_clocks, u64}
-    rest_field! {total_apu_clocks, u64}
     rest_field! {input_ports, [InputPort; 2]}
     rest_field! {apu_to_cpu_reg, [u8; 4]}
     rest_field! {cpu_to_apu_reg, [u8; 4]}
@@ -635,8 +635,8 @@ impl Console {
     }
     // Returns whether the APU is "behind" the CPU, i.e. it has advanced fewer master cycles
     pub fn apu_is_behind(&self) -> bool {
-        (*self.apu.total_clocks() as f64 / APU_CLOCK_SPEED_HZ as f64)
-            < (self.rest.total_master_clocks as f64 / MASTER_CLOCK_SPEED_HZ as f64)
+        *self.apu.total_cr_clocks() as u64 * MASTER_CLOCK_SPEED_HZ
+            < self.rest.total_master_clocks as u64 * APU_CR_CLOCK_SPEED_HZ
     }
     /// Advance a given number of instructions
     pub fn advance_instructions(&mut self, num_instructions: u32) {

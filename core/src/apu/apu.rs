@@ -10,8 +10,10 @@ use derivative::Derivative;
 use paste::paste;
 
 pub const APU_RAM_SIZE: usize = 0x10000;
-/// Generate a new sample every 64 APU clocks (32 SPC700 clocks, or 96 ceramic resonator cycles)
-pub const CLOCKS_PER_SAMPLE: usize = 96;
+/// The number of ceramic resonator clock cycles per SPC700 clock
+pub const CR_CLOCK_PER_CPU_CYCLE: usize = 24;
+/// The number of ceramic resonator clock cycles per sample
+pub const CR_CLOCKS_PER_SAMPLE: usize = 32 * CR_CLOCK_PER_CPU_CYCLE;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, new)]
 pub struct ApuTimer {
@@ -46,8 +48,8 @@ pub struct ApuMemory {
     pub cpu_to_apu_reg: [u8; 4],
     pub apu_to_cpu_reg: [u8; 4],
     pub timers: [ApuTimer; 3],
-    /// Total number of clocks that have passed
-    pub total_clocks: usize,
+    /// Total number of ceramic resonator clocks that have passed
+    pub total_cr_clocks: usize,
     #[derivative(Default(value = "true"))]
     pub expose_ipl_rom: bool,
     pub dsp_addr: u8,
@@ -65,18 +67,22 @@ pub struct ApuMemory {
 }
 
 impl ApuMemory {
-    pub fn advance_apu_clocks(&mut self, clocks: usize) {
+    /// Advance a number of ceramic resonator clocks
+    // TODO: Maybe, make it advance by SPC700 clocks (CR clocks / 24)
+    pub fn advance_cr_clocks(&mut self, clocks: usize) {
         // Advance
         (0..clocks).for_each(|_| {
-            self.total_clocks += 1;
-            if self.total_clocks % 3 == 0 {
+            self.total_cr_clocks += 1;
+            // Clock timers
+            if self.total_cr_clocks % CR_CLOCK_PER_CPU_CYCLE == 0 {
+                let cycles = self.total_cr_clocks / CR_CLOCK_PER_CPU_CYCLE;
                 // Clock the timers every 128 (timers 0 and 1) or 16 (timer 2) APU cycles
                 if !self.halt_timers && self.timers_enabled {
                     [128, 128, 16]
                         .into_iter()
                         .enumerate()
                         .for_each(|(i, clks)| {
-                            if (self.total_clocks / 3) % clks == 0 {
+                            if cycles % clks == 0 {
                                 let t = &mut self.timers[i];
                                 // Increment timer and increment counter if it overflows
                                 t.value = t.value.wrapping_add(1);
@@ -86,9 +92,10 @@ impl ApuMemory {
                                 }
                             }
                         });
-                    if self.total_clocks % CLOCKS_PER_SAMPLE == 0 {
-                        self.dsp.generate_sample(self.ram.as_mut_slice());
-                    }
+                }
+                // Generate new sample
+                if self.total_cr_clocks % CR_CLOCKS_PER_SAMPLE == 0 {
+                    self.dsp.generate_sample(self.ram.as_mut_slice());
                 }
             }
         });
@@ -98,10 +105,10 @@ impl ApuMemory {
 impl HasAddressBus for ApuMemory {
     fn io(&mut self) {
         // Advance by 2 cycles since the SPC700 is only clocked on every other clock
-        self.advance_apu_clocks(2);
+        self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
     }
     fn read(&mut self, address: usize) -> u8 {
-        self.advance_apu_clocks(2);
+        self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
         match address {
             0xF0 => 0,
             0xF1 => 0,
@@ -135,7 +142,7 @@ impl HasAddressBus for ApuMemory {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
-        self.advance_apu_clocks(2);
+        self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
         match address {
             0xF0 => {
                 self.halt_timers = bit(value, 0);
@@ -202,8 +209,9 @@ macro_rules! rest_field {
     };
 }
 impl Apu {
-    rest_field! {total_clocks, usize}
+    rest_field! {total_cr_clocks, usize}
     rest_field! {dsp, Dsp}
+    rest_field! {timers, [ApuTimer; 3]}
     pub fn ram(&self) -> &[u8] {
         self.rest.ram.as_slice()
     }
