@@ -938,14 +938,23 @@ impl Ppu {
                 [0, 0, 0, 0]
             }
         };
+        let tile_size = (
+            // Tile width can be overridden in BG mode 5 and 6 (8x8 is replaced by 8x16)
+            if self.bg_mode == 5 || self.bg_mode == 6 {
+                16
+            } else {
+                b.tile_size
+            },
+            b.tile_size,
+        );
         // Get the tilemap address and X/Y coord of the pixel in the tilemap
         let (tilemap_addr, x, y) = {
             let x = (x + b.h_off as usize) % 512;
             let y = (y + b.v_off as usize) % 512;
             const WORDS_PER_TILEMAP: usize = 32 * 32;
             // Max width/height depends on the tile size
-            let max_width = 0x20 * b.tile_size as usize;
-            let max_height = 0x20 * b.tile_size as usize;
+            let max_width = 0x20 * tile_size.0 as usize;
+            let max_height = 0x20 * tile_size.1 as usize;
             if x >= max_width {
                 if y >= max_height {
                     (
@@ -971,8 +980,8 @@ impl Ppu {
             }
         };
         // Calculate what tile we are drawing
-        let tile_x = x / b.tile_size as usize;
-        let tile_y = y / b.tile_size as usize;
+        let tile_x = x / tile_size.0 as usize;
+        let tile_y = y / tile_size.1 as usize;
         // 2 bytes/tile, 32 tiles/row
         // Note that there's always 2 bytes per tile of the TILEMAP, regardless of how many bpp the tile will use
         let addr = 2 * (32 * tile_y + tile_x);
@@ -986,18 +995,21 @@ impl Ppu {
         let priority = tile_high & 0x20 != 0;
         let flip_x = tile_high & 0x40 != 0;
         let flip_y = tile_high & 0x80 != 0;
-        // Calculate the final tile index, accounting for 16x16 tiles
-        let tile_index = match b.tile_size {
-            8 => base_tile_index,
-            16 => {
-                // Check if we are not in the top left corner (need to add an offset)
-                // XOR with the flip values since they switch which corner we need to fetch
-                let x_off = if (x % 16 < 8) ^ flip_x { 0 } else { 1 };
-                let y_off = if (y % 16 < 8) ^ flip_y { 0 } else { 1 };
-                base_tile_index + x_off + 16 * y_off
-            }
-            _ => unreachable!("Invalid tile size: {}", b.tile_size),
+        // Calculate the final tile index
+        // Check if we are not in the top left corner (need to add an offset)
+        // XOR with the flip values since they switch which corner we need to fetch
+        let x_off = if tile_size.0 == 16 {
+            if (x % 16 < 8) ^ flip_x { 0 } else { 1 }
+        } else {
+            0
         };
+        let y_off = if tile_size.1 == 16 {
+            if (y % 16 < 8) ^ flip_y { 0 } else { 1 }
+        } else {
+            0
+        };
+        let tile_index = base_tile_index + x_off + 16 * y_off;
+        // Get the fine Y offset (i.e. the slice index)
         let fine_y = if flip_y { 7 - y % 8 } else { y % 8 };
         let slice_addr = (2 * b.chr_addr + 2 * fine_y as usize + (bpp * 8 * tile_index as usize))
             % self.vram.len();
@@ -1141,6 +1153,38 @@ impl Ppu {
         let y = (self.master_cycles / MASTER_CYCLES_PER_DOT) / DOTS_PER_SCANLINE;
         (x, y)
     }
+    /// Get the pixel for a given background at an (x, y) coordinate.
+    /// Extends the buffer if it's empty and then returns the next pixel from the buffer,
+    /// so if the buffer is non-empty (x, y) is not used.
+    fn get_background_pixel(
+        &mut self,
+        bg_index: usize,
+        bpp: usize,
+        (x, y): (usize, usize),
+    ) -> Option<BackgroundPixel> {
+        // Ensure buffer is not empty
+        if self.backgrounds[bg_index].pixel_buffer.is_empty() {
+            self.extend_background_byte_buffer(bg_index, (x, y), bpp);
+        }
+        let b = &mut self.backgrounds[bg_index];
+        // Should be impossible to there to be no pixels right now
+        if b.main_screen_enable || b.sub_screen_enable {
+            // Get next pixel in the buffer
+            let v = b.pixel_buffer.pop_front().unwrap();
+            // Use/update mosaic latch if enabled
+            if b.mosaic {
+                let p = &mut b.mosaic_values[x / self.mosaic_size];
+                if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0 {
+                    *p = v;
+                }
+                *p
+            } else {
+                v
+            }
+        } else {
+            None
+        }
+    }
     pub fn advance_master_clock(&mut self, clock: u32) {
         (0..clock).for_each(|_| {
             self.master_cycles = (self.master_cycles + 1)
@@ -1209,8 +1253,10 @@ impl Ppu {
                                 x as f32 + self.m7_h_off as f32,
                                 y as f32 + self.m7_v_off as f32,
                             ]);
-                            let slice = self.get_m7_background_slice(x, y);
-                            [slice, None, None, None]
+                            [[
+                                self.get_m7_background_slice(x, y),
+                                self.get_m7_background_slice(x + 0.5, y),
+                            ]; 4]
                         } else {
                             // Structured (background_number, bpp)
                             let backgrounds: &[(usize, usize)] = match self.bg_mode {
@@ -1224,229 +1270,222 @@ impl Ppu {
                                 7 => unreachable!("Mode 7 should be custom handled"),
                                 _ => todo!("Background mode {} not implemented", self.bg_mode),
                             };
-                            for (i, bpp) in backgrounds.iter() {
-                                if self.backgrounds[*i].pixel_buffer.is_empty() {
-                                    self.extend_background_byte_buffer(*i, (x, y), *bpp);
-                                }
-                            }
-                            let bg_pixels: [Option<BackgroundPixel>; 4] =
-                                core::array::from_fn(|i| {
-                                    if i >= backgrounds.len() {
-                                        return None;
-                                    }
-                                    // Should be impossible to there to be no pixels right now
-                                    let b = &mut self.backgrounds[backgrounds[i].0];
-                                    if b.main_screen_enable || b.sub_screen_enable {
-                                        // Get next pixel in the buffer
-                                        let v = b.pixel_buffer.pop_front().unwrap();
-                                        // Use/update mosaic latch if enabled
-                                        if b.mosaic {
-                                            let p = &mut b.mosaic_values[x / self.mosaic_size];
-                                            if self.mosaic_v_latch == 0 && x % self.mosaic_size == 0
-                                            {
-                                                *p = v;
-                                            }
-                                            *p
-                                        } else {
-                                            v
-                                        }
+                            core::array::from_fn(|i| {
+                                if i < backgrounds.len() {
+                                    let bpp = backgrounds[i].1;
+                                    if self.bg_mode == 5 || self.bg_mode == 6 {
+                                        [
+                                            self.get_background_pixel(i, bpp, (2 * x, y)),
+                                            self.get_background_pixel(i, bpp, (2 * x + 1, y)),
+                                        ]
                                     } else {
-                                        None
+                                        [self.get_background_pixel(i, bpp, (x, y)); 2]
                                     }
-                                });
-                            bg_pixels
+                                } else {
+                                    [None; 2]
+                                }
+                            })
                         }
                     };
-                    // Get the pixel from a background layer with a given priority, or None if the background is transparent
-                    macro_rules! bg_value {
-                        ($index: expr, $priority: expr) => {{
-                            bg_pixels[$index]
-                                .filter(|bg_pixel| bg_pixel.priority == $priority)
-                                .map(|bg_pixel| bg_pixel.color)
-                        }};
-                    }
-                    // Get a bool returning true if a background is on a given layer (i.e. main or sub screen)
-                    macro_rules! bg_on_layer {
-                        ($index: expr, $enabled: ident, $window_enabled: ident) => {{
-                            let b = &self.backgrounds[$index];
-                            if !b.$enabled {
-                                false
-                            } else {
-                                let wv: [bool; 2] =
-                                    core::array::from_fn(|i| window_vals[i] ^ b.window_invert[i]);
-                                let v = if b.$window_enabled {
-                                    if b.window_enabled[0] {
-                                        if b.window_enabled[1] {
-                                            b.window_mask_logic.compute(wv[0], wv[1])
+                    // Set 2 pixels
+                    // In modes 5 and 6, these will be the two next pixels in the buffers.
+                    // If interlacing is on, these will be the two next pixels from the main or subscreen (TODO)
+                    // Otherwise the pixels should be the same
+                    for x_off in 0..2 {
+                        // Get the pixel from a background layer with a given priority, or None if the background is transparent
+                        macro_rules! bg_value {
+                            ($index: expr, $priority: expr) => {{
+                                bg_pixels[$index][x_off]
+                                    .filter(|bg_pixel| bg_pixel.priority == $priority)
+                                    .map(|bg_pixel| bg_pixel.color)
+                            }};
+                        }
+                        // Get a bool returning true if a background is on a given layer (i.e. main or sub screen)
+                        macro_rules! bg_on_layer {
+                            ($index: expr, $enabled: ident, $window_enabled: ident) => {{
+                                let b = &self.backgrounds[$index];
+                                if !b.$enabled {
+                                    false
+                                } else {
+                                    let wv: [bool; 2] = core::array::from_fn(|i| {
+                                        window_vals[i] ^ b.window_invert[i]
+                                    });
+                                    let v = if b.$window_enabled {
+                                        if b.window_enabled[0] {
+                                            if b.window_enabled[1] {
+                                                b.window_mask_logic.compute(wv[0], wv[1])
+                                            } else {
+                                                wv[0]
+                                            }
+                                        } else if b.window_enabled[1] {
+                                            wv[1]
                                         } else {
-                                            wv[0]
+                                            false
                                         }
-                                    } else if b.window_enabled[1] {
-                                        wv[1]
                                     } else {
                                         false
-                                    }
-                                } else {
-                                    false
-                                };
-                                // If window returns false, should return true
-                                !v
-                            }
-                        }};
-                    }
-                    // Get a tuple of the background's value and whether that pixel is on the main or sub screen
-                    macro_rules! bg {
-                        ($index: expr, $priority: expr) => {
-                            (
-                                bg_value!($index, $priority),
-                                bg_on_layer!($index, main_screen_enable, windows_enabled_main),
-                                bg_on_layer!($index, sub_screen_enable, windows_enabled_sub),
-                                self.backgrounds[$index].color_math_enable,
-                            )
-                        };
-                    }
-                    // Calculate sprite window values
-                    let sprite_windows: [bool; 2] =
-                        core::array::from_fn(|i| self.windows[i].invert_sprite ^ window_vals[i]);
-                    // Calculate the actual resulting sprite window vaue
-                    let sw = if self.windows[0].enabled_sprite {
-                        if self.windows[1].enabled_sprite {
-                            self.sprite_window_logic
-                                .compute(sprite_windows[0], sprite_windows[1])
-                        } else {
-                            sprite_windows[0]
+                                    };
+                                    // If window returns false, should return true
+                                    !v
+                                }
+                            }};
                         }
-                    } else if self.windows[1].enabled_sprite {
-                        sprite_windows[1]
-                    } else {
-                        false
-                    };
-                    // Get the pixel from a sprite layer with a given priority, or None
-                    macro_rules! spr {
-                        ($prio: expr) => {
-                            (
-                                self.oam_buffer[x]
-                                    .filter(|data| data.priority == $prio)
-                                    .map(|data| data.color),
-                                self.obj_main_enable && !(sw && self.windows_enabled_obj_main),
-                                self.obj_subscreen_enable && !(sw && self.windows_enabled_obj_sub),
-                                self.color_math_enable_obj
-                                    && self.oam_buffer[x].is_none_or(|data| data.allow_color_math),
-                            )
-                        };
-                    }
-                    // Format (pixel value, draw on main screen, draw on subscreen, apply color math)
-                    const EMPTY: (Option<u16>, bool, bool, bool) = (None, false, false, false);
-                    // The pixels at the given dot, in order from front to back
-                    // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
-                    let in_order_pixels: &[(Option<u16>, bool, bool, bool)] = match self.bg_mode {
-                        0 => &[
-                            spr!(3),
-                            bg!(0, true),
-                            bg!(1, true),
-                            spr!(2),
-                            bg!(0, false),
-                            bg!(1, false),
-                            spr!(1),
-                            bg!(2, true),
-                            bg!(3, true),
-                            spr!(0),
-                            bg!(2, false),
-                            bg!(3, false),
-                        ],
-                        1 => &[
-                            if self.bg3_prio { bg!(2, true) } else { EMPTY },
-                            spr!(3),
-                            bg!(0, true),
-                            bg!(1, true),
-                            spr!(2),
-                            bg!(0, false),
-                            bg!(1, false),
-                            spr!(1),
-                            if self.bg3_prio { EMPTY } else { bg!(2, true) },
-                            spr!(0),
-                            bg!(2, false),
-                        ],
-                        2 | 3 | 4 | 5 => &[
-                            spr!(3),
-                            bg!(0, true),
-                            spr!(2),
-                            bg!(1, true),
-                            spr!(1),
-                            bg!(0, false),
-                            spr!(0),
-                            bg!(1, false),
-                        ],
-                        7 => &[
-                            spr!(3),
-                            spr!(2),
-                            bg!(1, true),
-                            spr!(1),
-                            // BG 0 is draw regardless of prio
-                            bg!(0, true),
-                            bg!(0, false),
-                            spr!(0),
-                            bg!(2, false),
-                        ],
-                        _ => todo!("Background mode {} not implemented", self.bg_mode),
-                    };
-                    /// This macro gets a pixel if the given field is true
-                    /// Used to avoid duplicate logic for getting the main screen and sub screen pixels
-                    macro_rules! get_pixel {
-                        ($field: tt) => {{
-                            in_order_pixels
-                                .iter()
-                                // TODO: can probably combine these two lines
-                                .find(|bg_pixel| bg_pixel.0.is_some() && bg_pixel.$field)
-                                .map_or(None, |b| Some((b.0.unwrap(), b.3)))
-                        }};
-                    }
-                    // Evaluate main and subscreen value
-                    let subscreen_val = get_pixel!(2);
-                    let mainscreen_val = get_pixel!(1);
-                    // Can be none if the color window makes the sub screen transparent
-                    let color_math_source =
-                        if self.color_window_sub_region.compute(color_window_value) {
-                            None
-                        } else {
-                            match self.color_math_src {
-                                ColorMathSource::Subscreen => {
-                                    // Backdrop for the subscreen is the fixed color
-                                    subscreen_val
-                                        .map_or(Some(self.fixed_color_value()), |ss| Some(ss.0))
-                                }
-                                ColorMathSource::Fixed => Some(self.fixed_color_value()),
+                        // Get a tuple of the background's value and whether that pixel is on the main or sub screen
+                        macro_rules! bg {
+                            ($index: expr, $priority: expr) => {
+                                (
+                                    bg_value!($index, $priority),
+                                    bg_on_layer!($index, main_screen_enable, windows_enabled_main),
+                                    bg_on_layer!($index, sub_screen_enable, windows_enabled_sub),
+                                    self.backgrounds[$index].color_math_enable,
+                                )
+                            };
+                        }
+                        // Calculate sprite window values
+                        let sprite_windows: [bool; 2] = core::array::from_fn(|i| {
+                            self.windows[i].invert_sprite ^ window_vals[i]
+                        });
+                        // Calculate the actual resulting sprite window vaue
+                        let sw = if self.windows[0].enabled_sprite {
+                            if self.windows[1].enabled_sprite {
+                                self.sprite_window_logic
+                                    .compute(sprite_windows[0], sprite_windows[1])
+                            } else {
+                                sprite_windows[0]
                             }
+                        } else if self.windows[1].enabled_sprite {
+                            sprite_windows[1]
+                        } else {
+                            false
                         };
-                    // Whether the window is masking the main layer
-                    let hide_main = self.color_window_main_region.compute(color_window_value);
-                    // Color math goes here
-                    let p = if hide_main {
-                        0
-                    } else {
-                        mainscreen_val
-                            .map(|b| {
-                                if b.1 {
+                        // Get the pixel from a sprite layer with a given priority, or None
+                        macro_rules! spr {
+                            ($prio: expr) => {
+                                (
+                                    self.oam_buffer[x]
+                                        .filter(|data| data.priority == $prio)
+                                        .map(|data| data.color),
+                                    self.obj_main_enable && !(sw && self.windows_enabled_obj_main),
+                                    self.obj_subscreen_enable
+                                        && !(sw && self.windows_enabled_obj_sub),
+                                    self.color_math_enable_obj
+                                        && self.oam_buffer[x]
+                                            .is_none_or(|data| data.allow_color_math),
+                                )
+                            };
+                        }
+                        // Format (pixel value, draw on main screen, draw on subscreen, apply color math)
+                        const EMPTY: (Option<u16>, bool, bool, bool) = (None, false, false, false);
+                        // The pixels at the given dot, in order from front to back
+                        // Can get the first non-None pixel to draw and discard the rest (since they will be behind)
+                        let in_order_pixels: &[(Option<u16>, bool, bool, bool)] = match self.bg_mode
+                        {
+                            0 => &[
+                                spr!(3),
+                                bg!(0, true),
+                                bg!(1, true),
+                                spr!(2),
+                                bg!(0, false),
+                                bg!(1, false),
+                                spr!(1),
+                                bg!(2, true),
+                                bg!(3, true),
+                                spr!(0),
+                                bg!(2, false),
+                                bg!(3, false),
+                            ],
+                            1 => &[
+                                if self.bg3_prio { bg!(2, true) } else { EMPTY },
+                                spr!(3),
+                                bg!(0, true),
+                                bg!(1, true),
+                                spr!(2),
+                                bg!(0, false),
+                                bg!(1, false),
+                                spr!(1),
+                                if self.bg3_prio { EMPTY } else { bg!(2, true) },
+                                spr!(0),
+                                bg!(2, false),
+                            ],
+                            2 | 3 | 4 | 5 => &[
+                                spr!(3),
+                                bg!(0, true),
+                                spr!(2),
+                                bg!(1, true),
+                                spr!(1),
+                                bg!(0, false),
+                                spr!(0),
+                                bg!(1, false),
+                            ],
+                            7 => &[
+                                spr!(3),
+                                spr!(2),
+                                bg!(1, true),
+                                spr!(1),
+                                // BG 0 is draw regardless of prio
+                                bg!(0, true),
+                                bg!(0, false),
+                                spr!(0),
+                                bg!(2, false),
+                            ],
+                            _ => todo!("Background mode {} not implemented", self.bg_mode),
+                        };
+                        /// This macro gets a pixel if the given field is true
+                        /// Used to avoid duplicate logic for getting the main screen and sub screen pixels
+                        macro_rules! get_pixel {
+                            ($field: tt) => {{
+                                in_order_pixels
+                                    .iter()
+                                    // TODO: can probably combine these two lines
+                                    .find(|bg_pixel| bg_pixel.0.is_some() && bg_pixel.$field)
+                                    .map_or(None, |b| Some((b.0.unwrap(), b.3)))
+                            }};
+                        }
+                        // Evaluate main and subscreen value
+                        let subscreen_val = get_pixel!(2);
+                        let mainscreen_val = get_pixel!(1);
+                        // Can be none if the color window makes the sub screen transparent
+                        let color_math_source =
+                            if self.color_window_sub_region.compute(color_window_value) {
+                                None
+                            } else {
+                                match self.color_math_src {
+                                    ColorMathSource::Subscreen => {
+                                        // Backdrop for the subscreen is the fixed color
+                                        subscreen_val
+                                            .map_or(Some(self.fixed_color_value()), |ss| Some(ss.0))
+                                    }
+                                    ColorMathSource::Fixed => Some(self.fixed_color_value()),
+                                }
+                            };
+                        // Whether the window is masking the main layer
+                        let hide_main = self.color_window_main_region.compute(color_window_value);
+                        // Color math goes here
+                        let p = if hide_main {
+                            0
+                        } else {
+                            mainscreen_val
+                                .map(|b| {
+                                    if b.1 {
+                                        match color_math_source {
+                                            Some(c) => self.color_blend_mode.compute(b.0, c),
+                                            None => b.0,
+                                        }
+                                    } else {
+                                        b.0
+                                    }
+                                })
+                                .unwrap_or(if self.color_math_enable_backdrop {
                                     match color_math_source {
-                                        Some(c) => self.color_blend_mode.compute(b.0, c),
-                                        None => b.0,
+                                        Some(c) => self.color_blend_mode.compute(self.cgram[0], c),
+                                        None => self.cgram[0],
                                     }
                                 } else {
-                                    b.0
-                                }
-                            })
-                            .unwrap_or(if self.color_math_enable_backdrop {
-                                match color_math_source {
-                                    Some(c) => self.color_blend_mode.compute(self.cgram[0], c),
-                                    None => self.cgram[0],
-                                }
-                            } else {
-                                self.cgram[0]
-                            })
-                    };
-                    // Set screen pixel
-                    let pixel_value = if self.forced_blanking { 0 } else { p & 0x7FFF };
-                    for x_off in 0..2 {
+                                    self.cgram[0]
+                                })
+                        };
+                        // Set screen pixel
+                        let pixel_value = if self.forced_blanking { 0 } else { p & 0x7FFF };
                         for y_off in 0..2 {
                             self.screen_buffer
                                 [SCREEN_RESOLUTION[0] * (2 * y + y_off) + 2 * x + x_off] =
