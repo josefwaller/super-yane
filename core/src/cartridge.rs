@@ -23,7 +23,7 @@ impl MemoryMap {
                     && (address & 0xFFFF) < 0x8000
             }
             MemoryMap::HiRom => {
-                (0x30_0000..0x40_0000).contains(&address)
+                (0x30_0000..0x40_0000).contains(&(address % 0x80_0000))
                     && (0x6000..0x8000).contains(&(address & 0xFFFF))
             }
             MemoryMap::ExHiRom => {
@@ -135,9 +135,24 @@ impl Cartridge {
         } else {
             data.to_vec()
         };
+        let (has_coprocessor, has_sram) = match data[memory_map.transform_address(0x00FFD6)] & 0x0F
+        {
+            0 | 1 => (false, false),
+            2 => (false, true),
+            3 | 4 | 6 => (true, false),
+            5 => (true, true),
+            _ => {
+                log::warn!("Unable to detect whether cartridge has coprocessor/SRAM");
+                (false, false)
+            }
+        };
         let sram_len = {
-            let n = data[(memory_map.transform_address(0x00FFD8)) % data.len()];
-            (1 << n.min(7)) * 1024
+            if has_sram {
+                let n = data[(memory_map.transform_address(0x00FFD8)) % data.len()];
+                (1 << n.min(7)) * 1024
+            } else {
+                0
+            }
         };
         debug!("SRAM len: {}", sram_len);
         debug!(
@@ -166,13 +181,13 @@ impl Cartridge {
         self.memory_map.transform_address(address)
     }
     pub fn write_byte(&mut self, address: usize, value: u8) {
-        if self.memory_map.is_sram_address(address) {
+        if self.memory_map.is_sram_address(address) && self.sram.len() > 0 {
             let i = address % self.sram.len();
             self.sram[i] = value;
         }
     }
     pub fn read_byte(&self, address: usize) -> u8 {
-        if self.memory_map.is_sram_address(address) {
+        if self.memory_map.is_sram_address(address) && self.sram.len() > 0 {
             self.sram[address % self.sram.len()]
         } else {
             self.data[self.transform_address(address) % self.data.len()]

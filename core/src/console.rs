@@ -231,7 +231,7 @@ impl ExternalArchitecture {
                 }
                 0x6000..0x8000 => {
                     // Expansion
-                    (0, 6)
+                    (self.cartridge.read_byte(addr), 6)
                 }
                 0x8000..=0xFFFF => (self.cartridge.read_byte(addr), 8),
                 _ => {
@@ -433,6 +433,11 @@ impl ExternalArchitecture {
                                 }
                             }
                         }
+                        6
+                    }
+                    0x6000..0x8000 => {
+                        // Expansion
+                        self.cartridge.write_byte(addr, value);
                         6
                     }
                     _ => {
