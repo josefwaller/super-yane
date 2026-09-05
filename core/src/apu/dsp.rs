@@ -136,7 +136,19 @@ impl Dsp {
         match address % 0x80 {
             0x0D => self.echo_feedback as u8,
             0x2C => self.echo_volume[0] as u8,
+            0x2D => self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .map(|(i, c)| u8::from(c.pitch_mod_enabled) << i)
+                .sum(),
             0x3C => self.echo_volume[1] as u8,
+            0x3D => self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .map(|(i, c)| u8::from(c.pitch_mod_enabled) << i)
+                .sum(),
             0x4D => self
                 .voices
                 .iter()
