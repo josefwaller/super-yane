@@ -59,7 +59,7 @@ pub fn disassembly<I: Instruction>(ui: &mut Ui, emu: &Emulation, dis: &Disassemb
 
                     row.col(|ui| {
                         ui.label(
-                            RichText::new(format!("{}", inst.instruction.operands(dis.labels())))
+                            RichText::new(format!("{}", inst.instruction.operands()))
                                 .color(LIGHT_BLUE_SECONDARY),
                         );
                     });

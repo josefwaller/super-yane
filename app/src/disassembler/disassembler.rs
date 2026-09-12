@@ -20,6 +20,7 @@ where
     instruction_index: usize,
     labels_index: usize,
     instructions: &'a BTreeMap<usize, I>,
+    /// Labels only contains the reset/interrupt vectors
     labels: &'a BTreeMap<usize, Label>,
 }
 
@@ -54,7 +55,6 @@ where
         self.instructions
             .iter()
             .nth(n)
-            // .map(|(pc, i)| format!("{:8}{} {}", " ", i.opcode_name(), i.operands(self.labels)))
             .map(|(pc, i)| Line::new(*pc, i.clone(), self.labels))
     }
     fn next(&mut self) -> Option<Self::Item> {
@@ -66,34 +66,6 @@ where
         self.instruction_index += 1;
         v
     }
-    // fn next(&mut self) -> Option<Self::Item> {
-    //     let lab = self
-    //         .labels
-    //         .iter()
-    //         .nth(self.labels_index)
-    //         .map(|(pc, l)| (pc, format!("{}:", l.to_string())));
-    //     if inst.is_some() {
-    //         let (ipc, i) = inst.unwrap();
-    //         Some(if lab.is_some() {
-    //             let (lpc, l) = lab.unwrap();
-    //             if lpc <= ipc {
-    //                 self.labels_index += 1;
-    //                 l
-    //             } else {
-    //                 self.instruction_index += 1;
-    //                 i
-    //             }
-    //         } else {
-    //             self.instruction_index += 1;
-    //             i
-    //         })
-    //     } else {
-    //         lab.map(|(_, l)| {
-    //             self.labels_index += 1;
-    //             l
-    //         })
-    //     }
-    // }
 }
 
 /// Contains all the information required to disassemble the machine code into ASM
@@ -107,15 +79,6 @@ where
     /// The labels (i.e. locations that are jumped/branched to)
     labels: BTreeMap<usize, Label>,
 }
-static ASCII_LOWER: [char; 16] = [
-    'g', 'h', 'j', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'u', 'w', 'x', 'y', 'z',
-];
-
-fn get_label_name(prefix: &str, n: usize) -> String {
-    let mut chars = Vec::new();
-    (0..6).for_each(|i| chars.push(ASCII_LOWER[(n >> (4 * i)) & 0xF]));
-    format!("{}{}", prefix, chars.into_iter().collect::<String>())
-}
 
 impl<I: Instruction> Disassembler<I> {
     pub fn add_current_instruction(&mut self, console: &Console) {
@@ -123,11 +86,6 @@ impl<I: Instruction> Disassembler<I> {
         let inst = I::current_instruction(&console);
         let key = inst.key();
         self.instructions.insert(key, inst.clone());
-        if let Some(addr) = inst.jump_addr(console.pc()) {
-            let addr = console.cartridge().transform_address(addr);
-            self.labels
-                .insert(addr, Label::Location(get_label_name("", addr)));
-        }
     }
     pub fn new() -> Disassembler<I> {
         Disassembler {

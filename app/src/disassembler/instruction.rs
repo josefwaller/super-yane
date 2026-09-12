@@ -11,7 +11,7 @@ pub trait Instruction: Clone {
     fn jump_addr(&self, pc: usize) -> Option<usize>;
     fn addr(&self) -> String;
     fn opcode_name(&self) -> String;
-    fn operands(&self, labels: &BTreeMap<usize, Label>) -> String;
+    fn operands(&self) -> String;
 }
 
 #[derive(Clone, Copy)]
@@ -24,10 +24,10 @@ pub struct CpuInstruction {
 }
 
 impl CpuInstruction {
-    pub fn to_string(&self, labels: &BTreeMap<usize, Label>) -> String {
+    pub fn to_string(&self) -> String {
         let data = self.data();
-        let operands = self.operands(labels);
-        format!("{} {} -- PC={:04X}", data.name, operands, self.pc)
+        let operands = self.operands();
+        format!("PC={:06X} {} {}", self.pc, data.name, operands)
     }
     pub fn data(&self) -> OpcodeData {
         opcode_data(self.opcode, self.a, self.xy)
@@ -75,15 +75,10 @@ impl Instruction for CpuInstruction {
     fn opcode_name(&self) -> String {
         self.data().name.to_string()
     }
-    fn operands(&self, labels: &BTreeMap<usize, Label>) -> String {
+    fn operands(&self) -> String {
         let data = self.data();
         self.jump_addr(self.pc)
-            .map(|addr| {
-                labels
-                    .get(&(MemoryMap::LoRom.transform_address(addr)))
-                    .map(|l| l.to_string())
-            })
-            .flatten()
+            .map(|addr| format!("{:06X}", addr))
             .unwrap_or(format_address_mode(
                 data.addr_mode,
                 &self.operands,
@@ -123,7 +118,7 @@ impl Instruction for ApuInstruction {
     fn opcode_name(&self) -> String {
         ApuOpcodeData::from_opcode(self.opcode).name.to_string()
     }
-    fn operands(&self, labels: &BTreeMap<usize, Label>) -> String {
+    fn operands(&self) -> String {
         let d = ApuOpcodeData::from_opcode(self.opcode);
         format_address_modes(&d.addr_modes, &self.operands)
     }

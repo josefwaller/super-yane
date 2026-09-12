@@ -152,9 +152,7 @@ impl eframe::App for App {
         let e = self.engine.emulation.lock().unwrap();
         buf_write(
             "./cpu.asm",
-            e.cpu_dis
-                .lines()
-                .map(|l| l.instruction.to_string(e.cpu_dis.labels())),
+            e.cpu_dis.lines().map(|l| l.instruction.to_string()),
         );
         buf_write(
             "./apu.asm",
@@ -162,7 +160,7 @@ impl eframe::App for App {
                 format!(
                     "{} {}",
                     l.instruction.opcode_name(),
-                    l.instruction.operands(e.apu_dis.labels())
+                    l.instruction.operands()
                 )
             }),
         );
