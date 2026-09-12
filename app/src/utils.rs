@@ -2,6 +2,8 @@ use std::io::{BufWriter, Write};
 
 use super_yane::utils::{color_to_rgb_bytes, from_direct_color};
 
+const MAX_BRIGHTNESS: u8 = 0x0F;
+
 pub enum BinaryDataSrc {
     Wram,
     Vram,
@@ -86,7 +88,6 @@ pub fn bytes_to_rgb(
     // TODO: Don't allocate every call
     let mut inner_buf = vec![0u8; out_buf.len()];
     bytes_to_index(src_bytes, width_tiles, height_tiles, bpp, &mut inner_buf);
-    const BRIGHTNESS: u8 = 0x0F;
     // Convert to RGB
     inner_buf.iter().enumerate().for_each(|(index, value)| {
         out_buf[index] = if *value == 0 {
@@ -98,10 +99,42 @@ pub fn bytes_to_rgb(
                 } else {
                     palette[*value as usize]
                 },
-                BRIGHTNESS,
+                MAX_BRIGHTNESS,
             )
         };
     });
+}
+
+/// Convert a bunch of RAM in mode 7 format (including tile data and tilemap, the latter is ignored)
+/// to RBG bytes to be displayed.
+pub fn bytes_to_rgb_mode7(
+    src_bytes: &[u8],
+    width_tiles: usize,
+    height_tiles: usize,
+    palette: &[u16],
+    direct_color: bool,
+    out_buf: &mut [[u8; 3]],
+) {
+    let bytes_per_slice = 2 * 8;
+    let bytes_per_tile = 8 * bytes_per_slice;
+    for y in 0..(height_tiles * 8) {
+        for x in 0..(width_tiles * 8) {
+            // Get tile X/Y and address
+            let (tile_x, tile_y) = (x / 8, y / 8);
+            let tile_addr = bytes_per_tile * (tile_x + width_tiles * tile_y);
+            // Get individual pixel X/Y within tile
+            let (p_x, p_y) = (x % 8, y % 8);
+            let pixel_data = src_bytes[tile_addr + 2 * (p_x + 8 * p_y) + 1];
+            out_buf[x + y * (width_tiles * 8)] = color_to_rgb_bytes(
+                if direct_color {
+                    from_direct_color(pixel_data, 0)
+                } else {
+                    palette[pixel_data as usize]
+                },
+                MAX_BRIGHTNESS,
+            );
+        }
+    }
 }
 
 /// Write using a buffered writer

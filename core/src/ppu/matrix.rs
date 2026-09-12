@@ -40,4 +40,7 @@ impl Matrix {
             core::array::from_fn(|i| a.iter().enumerate().map(|(j, v)| mat[i][j] * *v).sum());
         res
     }
+    pub fn as_array(&self) -> [[u16; 2]; 2] {
+        [[self.a, self.b], [self.c, self.d]]
+    }
 }

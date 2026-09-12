@@ -24,12 +24,21 @@ pub fn ppu_data(ui: &mut Ui, emu: &Emulation) {
                 KvNode::new("BG3 Priority", format!("{}", ppu.bg3_prio)),
                 KvNode::new("Mosaic Size", format!("{:02X}", ppu.mosaic_size)),
                 KvNode::new("VRAM Address", format!("{:02X}", ppu.vram_addr)),
+                KvNode::new("VRAM Word Address", format!("{:03X}", 2 * ppu.vram_addr)),
                 KvNode::new("VRAM INC AMT", format!("{:02X}", ppu.vram_increment_amount)),
                 KvNode::new("VRAM INC MODE", format!("{}", ppu.vram_increment_mode)),
                 KvNode::new("VRAM Remap", format!("{:02X}", ppu.vram_remap)),
                 KvNode::new("CGRAM Address", format!("{:02X}", ppu.cgram_addr)),
                 KvNode::new("OBJ Enable Main", format!("{}", ppu.obj_main_enable)),
                 KvNode::new("OBJ Enable Sub", format!("{}", ppu.obj_subscreen_enable)),
+                KvNode::with_children(
+                    "Mode 7",
+                    "",
+                    &[KvNode::new(
+                        "Matrix",
+                        format!("{:02X?}", ppu.matrix.as_array()),
+                    )],
+                ),
                 KvNode::new(
                     "Window OBJ Enable Main",
                     format!("{}", ppu.windows_enabled_obj_main),
