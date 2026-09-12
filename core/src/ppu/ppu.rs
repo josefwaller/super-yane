@@ -49,9 +49,9 @@ impl From<u8> for TimerMode {
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum VramIncMode {
     /// Increment after reading the high byte or writing the low byte
-    HighReadLowWrite = 0,
+    LowReadWrite = 0,
     /// Increment after reading the low byte or writing the high byte
-    LowReadHighWrite = 1,
+    HighReadWrite = 1,
 }
 
 impl std::fmt::Display for VramIncMode {
@@ -60,8 +60,8 @@ impl std::fmt::Display for VramIncMode {
             f,
             "{}",
             match self {
-                Self::HighReadLowWrite => "High Read/Low Write",
-                Self::LowReadHighWrite => "Low Read/High Write",
+                Self::LowReadWrite => "Low Read/Write",
+                Self::HighReadWrite => "High Read/Write",
             }
         )
     }
@@ -159,7 +159,7 @@ pub struct Ppu {
     #[new(value = "1")]
     pub vram_increment_amount: usize,
     /// The current increment mode
-    #[new(value = "VramIncMode::HighReadLowWrite")]
+    #[new(value = "VramIncMode::LowReadWrite")]
     pub vram_increment_mode: VramIncMode,
     /// The VRAM ADDR.
     /// References a VRAM word, not byte.
@@ -369,7 +369,7 @@ impl Ppu {
             }
             0x2139 => {
                 let val = self.vram_latch_low;
-                if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
+                if self.vram_increment_mode == VramIncMode::LowReadWrite {
                     self.refresh_vram_latch();
                     self.inc_vram_addr();
                 }
@@ -377,7 +377,7 @@ impl Ppu {
             }
             0x213A => {
                 let val = self.vram_latch_high;
-                if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
+                if self.vram_increment_mode == VramIncMode::HighReadWrite {
                     self.refresh_vram_latch();
                     self.inc_vram_addr();
                 }
@@ -559,8 +559,8 @@ impl Ppu {
                     _ => unreachable!("Invalid VRAM increment amount value: {:X}", value),
                 };
                 self.vram_increment_mode = match bit(value, 7) {
-                    false => VramIncMode::HighReadLowWrite,
-                    true => VramIncMode::LowReadHighWrite,
+                    false => VramIncMode::LowReadWrite,
+                    true => VramIncMode::HighReadWrite,
                 };
                 self.vram_remap = (value >> 2) as u32 & 0x03;
                 if self.vram_remap != 0 {
@@ -582,7 +582,7 @@ impl Ppu {
                 let remapped_addr = self.remapped_vram_addr();
                 // Write the low byte
                 self.write_vram(2 * remapped_addr, value);
-                if self.vram_increment_mode == VramIncMode::HighReadLowWrite {
+                if self.vram_increment_mode == VramIncMode::LowReadWrite {
                     self.inc_vram_addr();
                 }
             }
@@ -590,7 +590,7 @@ impl Ppu {
                 let remapped_addr = self.remapped_vram_addr();
                 // Write the high byte
                 self.write_vram(2 * remapped_addr + 1, value);
-                if self.vram_increment_mode == VramIncMode::LowReadHighWrite {
+                if self.vram_increment_mode == VramIncMode::HighReadWrite {
                     self.inc_vram_addr();
                 }
             }
@@ -743,6 +743,7 @@ impl Ppu {
         self.multi_res =
             (self.multi_value as i32 * self.multi_factor as i32).clamp(-8_388_608, 8_388_607);
     }
+    /// Writes a byte of VRAM given a byte address
     fn write_vram(&mut self, addr: usize, value: u8) {
         if self.can_write_vram() {
             self.vram[addr] = value;
@@ -779,7 +780,7 @@ impl Ppu {
         self.cgram_addr = (self.cgram_addr + 1) % self.cgram.len();
     }
     fn inc_vram_addr(&mut self) {
-        self.vram_addr = (self.vram_addr + self.vram_increment_amount) % self.vram.len();
+        self.vram_addr = (self.vram_addr + self.vram_increment_amount) % 0x8000;
     }
     fn refresh_vram_latch(&mut self) {
         let vram_addr = self.remapped_vram_addr();
