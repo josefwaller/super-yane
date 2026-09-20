@@ -51,11 +51,6 @@ pub fn screen(ui: &mut Ui, emu: &mut Emulation, app_state: &mut AppState) {
                         let mut vol = emu.volume;
                         ui.add(egui::Slider::new(&mut vol, 0.0..=100.0).text("Volume"));
                         emu.volume = vol;
-                        ui.label(format!("CPU clocks: {}", emu.console.total_master_clocks()));
-                        ui.label(format!(
-                            "APU clocks: {}",
-                            emu.console.apu().total_cr_clocks()
-                        ));
                     });
                 });
             });

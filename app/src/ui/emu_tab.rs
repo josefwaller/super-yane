@@ -4,13 +4,12 @@ use strum::EnumIter;
 
 use crate::{
     app::AppState,
-    disassembler::CpuInstruction,
     emulation::Emulation,
     ui::{
         colors::{COLOR_ORANGE, GREEN_PRIMARY, LIGHT_BLUE_PRIMARY, PINK_PRIMARY, RED_PRIMARY},
         panes::{
-            apu_data, backgrounds, binary_data, breakpoints, cartridge_data, cpu_data, disassembly,
-            dma_channels, oam, ppu_data, screen, settings, voices,
+            apu_data, backgrounds, binary_data, breakpoints, cpu_data, disassembly, dma_channels,
+            info, oam, ppu_data, screen, settings, voices,
         },
     },
 };
@@ -33,7 +32,7 @@ pub enum EmuTab {
     Cgram,
     Aram,
     CartridgeRom,
-    CartridgeInfo,
+    Info,
     Settings,
     Voices,
 }
@@ -56,7 +55,7 @@ impl ToString for EmuTab {
             Cgram => "CGRAM",
             Aram => "ARAM",
             CartridgeRom => "ROM",
-            CartridgeInfo => "Cartridge",
+            Info => "Info",
             Settings => "Settings",
             Voices => "Voices",
         }
@@ -111,7 +110,7 @@ pub fn render_tab_pane(ui: &mut Ui, tab: EmuTab, emu: &mut Emulation, app_state:
             PINK_PRIMARY,
             &emu.console.ppu().cgram,
         ),
-        CartridgeInfo => cartridge_data(ui, &emu.console),
+        Info => info(ui, &emu.console),
         Settings => settings(ui, emu, &mut app_state.gilrs),
         Voices => voices(ui, emu),
     }
