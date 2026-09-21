@@ -1,5 +1,5 @@
 mod opcode_data;
-mod opcodes;
+pub mod opcodes;
 mod processor;
 mod program_status_word;
 

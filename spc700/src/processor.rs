@@ -430,7 +430,7 @@ impl Processor {
         macro_rules! inc {
             ($reg: ident) => {{
                 bus.io();
-                self.$reg = self.$reg.wrapping_add(1);
+                self.$reg = self.inc(self.$reg);
             }};
         }
         match opcode {
