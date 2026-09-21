@@ -275,6 +275,9 @@ impl Processor {
         // Read opcode
         let opcode = bus.read(self.pc as usize);
         self.pc = self.pc.wrapping_add(1);
+        self.execute_opcode(opcode, bus);
+    }
+    pub fn execute_opcode(&mut self, opcode: u8, bus: &mut impl HasAddressBus) {
         // Utility macro to create the YA register from the Y and A registers
         macro_rules! ya {
             () => {
@@ -422,6 +425,12 @@ impl Processor {
                 let addr = addr & 0x1FFF;
                 let val = bus.read(addr as usize);
                 (bit, addr, val)
+            }};
+        }
+        macro_rules! inc {
+            ($reg: ident) => {{
+                bus.io();
+                self.$reg = self.$reg.wrapping_add(1);
             }};
         }
         match opcode {
@@ -620,9 +629,9 @@ impl Processor {
                 let (bit, _addr, val) = addr_bit_func!(abs);
                 self.psw.c ^= ((val >> bit) & 0x01) != 0;
             }
-            INC_A => self.a = self.inc(self.a),
-            INC_X => self.x = self.inc(self.x),
-            INC_Y => self.y = self.inc(self.y),
+            INC_A => inc!(a),
+            INC_X => inc!(x),
+            INC_Y => inc!(y),
             INC_D => read_write_func!(inc, d),
             INC_DX => read_write_func!(inc, dx),
             INC_ABS => read_write_func!(inc, abs),
@@ -792,6 +801,11 @@ impl Processor {
             SBC_A_ABSY => read_a_func!(sbc, absy),
             SBC_D_D => read_read_write_func!(sbc, d, d),
             SBC_D_IMM => read_read_write_func!(sbc, d, imm),
+            SLEEP | STOP => {
+                // Just jump back to the same instruction
+                bus.io();
+                self.pc = self.pc.wrapping_sub(1);
+            }
             SUBW_YA_D => {
                 // Address low high
                 let [al, ah] = self.dw(bus);
