@@ -14,8 +14,8 @@ use crate::{
 
 #[derive(EnumIter, Debug, Clone, PartialEq, Copy)]
 pub enum Breakpoint {
-    Pc(usize),
-    Opcode(u8),
+    CpuPc(usize),
+    CpuOpcode(u8),
     Dma(usize),
 }
 
@@ -23,8 +23,8 @@ impl Breakpoint {
     pub fn type_name(&self) -> &'static str {
         use Breakpoint::*;
         match self {
-            Pc(_) => "PC",
-            Opcode(_) => "Opcode",
+            CpuPc(_) => "CPU PC",
+            CpuOpcode(_) => "CPU Opcode",
             Dma(_) => "DMA Transfer",
         }
     }
@@ -81,7 +81,7 @@ impl Emulation {
             apu_dis: Disassembler::<ApuInstruction>::new(),
             ui_ctx,
             // Default breakpoints
-            breakpoints: vec![Breakpoint::Opcode(WDM), Breakpoint::Opcode(STP)],
+            breakpoints: vec![Breakpoint::CpuOpcode(WDM), Breakpoint::CpuOpcode(STP)],
             keybindings: get_default_keyboard_keybindings(),
             gilrs,
         }
@@ -124,7 +124,7 @@ impl Emulation {
         use Breakpoint::*;
         self.breakpoints.iter().any(|b| match b {
             Dma(index) => self.console.dma_channels()[*index].is_executing,
-            Pc(pc) => self.console.pc() == *pc,
+            CpuPc(pc) => self.console.pc() == *pc,
             _ => false,
         })
     }

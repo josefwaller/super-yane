@@ -1,11 +1,7 @@
-use std::{fmt::UpperHex, sync::Arc};
-
-use egui::{
-    ComboBox, Id, Layout, Response, RichText, ScrollArea, TextEdit, Ui, Widget, WidgetWithState,
-};
+use egui::{ComboBox, Layout, Response, RichText, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
 use strum::IntoEnumIterator;
-use wdc65816::{format_address_mode, opcode_data};
+use wdc65816::opcode_data;
 
 use crate::{
     emulation::{Breakpoint, Emulation},
@@ -35,12 +31,13 @@ fn hex_input(ui: &mut Ui, value: &mut usize) -> Response {
 
 #[derive(Clone)]
 struct State {
+    /// The breakpoint being currently added, currently just exists in UI logic
     breakpoint: Breakpoint,
 }
 impl Default for State {
     fn default() -> Self {
         State {
-            breakpoint: Breakpoint::Pc(0),
+            breakpoint: Breakpoint::CpuPc(0),
         }
     }
 }
@@ -72,10 +69,10 @@ fn breakpoint_adder(ui: &mut Ui) -> AdderResponse {
                 });
             use Breakpoint::*;
             match &mut state.breakpoint {
-                Pc(value) => {
+                CpuPc(value) => {
                     hex_input(ui, value);
                 }
-                Opcode(opcode) => {
+                CpuOpcode(opcode) => {
                     let mut value = *opcode as usize;
                     hex_input(ui, &mut value);
                     *opcode = value.clamp(u8::MIN as usize, u8::MAX as usize) as u8;
@@ -116,11 +113,11 @@ pub fn breakpoints(ui: &mut Ui, emu: &mut Emulation) {
                 if let Some(bp) = bp.get(index) {
                     use Breakpoint::*;
                     let (left, right) = match bp {
-                        Pc(pc) => (
+                        CpuPc(pc) => (
                             RichText::new("PC").color(RED_PRIMARY),
                             format!("{:06X}", pc),
                         ),
-                        Opcode(opcode) => {
+                        CpuOpcode(opcode) => {
                             let data = opcode_data(*opcode, false, false);
                             (
                                 RichText::new("OPCODE").color(GREEN_PRIMARY),
