@@ -105,6 +105,8 @@ impl Processor {
     fn branch_imm(&mut self, bus: &mut impl HasAddressBus) {
         let offset_addr = self.imm(bus);
         let offset = bus.read(offset_addr as usize);
+        bus.io();
+        bus.io();
         self.pc =
             ((self.pc as isize).wrapping_add((offset as i8) as isize) % u16::MAX as isize) as u16;
     }
@@ -112,10 +114,11 @@ impl Processor {
         self.push_to_stack_u16(self.pc, bus);
         self.pc = addr;
     }
-    fn cmp(&mut self, lhs: u8, rhs: u8) {
+    fn cmp(&mut self, lhs: u8, rhs: u8) -> u8 {
         let (r, c) = lhs.overflowing_sub(rhs);
         self.set_nz(r);
         self.psw.c = !c;
+        lhs
     }
     fn cmp_a(&mut self, v: u8) {
         self.cmp(self.a, v);
@@ -124,7 +127,7 @@ impl Processor {
         self.cmp(self.x, v);
     }
     fn cmp_y(&mut self, v: u8) {
-        self.cmp(self.y, v)
+        self.cmp(self.y, v);
     }
     fn dec(&mut self, v: u8) -> u8 {
         let v = v.wrapping_sub(1);
@@ -313,6 +316,16 @@ impl Processor {
                 self.psw.n = (self.$dst & 0x80) != 0;
             }};
         }
+        macro_rules! ix_iy {
+            ($op: ident) => {{
+                // Read next PC (basically an IO operation)
+                bus.read(self.pc as usize);
+                let lhs = bus.read(self.x as usize);
+                let rhs = bus.read(self.y as usize);
+                let result = self.$op(lhs, rhs);
+                bus.write(self.x as usize, result);
+            }};
+        }
         /// Reads 2 values using 2 different addressing mode(s),
         /// and then writes a value using the first addressing mode.
         /// `target` is the function address that will be read and then written to.
@@ -443,7 +456,7 @@ impl Processor {
             ADC_A_IDY => read_a_func!(adc, idy),
             ADC_A_IX => read_a_func!(adc, ix),
             ADC_A_IMM => read_a_func!(adc, imm),
-            ADC_IX_IY => read_read_write_func!(adc, ix, iy),
+            ADC_IX_IY => ix_iy!(adc),
             ADC_D_D => read_read_write_func!(adc, d, d),
             ADC_D_IMM => read_read_write_func!(adc, d, imm),
             ADDW_YA_D => {
@@ -456,7 +469,7 @@ impl Processor {
                 self.y = self.adc(h, self.y);
                 self.set_nz_16le(self.a, self.y);
             }
-            AND_IX_IY => read_read_write_func!(and, ix, iy),
+            AND_IX_IY => ix_iy!(and),
             AND_A_IMM => read_a_func!(and, imm),
             AND_A_IX => read_a_func!(and, ix),
             AND_A_IDY => read_a_func!(and, idy),
@@ -522,7 +535,7 @@ impl Processor {
             CMP_A_ABS => read_func!(cmp_a, abs),
             CMP_A_ABSX => read_func!(cmp_a, absx),
             CMP_A_ABSY => read_func!(cmp_a, absy),
-            CMP_IX_IY => read_read_func!(ix, iy, cmp),
+            CMP_IX_IY => ix_iy!(cmp),
             CMP_D_D => read_read_func!(d, d, cmp),
             CMP_D_IMM => read_read_func!(d, imm, cmp),
             CMP_X_IMM => read_func!(cmp_x, imm),
@@ -613,7 +626,7 @@ impl Processor {
                 self.set_nz(self.a);
             }
             EI => self.psw.i = true,
-            EOR_IX_IY => read_read_write_func!(eor, ix, iy),
+            EOR_IX_IY => ix_iy!(eor),
             EOR_A_IMM => read_a_func!(eor, imm),
             EOR_A_IX => read_a_func!(eor, ix),
             EOR_A_IDY => read_a_func!(eor, idy),
@@ -744,7 +757,7 @@ impl Processor {
                 bus.write(addr as usize, val);
             }
             NOTC => self.psw.c = !self.psw.c,
-            OR_IX_IY => read_read_write_func!(or, ix, iy),
+            OR_IX_IY => ix_iy!(or),
             OR_A_IMM => read_func!(or_a, imm),
             OR_A_IX => read_func!(or_a, ix),
             OR_A_IDY => read_func!(or_a, idy),
@@ -789,7 +802,7 @@ impl Processor {
             ROR_D => read_write_func!(ror, d),
             ROR_DX => read_write_func!(ror, dx),
             ROR_ABS => read_write_func!(ror, abs),
-            SBC_IX_IY => read_read_write_func!(sbc, ix, iy),
+            SBC_IX_IY => ix_iy!(sbc),
             SBC_A_IMM => read_a_func!(sbc, imm),
             SBC_A_IX => read_a_func!(sbc, ix),
             SBC_A_IDY => read_a_func!(sbc, idy),
