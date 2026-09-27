@@ -104,19 +104,19 @@ impl Emulation {
         let c = &mut self.console;
         let pc = c.pc();
         if c.apu_is_behind() {
-            c.step_apu();
-            self.apu_dis.add_current_instruction(&c);
             if self.log_apu {
                 let inst = ApuSnapshot::from(&c);
                 log::info!("[APU] {}", inst);
             }
+            c.step_apu();
+            self.apu_dis.add_current_instruction(&c);
         } else {
-            c.step_cpu();
-            self.cpu_dis.add_current_instruction(&c);
             if self.log_cpu && c.pc() != pc {
                 let inst = CpuSnapshot::from(&c);
                 log::info!("[CPU] {}", inst);
             }
+            c.step_cpu();
+            self.cpu_dis.add_current_instruction(&c);
         }
         // Pause if we have hit a breakpoint
         if self.is_in_breakpoint() {
