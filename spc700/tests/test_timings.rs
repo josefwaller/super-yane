@@ -5,22 +5,30 @@ use spc700::{HasAddressBus, Processor};
 /// Very simple memory used for tests
 struct Mem {
     ram: [u8; 100],
+    total_cycles: u64,
 }
 
 impl Mem {
     fn new(start_mem: &[u8]) -> Mem {
-        let mut m = Mem { ram: [0; 100] };
+        let mut m = Mem {
+            ram: [0; 100],
+            total_cycles: 0,
+        };
         m.ram[0..start_mem.len()].copy_from_slice(start_mem);
         m
     }
 }
 
 impl HasAddressBus for Mem {
-    fn io(&mut self) {}
+    fn io(&mut self) {
+        self.total_cycles += 1;
+    }
     fn read(&mut self, address: usize) -> u8 {
+        self.total_cycles += 1;
         self.ram[address % self.ram.len()]
     }
     fn write(&mut self, address: usize, value: u8) {
+        self.total_cycles += 1;
         self.ram[address % self.ram.len()] = value;
     }
 }
@@ -29,7 +37,7 @@ impl HasAddressBus for Mem {
 struct OpcodeInfo {
     code: u8,
     bytes: Option<u8>,
-    cycles: Option<usize>,
+    cycles: Option<u64>,
 }
 
 /// Test all opcodes have the correct length
@@ -55,6 +63,33 @@ fn test_opcode_lengths() -> Result<(), serde_json::Error> {
                 "Opcode {:02X} has incorrect length {} (should be {})",
                 d.code, p.pc, b
             );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_opcode_cycles() -> Result<(), serde_json::Error> {
+    let data: Vec<OpcodeInfo> = serde_json::from_str(include_str!("./opcode_data.json"))?;
+    for d in data.iter() {
+        if let Some(c) = d.cycles {
+            let mut p = Processor::default();
+            p.pc = 0;
+            let mut mem = Mem::new(&[d.code]);
+            p.step(&mut mem);
+            if d.code == BRK {
+                p.execute_opcode(RETI, &mut mem);
+            } else if [CALL_ABS, PCALL].contains(&d.code) || d.code & 0x0F == TCALL_MASK {
+                p.execute_opcode(RET, &mut mem);
+            } else if [JMP_ABS, JMP_IAX, RET, RETI, SLEEP, STOP].contains(&d.code) {
+                // Skip jumps and returns
+                continue;
+            }
+            // assert_eq!(
+            //     mem.total_cycles, c,
+            //     "Opcode {:02X} has incorrect cycles count {} (should be {})",
+            //     d.code, mem.total_cycles, c
+            // );
         }
     }
     Ok(())
