@@ -11,9 +11,9 @@ use paste::paste;
 
 pub const APU_RAM_SIZE: usize = 0x10000;
 /// The number of ceramic resonator clock cycles per SPC700 clock
-pub const CR_CLOCK_PER_CPU_CYCLE: usize = 24;
+pub const CR_CLOCK_PER_CPU_CYCLE: u64 = 24;
 /// The number of ceramic resonator clock cycles per sample
-pub const CR_CLOCKS_PER_SAMPLE: usize = 32 * CR_CLOCK_PER_CPU_CYCLE;
+pub const CR_CLOCKS_PER_SAMPLE: u64 = 32 * CR_CLOCK_PER_CPU_CYCLE;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, new)]
 pub struct ApuTimer {
@@ -49,7 +49,9 @@ pub struct ApuMemory {
     pub apu_to_cpu_reg: [u8; 4],
     pub timers: [ApuTimer; 3],
     /// Total number of ceramic resonator clocks that have passed
-    pub total_cr_clocks: usize,
+    pub total_cr_clocks: u64,
+    /// Total number of SPC700 cycles that have elapsed
+    pub total_core_clocks: u64,
     #[derivative(Default(value = "true"))]
     pub expose_ipl_rom: bool,
     pub dsp_addr: u8,
@@ -69,7 +71,7 @@ pub struct ApuMemory {
 impl ApuMemory {
     /// Advance a number of ceramic resonator clocks
     // TODO: Maybe, make it advance by SPC700 clocks (CR clocks / 24)
-    pub fn advance_cr_clocks(&mut self, clocks: usize) {
+    pub fn advance_cr_clocks(&mut self, clocks: u64) {
         // Advance
         (0..clocks).for_each(|_| {
             self.total_cr_clocks += 1;
@@ -104,10 +106,12 @@ impl ApuMemory {
 
 impl HasAddressBus for ApuMemory {
     fn io(&mut self) {
+        self.total_core_clocks += 1;
         // Advance by 2 cycles since the SPC700 is only clocked on every other clock
         self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
     }
     fn read(&mut self, address: usize) -> u8 {
+        self.total_core_clocks += 1;
         self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
         match address {
             0xF0 => 0,
@@ -142,6 +146,7 @@ impl HasAddressBus for ApuMemory {
         }
     }
     fn write(&mut self, address: usize, value: u8) {
+        self.total_core_clocks += 1;
         self.advance_cr_clocks(CR_CLOCK_PER_CPU_CYCLE);
         match address {
             0xF0 => {
@@ -209,7 +214,8 @@ macro_rules! rest_field {
     };
 }
 impl Apu {
-    rest_field! {total_cr_clocks, usize}
+    rest_field! {total_cr_clocks, u64}
+    rest_field! {total_core_clocks, u64}
     rest_field! {dsp, Dsp}
     rest_field! {timers, [ApuTimer; 3]}
     pub fn ram(&self) -> &[u8] {
@@ -235,6 +241,10 @@ impl Apu {
             }
             _ => 0,
         }
+    }
+    /// Reads the next opcode to be executed, assuming it is in RAM
+    pub fn opcode(&self) -> u8 {
+        self.read_ram(self.core.pc as usize)
     }
     pub fn sample_queue(&mut self) -> VecDeque<f32> {
         let mut s = VecDeque::new();
