@@ -16,6 +16,8 @@ use crate::{
 pub enum Breakpoint {
     CpuPc(usize),
     CpuOpcode(u8),
+    ApuPc(usize),
+    ApuOpcode(u8),
     Dma(usize),
 }
 
@@ -25,6 +27,8 @@ impl Breakpoint {
         match self {
             CpuPc(_) => "CPU PC",
             CpuOpcode(_) => "CPU Opcode",
+            ApuPc(_) => "APU PC",
+            ApuOpcode(_) => "APU Opcode",
             Dma(_) => "DMA Transfer",
         }
     }
@@ -94,37 +98,40 @@ impl Emulation {
         while let Some(_) = self.gilrs.next_event() {}
         *self.console.input_ports_mut() = self.get_input_ports();
     }
-    /// Advances the console 1 instruction.
+    /// Advances the console 1 instruction, either CPU or APU
     /// Handles disassembly, profiling, logging, etc
     pub fn advance(&mut self) {
         let c = &mut self.console;
         let pc = c.pc();
-        // let before_master_cycles = *c.total_master_clocks();
-        c.step_cpu();
-        self.cpu_dis.add_current_instruction(&c);
-        if self.log_cpu && c.pc() != pc {
-            let inst = CpuSnapshot::from(&c);
-            log::info!("[CPU] {}", inst);
-        }
-        while c.apu_is_behind() {
+        if c.apu_is_behind() {
             c.step_apu();
             self.apu_dis.add_current_instruction(&c);
             if self.log_apu {
                 let inst = ApuSnapshot::from(&c);
                 log::info!("[APU] {}", inst);
             }
+        } else {
+            c.step_cpu();
+            self.cpu_dis.add_current_instruction(&c);
+            if self.log_cpu && c.pc() != pc {
+                let inst = CpuSnapshot::from(&c);
+                log::info!("[CPU] {}", inst);
+            }
         }
         // Pause if we have hit a breakpoint
         if self.is_in_breakpoint() {
             self.is_paused = true;
         }
-        // profiler.add_current_state(&console, before_master_cycles);
     }
     fn is_in_breakpoint(&self) -> bool {
         use Breakpoint::*;
         self.breakpoints.iter().any(|b| match b {
             Dma(index) => self.console.dma_channels()[*index].is_executing,
             CpuPc(pc) => self.console.pc() == *pc,
+            // TODO: This currently doesn't work because we need apply the same memory map in opcode() as we do in read()
+            // CpuOpcode(op) => self.console.opcode() == *op,
+            ApuPc(pc) => self.console.apu().core.pc == *pc as u16,
+            ApuOpcode(op) => self.console.apu().opcode() == *op,
             _ => false,
         })
     }

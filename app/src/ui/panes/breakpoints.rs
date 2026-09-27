@@ -1,5 +1,6 @@
 use egui::{ComboBox, Layout, Response, RichText, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
+use slint::ToSharedString;
 use strum::IntoEnumIterator;
 use wdc65816::opcode_data;
 
@@ -69,10 +70,10 @@ fn breakpoint_adder(ui: &mut Ui) -> AdderResponse {
                 });
             use Breakpoint::*;
             match &mut state.breakpoint {
-                CpuPc(value) => {
+                CpuPc(value) | ApuPc(value) => {
                     hex_input(ui, value);
                 }
-                CpuOpcode(opcode) => {
+                CpuOpcode(opcode) | ApuOpcode(opcode) => {
                     let mut value = *opcode as usize;
                     hex_input(ui, &mut value);
                     *opcode = value.clamp(u8::MIN as usize, u8::MAX as usize) as u8;
@@ -114,15 +115,20 @@ pub fn breakpoints(ui: &mut Ui, emu: &mut Emulation) {
                     use Breakpoint::*;
                     let (left, right) = match bp {
                         CpuPc(pc) => (
-                            RichText::new("PC").color(RED_PRIMARY),
+                            RichText::new("CPU PC").color(RED_PRIMARY),
                             format!("{:06X}", pc),
                         ),
+                        ApuPc(pc) => (RichText::new("APU PC"), format!("{:04X}", pc)),
                         CpuOpcode(opcode) => {
                             let data = opcode_data(*opcode, false, false);
                             (
                                 RichText::new("OPCODE").color(GREEN_PRIMARY),
                                 format!("{:02X} ({})", opcode, data.name),
                             )
+                        }
+                        ApuOpcode(opcode) => {
+                            let data = spc700::OpcodeData::from_opcode(*opcode);
+                            (RichText::new("APU Opcode"), data.name.to_string())
                         }
                         Dma(index) => (
                             RichText::new("DMA").color(LIGHT_BLUE_PRIMARY),
